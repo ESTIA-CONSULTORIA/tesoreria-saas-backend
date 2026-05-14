@@ -1,0 +1,27 @@
+import { Injectable } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Tenant } from './entities/tenant.entity';
+import { Repository } from 'typeorm';
+
+@Injectable()
+export class TenantsService {
+  constructor(
+    @InjectRepository(Tenant)
+    private tenantsRepository: Repository<Tenant>,
+  ) {}
+
+  create(legalName: string, tradeName: string, taxId?: string) {
+    const tenant = this.tenantsRepository.create({
+      legalName,
+      tradeName,
+      taxId,
+      isActive: true,
+    });
+
+    return this.tenantsRepository.save(tenant);
+  }
+
+  findAll() {
+    return this.tenantsRepository.find();
+  }
+}
