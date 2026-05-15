@@ -29,10 +29,19 @@ export class SyncQueue {
   payload: any;
 
   @Column({ default: 'PENDING' })
-  status: string; // PENDING, SYNCED, ERROR
+  status: string; // PENDING, PROCESSING, SYNCED, ERROR
 
   @Column({ nullable: true })
   deviceId: string;
+
+  @Column({ default: 0 })
+  retryCount: number;
+
+  @Column({ default: 5 })
+  maxRetries: number;
+
+  @Column({ nullable: true })
+  nextRetryAt: Date;
 
   @Column({ nullable: true })
   syncedAt: Date;
