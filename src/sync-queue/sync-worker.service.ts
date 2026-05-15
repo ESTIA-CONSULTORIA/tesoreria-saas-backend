@@ -2,10 +2,18 @@ import { Injectable } from '@nestjs/common';
 
 import { SyncQueueService } from './sync-queue.service';
 import { SyncQueue } from './entities/sync-queue.entity';
+import { TreasurySyncHandler } from './handlers/treasury-sync.handler';
+import { PosSyncHandler } from './handlers/pos-sync.handler';
+import { InventorySyncHandler } from './handlers/inventory-sync.handler';
 
 @Injectable()
 export class SyncWorkerService {
-  constructor(private syncQueueService: SyncQueueService) {}
+  constructor(
+    private syncQueueService: SyncQueueService,
+    private treasurySyncHandler: TreasurySyncHandler,
+    private posSyncHandler: PosSyncHandler,
+    private inventorySyncHandler: InventorySyncHandler,
+  ) {}
 
   async processPending() {
     const pendingItems = await this.syncQueueService.findPending();
@@ -53,18 +61,17 @@ export class SyncWorkerService {
   }
 
   private async routeOperation(item: SyncQueue) {
-    // This is the orchestration layer.
-    // Future handlers will process by module/operationType, for example:
-    // SALES + CREATE -> create sale and movements
-    // INVENTORY + UPDATE -> adjust stock
-    // TREASURY + CREATE -> create movement
-    // POS + CREATE -> import POS ticket
     switch (item.module) {
-      case 'SALES':
-      case 'INVENTORY':
       case 'TREASURY':
+        return this.treasurySyncHandler.handle(item);
+
       case 'POS':
-        return true;
+      case 'SALES':
+        return this.posSyncHandler.handle(item);
+
+      case 'INVENTORY':
+        return this.inventorySyncHandler.handle(item);
+
       default:
         throw new Error(`Unsupported sync module: ${item.module}`);
     }
