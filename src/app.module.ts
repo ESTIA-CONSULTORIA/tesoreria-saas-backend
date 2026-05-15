@@ -15,6 +15,8 @@ import { PlansModule } from './plans/plans.module';
 import { SubscriptionsModule } from './subscriptions/subscriptions.module';
 import { TransfersModule } from './transfers/transfers.module';
 import { BusinessTypesModule } from './business-types/business-types.module';
+import { IntegrationsModule } from './integrations/integrations.module';
+import { SyncQueueModule } from './sync-queue/sync-queue.module';
 
 import { SubscriptionGuard } from './auth/subscription.guard';
 import { FeatureGuard } from './auth/feature/feature.guard';
@@ -51,6 +53,8 @@ import { FeatureGuard } from './auth/feature/feature.guard';
     SubscriptionsModule,
     TransfersModule,
     BusinessTypesModule,
+    IntegrationsModule,
+    SyncQueueModule,
   ],
 
   providers: [
