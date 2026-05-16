@@ -7,9 +7,15 @@ import { SalesService } from './sales.service';
 import { SalesController } from './sales.controller';
 import { SalesFinancialService } from './services/sales-financial.service';
 import { SalesReportingService } from './services/sales-reporting.service';
+import { InventoryModule } from '../inventory/inventory.module';
+import { AccountingModule } from '../accounting/accounting.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Sale, SaleItem])],
+  imports: [
+    TypeOrmModule.forFeature([Sale, SaleItem]),
+    InventoryModule,
+    AccountingModule,
+  ],
   providers: [
     SalesService,
     SalesFinancialService,
