@@ -1,0 +1,41 @@
+version: '3.9'
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - '3000:3000'
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgres://postgres:postgres@db:5432/tesoreria
+      REDIS_HOST: redis
+    depends_on:
+      - db
+      - redis
+
+  frontend:
+    build:
+      context: ./frontend
+    ports:
+      - '3001:3000'
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:3000
+      NEXT_PUBLIC_SOCKET_URL: http://localhost:3000
+
+  db:
+    image: postgres:16
+    restart: always
+    environment:
+      POSTGRES_DB: tesoreria
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - '5432:5432'
+
+  redis:
+    image: redis:7
+    restart: always
+    ports:
+      - '6379:6379'
