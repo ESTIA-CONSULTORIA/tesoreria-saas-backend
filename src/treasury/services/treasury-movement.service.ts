@@ -12,18 +12,21 @@ export class TreasuryMovementService {
     tenantId: string;
     companyId: string;
     branchId?: string;
+    accountId?: string;
     saleId: string;
     amount: number;
     currency?: string;
   }) {
-    await this.movementsService.create(
-      'main-cash-account',
-      'INCOME',
-      'SALE',
-      'Venta registrada',
-      payload.amount,
-      payload.saleId,
-    );
+    if (payload.accountId) {
+      await this.movementsService.create(
+        payload.accountId,
+        'INCOME',
+        'SALE',
+        'Venta registrada',
+        payload.amount,
+        payload.saleId,
+      );
+    }
 
     return {
       success: true,
@@ -37,18 +40,21 @@ export class TreasuryMovementService {
     tenantId: string;
     companyId: string;
     branchId?: string;
+    accountId?: string;
     purchaseId: string;
     amount: number;
     currency?: string;
   }) {
-    await this.movementsService.create(
-      'main-cash-account',
-      'EXPENSE',
-      'PURCHASE',
-      'Compra registrada',
-      payload.amount,
-      payload.purchaseId,
-    );
+    if (payload.accountId) {
+      await this.movementsService.create(
+        payload.accountId,
+        'EXPENSE',
+        'PURCHASE',
+        'Compra registrada',
+        payload.amount,
+        payload.purchaseId,
+      );
+    }
 
     return {
       success: true,
