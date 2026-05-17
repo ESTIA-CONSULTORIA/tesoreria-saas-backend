@@ -9,8 +9,13 @@ services:
       - '3000:3000'
     environment:
       NODE_ENV: production
-      DATABASE_URL: postgres://postgres:postgres@db:5432/tesoreria
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_USER: postgres
+      DB_PASS: postgres
+      DB_NAME: tesoreria
       REDIS_HOST: redis
+      REDIS_PORT: 6379
     depends_on:
       - db
       - redis
