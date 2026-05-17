@@ -17,6 +17,12 @@ import { TransfersModule } from './transfers/transfers.module';
 import { BusinessTypesModule } from './business-types/business-types.module';
 import { IntegrationsModule } from './integrations/integrations.module';
 import { SyncQueueModule } from './sync-queue/sync-queue.module';
+import { SalesModule } from './sales/sales.module';
+import { InventoryModule } from './inventory/inventory.module';
+import { AccountingModule } from './accounting/accounting.module';
+import { PurchasesModule } from './purchases/purchases.module';
+import { TreasuryModule } from './treasury/treasury.module';
+import { RealtimeModule } from './realtime/realtime.module';
 
 import { SubscriptionGuard } from './auth/subscription.guard';
 import { FeatureGuard } from './auth/feature/feature.guard';
@@ -55,6 +61,12 @@ import { FeatureGuard } from './auth/feature/feature.guard';
     BusinessTypesModule,
     IntegrationsModule,
     SyncQueueModule,
+    SalesModule,
+    InventoryModule,
+    AccountingModule,
+    PurchasesModule,
+    TreasuryModule,
+    RealtimeModule,
   ],
 
   providers: [
