@@ -7,6 +7,7 @@ import { SalesService } from './sales.service';
 import { SalesController } from './sales.controller';
 import { SalesFinancialService } from './services/sales-financial.service';
 import { SalesReportingService } from './services/sales-reporting.service';
+import { SalesFlowService } from './services/sales-flow.service';
 import { InventoryModule } from '../inventory/inventory.module';
 import { AccountingModule } from '../accounting/accounting.module';
 
@@ -18,10 +19,14 @@ import { AccountingModule } from '../accounting/accounting.module';
   ],
   providers: [
     SalesService,
+    SalesFlowService,
     SalesFinancialService,
     SalesReportingService,
   ],
   controllers: [SalesController],
-  exports: [SalesService],
+  exports: [
+    SalesService,
+    SalesFlowService,
+  ],
 })
 export class SalesModule {}
