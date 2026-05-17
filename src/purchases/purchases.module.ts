@@ -8,9 +8,13 @@ import { PurchasesController } from './controllers/purchases.controller';
 import { PurchaseFlowService } from './services/purchase-flow.service';
 import { PurchaseFinancialService } from './services/purchase-financial.service';
 import { PurchaseInventoryService } from './services/purchase-inventory.service';
+import { RealtimeModule } from '../realtime/realtime.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Purchase, PurchaseItem, Supplier])],
+  imports: [
+    TypeOrmModule.forFeature([Purchase, PurchaseItem, Supplier]),
+    RealtimeModule,
+  ],
   controllers: [PurchasesController],
   providers: [
     PurchaseFlowService,
