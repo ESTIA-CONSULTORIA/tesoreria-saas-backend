@@ -45,11 +45,11 @@ export class PurchaseFlowService {
       taxes: 0,
     });
 
-    await this.treasuryMovementService.registerSaleIncome({
+    await this.treasuryMovementService.registerPurchaseExpense({
       tenantId: payload.tenantId,
       companyId: payload.companyId,
       branchId: payload.branchId,
-      saleId: purchaseId,
+      purchaseId,
       amount: payload.total,
       currency: payload.currency,
     });
