@@ -1,7 +1,16 @@
 import { Injectable } from '@nestjs/common';
+import { randomUUID } from 'crypto';
+
+import { TreasuryMovementService } from '../../treasury/services/treasury-movement.service';
+import { DashboardBroadcastService } from '../../realtime/services/dashboard-broadcast.service';
 
 @Injectable()
 export class SalesFlowService {
+  constructor(
+    private readonly treasuryMovementService: TreasuryMovementService,
+    private readonly dashboardBroadcastService: DashboardBroadcastService,
+  ) {}
+
   async createSale(payload: {
     tenantId: string;
     companyId: string;
@@ -15,19 +24,28 @@ export class SalesFlowService {
       unitPrice: number;
     }>;
   }) {
-    // Future implementation:
-    // - validate inventory
-    // - create sale transaction
-    // - emit sale.created event
-    // - generate inventory movement
-    // - generate treasury movement
-    // - generate accounting posting
-    // - register financial timeline event
-    // - push realtime dashboard update
+    const saleId = randomUUID();
+
+    await this.treasuryMovementService.registerSaleIncome({
+      tenantId: payload.tenantId,
+      companyId: payload.companyId,
+      branchId: payload.branchId,
+      saleId,
+      amount: payload.total,
+      currency: payload.currency,
+    });
+
+    await this.dashboardBroadcastService.broadcastSaleCreated({
+      tenantId: payload.tenantId,
+      companyId: payload.companyId,
+      branchId: payload.branchId,
+      saleId,
+      total: payload.total,
+    });
 
     return {
       success: true,
-      saleId: crypto.randomUUID(),
+      saleId,
       total: payload.total,
       status: 'CREATED',
     };
