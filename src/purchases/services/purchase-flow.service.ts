@@ -3,12 +3,16 @@ import { randomUUID } from 'crypto';
 
 import { PurchaseInventoryService } from './purchase-inventory.service';
 import { DashboardBroadcastService } from '../../realtime/services/dashboard-broadcast.service';
+import { PostingEngineService } from '../../accounting/services/posting-engine.service';
+import { TreasuryMovementService } from '../../treasury/services/treasury-movement.service';
 
 @Injectable()
 export class PurchaseFlowService {
   constructor(
     private readonly purchaseInventoryService: PurchaseInventoryService,
     private readonly dashboardBroadcastService: DashboardBroadcastService,
+    private readonly postingEngineService: PostingEngineService,
+    private readonly treasuryMovementService: TreasuryMovementService,
   ) {}
 
   async createPurchase(payload: {
@@ -34,6 +38,21 @@ export class PurchaseFlowService {
         unitCost: item.unitCost,
       });
     }
+
+    await this.postingEngineService.postPurchase({
+      purchaseId,
+      total: payload.total,
+      taxes: 0,
+    });
+
+    await this.treasuryMovementService.registerSaleIncome({
+      tenantId: payload.tenantId,
+      companyId: payload.companyId,
+      branchId: payload.branchId,
+      saleId: purchaseId,
+      amount: payload.total,
+      currency: payload.currency,
+    });
 
     await this.dashboardBroadcastService.broadcastPurchaseCreated({
       tenantId: payload.tenantId,
