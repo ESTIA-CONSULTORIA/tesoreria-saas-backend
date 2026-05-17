@@ -3,12 +3,16 @@ import { randomUUID } from 'crypto';
 
 import { TreasuryMovementService } from '../../treasury/services/treasury-movement.service';
 import { DashboardBroadcastService } from '../../realtime/services/dashboard-broadcast.service';
+import { InventoryService } from '../../inventory/inventory.service';
+import { PostingEngineService } from '../../accounting/services/posting-engine.service';
 
 @Injectable()
 export class SalesFlowService {
   constructor(
     private readonly treasuryMovementService: TreasuryMovementService,
     private readonly dashboardBroadcastService: DashboardBroadcastService,
+    private readonly inventoryService: InventoryService,
+    private readonly postingEngineService: PostingEngineService,
   ) {}
 
   async createSale(payload: {
@@ -26,6 +30,15 @@ export class SalesFlowService {
   }) {
     const saleId = randomUUID();
 
+    for (const item of payload.items) {
+      await this.inventoryService.registerMovement({
+        productId: item.productId,
+        quantity: item.quantity,
+        type: 'SALE',
+        referenceId: saleId,
+      });
+    }
+
     await this.treasuryMovementService.registerSaleIncome({
       tenantId: payload.tenantId,
       companyId: payload.companyId,
@@ -33,6 +46,12 @@ export class SalesFlowService {
       saleId,
       amount: payload.total,
       currency: payload.currency,
+    });
+
+    await this.postingEngineService.postSale({
+      saleId,
+      total: payload.total,
+      taxes: 0,
     });
 
     await this.dashboardBroadcastService.broadcastSaleCreated({
