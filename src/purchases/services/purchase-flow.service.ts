@@ -35,11 +35,11 @@ export class PurchaseFlowService {
       });
     }
 
-    await this.dashboardBroadcastService.broadcastSaleCreated({
+    await this.dashboardBroadcastService.broadcastPurchaseCreated({
       tenantId: payload.tenantId,
       companyId: payload.companyId,
       branchId: payload.branchId,
-      saleId: purchaseId,
+      purchaseId,
       total: payload.total,
     });
 
