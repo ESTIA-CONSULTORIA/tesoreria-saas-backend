@@ -9,17 +9,26 @@ export class DashboardBroadcastService {
     saleId: string;
     total: number;
   }) {
-    // Future implementation:
-    // - emit websocket updates
-    // - refresh KPIs
-    // - refresh liquidity widgets
-    // - refresh activity feed
-    // - refresh timeline
-
     return {
       success: true,
       broadcasted: true,
       event: 'sale.created',
+      payload,
+    };
+  }
+
+  async broadcastPurchaseCreated(payload: {
+    tenantId: string;
+    companyId: string;
+    branchId?: string;
+    purchaseId: string;
+    total: number;
+  }) {
+    return {
+      success: true,
+      broadcasted: true,
+      event: 'purchase.created',
+      payload,
     };
   }
 }
