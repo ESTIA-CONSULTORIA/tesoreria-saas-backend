@@ -1,7 +1,13 @@
 import { Injectable } from '@nestjs/common';
 
+import { MovementsService } from '../../movements/movements.service';
+
 @Injectable()
 export class TreasuryMovementService {
+  constructor(
+    private readonly movementsService: MovementsService,
+  ) {}
+
   async registerSaleIncome(payload: {
     tenantId: string;
     companyId: string;
@@ -10,6 +16,15 @@ export class TreasuryMovementService {
     amount: number;
     currency?: string;
   }) {
+    await this.movementsService.create(
+      'main-cash-account',
+      'INCOME',
+      'SALE',
+      'Venta registrada',
+      payload.amount,
+      payload.saleId,
+    );
+
     return {
       success: true,
       movementType: 'SALE_INCOME',
@@ -26,6 +41,15 @@ export class TreasuryMovementService {
     amount: number;
     currency?: string;
   }) {
+    await this.movementsService.create(
+      'main-cash-account',
+      'EXPENSE',
+      'PURCHASE',
+      'Compra registrada',
+      payload.amount,
+      payload.purchaseId,
+    );
+
     return {
       success: true,
       movementType: 'PURCHASE_EXPENSE',
