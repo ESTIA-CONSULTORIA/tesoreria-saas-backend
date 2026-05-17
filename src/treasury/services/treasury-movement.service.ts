@@ -10,16 +10,26 @@ export class TreasuryMovementService {
     amount: number;
     currency?: string;
   }) {
-    // Future implementation:
-    // - cash movement
-    // - bank movement
-    // - projected liquidity
-    // - reconciliation pending record
-
     return {
       success: true,
       movementType: 'SALE_INCOME',
       saleId: payload.saleId,
+      amount: payload.amount,
+    };
+  }
+
+  async registerPurchaseExpense(payload: {
+    tenantId: string;
+    companyId: string;
+    branchId?: string;
+    purchaseId: string;
+    amount: number;
+    currency?: string;
+  }) {
+    return {
+      success: true,
+      movementType: 'PURCHASE_EXPENSE',
+      purchaseId: payload.purchaseId,
       amount: payload.amount,
     };
   }
