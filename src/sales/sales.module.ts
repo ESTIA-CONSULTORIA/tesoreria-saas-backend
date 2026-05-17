@@ -5,6 +5,7 @@ import { Sale } from './entities/sale.entity';
 import { SaleItem } from './entities/sale-item.entity';
 import { SalesService } from './sales.service';
 import { SalesController } from './sales.controller';
+import { SalesFlowController } from './controllers/sales.controller';
 import { SalesFinancialService } from './services/sales-financial.service';
 import { SalesReportingService } from './services/sales-reporting.service';
 import { SalesFlowService } from './services/sales-flow.service';
@@ -23,7 +24,10 @@ import { AccountingModule } from '../accounting/accounting.module';
     SalesFinancialService,
     SalesReportingService,
   ],
-  controllers: [SalesController],
+  controllers: [
+    SalesController,
+    SalesFlowController,
+  ],
   exports: [
     SalesService,
     SalesFlowService,
