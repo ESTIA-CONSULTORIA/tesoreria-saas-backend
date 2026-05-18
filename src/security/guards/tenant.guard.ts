@@ -10,14 +10,19 @@ export class TenantGuard implements CanActivate {
   canActivate(context: ExecutionContext): boolean {
     const request = context.switchToHttp().getRequest();
 
-    const tenantId = request.headers['tenant-id'];
+    const headerTenantId = request.headers['tenant-id'];
     const userTenantId = request.user?.tenantId;
 
-    if (!tenantId || !userTenantId) {
+    if (!userTenantId) {
       throw new ForbiddenException('Tenant context missing');
     }
 
-    if (String(tenantId) !== String(userTenantId)) {
+    // Si no mandan header, usamos JWT directamente
+    if (!headerTenantId) {
+      return true;
+    }
+
+    if (String(headerTenantId) !== String(userTenantId)) {
       throw new ForbiddenException('Tenant access denied');
     }
 
