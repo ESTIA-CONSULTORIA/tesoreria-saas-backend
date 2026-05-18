@@ -29,7 +29,9 @@ export class FeatureGuard implements CanActivate {
     }
 
     const request = context.switchToHttp().getRequest();
-    const tenantId = request.headers['tenant-id'];
+
+    const tenantId =
+      request.user?.tenantId || request.headers['tenant-id'];
 
     if (!tenantId) {
       throw new ForbiddenException('Tenant no identificado');
