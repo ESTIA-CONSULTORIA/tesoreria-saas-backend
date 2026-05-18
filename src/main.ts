@@ -7,6 +7,7 @@ import { DataSource } from 'typeorm';
 
 import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
+import { ResponseInterceptor } from './common/interceptors/response.interceptor';
 import { validateEnvironment } from './config/env.validation';
 import { runBaseFinancialSeed } from './database/seeds/run-base-financial.seed';
 import { runBaseOrganizationSeed } from './database/seeds/run-base-organization.seed';
@@ -30,6 +31,8 @@ async function bootstrap() {
   });
 
   app.useGlobalFilters(new HttpExceptionFilter());
+
+  app.useGlobalInterceptors(new ResponseInterceptor());
 
   app.useGlobalPipes(
     new ValidationPipe({
