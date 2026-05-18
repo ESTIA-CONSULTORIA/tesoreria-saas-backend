@@ -1,4 +1,8 @@
-import { Module } from '@nestjs/common';
+import {
+  MiddlewareConsumer,
+  Module,
+  NestModule,
+} from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
 import { TypeOrmModule } from '@nestjs/typeorm';
@@ -11,6 +15,7 @@ import { SubscriptionGuard } from './auth/subscription.guard';
 import { BranchesModule } from './branches/branches.module';
 import { BusinessTypesModule } from './business-types/business-types.module';
 import { CategoriesModule } from './categories/categories.module';
+import { RequestContextMiddleware } from './common/middleware/request-context.middleware';
 import { CompaniesModule } from './companies/companies.module';
 import { IntegrationsModule } from './integrations/integrations.module';
 import { InventoryModule } from './inventory/inventory.module';
@@ -93,4 +98,8 @@ import { UsersModule } from './users/users.module';
     },
   ],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer.apply(RequestContextMiddleware).forRoutes('*');
+  }
+}
