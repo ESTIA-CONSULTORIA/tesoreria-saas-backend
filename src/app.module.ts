@@ -43,7 +43,8 @@ import { FeatureGuard } from './auth/feature/feature.guard';
         password: config.get<string>('DB_PASS'),
         database: config.get<string>('DB_NAME'),
         autoLoadEntities: true,
-        synchronize: true,
+        synchronize:
+          config.get<string>('NODE_ENV') !== 'production',
       }),
     }),
 
