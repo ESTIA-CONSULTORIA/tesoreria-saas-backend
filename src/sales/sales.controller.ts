@@ -1,20 +1,14 @@
 import { Body, Controller, Get, Param, Post } from '@nestjs/common';
 
 import { SalesService } from './sales.service';
-import { Sale } from './entities/sale.entity';
-import { SaleItem } from './entities/sale-item.entity';
+import { CreateSaleDto } from './dto/create-sale.dto';
 
 @Controller('sales')
 export class SalesController {
   constructor(private salesService: SalesService) {}
 
   @Post()
-  createSale(
-    @Body()
-    body: Partial<Sale> & {
-      items?: Partial<SaleItem>[];
-    },
-  ) {
+  createSale(@Body() body: CreateSaleDto) {
     return this.salesService.createSale(body);
   }
 
