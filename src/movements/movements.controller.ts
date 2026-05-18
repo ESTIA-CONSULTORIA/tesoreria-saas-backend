@@ -1,4 +1,11 @@
-import { Body, Controller, Get, Param, Post } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Get,
+  Param,
+  Post,
+} from '@nestjs/common';
 
 import { MovementsService } from './movements.service';
 import { CreateMovementDto } from './dto/create-movement.dto';
@@ -26,6 +33,18 @@ export class MovementsController {
 
   @Get('account/:accountId')
   findByAccount(@Param('accountId') accountId: string) {
-    return this.movementsService.findByAccount(accountId);
+    const normalizedAccountId = String(
+      accountId || '',
+    ).trim();
+
+    if (!normalizedAccountId) {
+      throw new BadRequestException(
+        'accountId requerido',
+      );
+    }
+
+    return this.movementsService.findByAccount(
+      normalizedAccountId,
+    );
   }
 }
