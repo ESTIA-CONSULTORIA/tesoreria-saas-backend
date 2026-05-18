@@ -4,6 +4,7 @@ import {
   Injectable,
   ForbiddenException,
 } from '@nestjs/common';
+
 import { SubscriptionsService } from '../subscriptions/subscriptions.service';
 
 @Injectable()
@@ -13,35 +14,56 @@ export class SubscriptionGuard implements CanActivate {
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest();
 
-    const path = request.url;
+    const path = String(request.url || '');
 
-    // Rutas públicas
+    // Rutas públicas estrictamente necesarias
     if (
       path.startsWith('/auth') ||
-      path.startsWith('/plans') ||
-      path.startsWith('/subscriptions')
+      path.startsWith('/plans')
     ) {
       return true;
     }
 
-    const tenantId =
-      request.user?.tenantId || request.headers['tenant-id'];
+    const tenantId = String(
+      request.user?.tenantId ||
+        request.headers['tenant-id'] ||
+        '',
+    ).trim();
 
     if (!tenantId) {
-      throw new ForbiddenException('Tenant no identificado');
+      throw new ForbiddenException(
+        'Tenant no identificado',
+      );
     }
 
-    const subscription = await this.subsService.findByTenant(tenantId);
+    const subscription = await this.subsService.findByTenant(
+      tenantId,
+    );
 
     if (!subscription) {
       throw new ForbiddenException('Sin suscripción');
     }
 
     const today = new Date();
-    const endDate = new Date(subscription.endDate);
 
-    if (subscription.status !== 'ACTIVE' || endDate < today) {
-      throw new ForbiddenException('Suscripción vencida');
+    const endDate = subscription.endDate
+      ? new Date(subscription.endDate)
+      : null;
+
+    const status = String(
+      subscription.status || '',
+    ).toUpperCase();
+
+    if (!endDate || Number.isNaN(endDate.getTime())) {
+      throw new ForbiddenException(
+        'Suscripción inválida',
+      );
+    }
+
+    if (status !== 'ACTIVE' || endDate < today) {
+      throw new ForbiddenException(
+        'Suscripción vencida',
+      );
     }
 
     return true;
