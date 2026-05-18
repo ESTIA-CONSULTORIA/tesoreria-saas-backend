@@ -22,9 +22,12 @@ export class RealtimeGateway implements OnGatewayConnection {
     const companyId = client.handshake.auth?.companyId;
     const branchId = client.handshake.auth?.branchId;
 
-    if (tenantId) {
-      client.join(`tenant:${tenantId}`);
+    if (!tenantId) {
+      client.disconnect();
+      return;
     }
+
+    client.join(`tenant:${tenantId}`);
 
     if (companyId) {
       client.join(`company:${companyId}`);
