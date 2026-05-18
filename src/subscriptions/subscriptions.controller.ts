@@ -1,13 +1,20 @@
-import { Body, Controller, Get, Param, Post } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Post,
+} from '@nestjs/common';
+
+import { CreateSubscriptionDto } from './dto/create-subscription.dto';
 import { SubscriptionsService } from './subscriptions.service';
-import { Subscription } from './entities/subscription.entity';
 
 @Controller('subscriptions')
 export class SubscriptionsController {
   constructor(private subsService: SubscriptionsService) {}
 
   @Post()
-  create(@Body() body: Partial<Subscription>) {
+  create(@Body() body: CreateSubscriptionDto) {
     return this.subsService.create(body);
   }
 
