@@ -5,6 +5,7 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
+
 import { SubscriptionsService } from '../../subscriptions/subscriptions.service';
 import { PlansService } from '../../plans/plans.service';
 import { FEATURE_KEY } from './decorator';
@@ -18,45 +19,63 @@ export class FeatureGuard implements CanActivate {
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
-    const feature = this.reflector.getAllAndOverride<string>(FEATURE_KEY, [
-      context.getHandler(),
-      context.getClass(),
-    ]);
+    const rawFeature =
+      this.reflector.getAllAndOverride<string>(
+        FEATURE_KEY,
+        [context.getHandler(), context.getClass()],
+      );
 
     // Si el endpoint no requiere feature, deja pasar
-    if (!feature) {
+    if (!rawFeature) {
       return true;
     }
 
+    const feature = rawFeature.toUpperCase().trim();
+
     const request = context.switchToHttp().getRequest();
 
-    const tenantId =
-      request.user?.tenantId || request.headers['tenant-id'];
+    const tenantId = String(
+      request.user?.tenantId ||
+        request.headers['tenant-id'] ||
+        '',
+    ).trim();
 
     if (!tenantId) {
-      throw new ForbiddenException('Tenant no identificado');
+      throw new ForbiddenException(
+        'Tenant no identificado',
+      );
     }
 
-    const subscription = await this.subsService.findByTenant(tenantId);
+    const subscription = await this.subsService.findByTenant(
+      tenantId,
+    );
 
     if (!subscription) {
       throw new ForbiddenException('Sin suscripción');
     }
 
-    const plan = await this.plansService.findByCode(subscription.planCode);
+    const plan = await this.plansService.findByCode(
+      subscription.planCode,
+    );
 
     if (!plan) {
       throw new ForbiddenException('Plan no encontrado');
     }
 
     const featureMap: Record<string, boolean> = {
-      TREASURY: plan.allowTreasury,
-      POS: plan.allowPOS,
-      INVENTORY: plan.allowInventory,
-      RECEIVABLES: plan.allowReceivables,
-      PAYABLES: plan.allowPayables,
-      REPORTS: plan.allowReports,
+      TREASURY: Boolean(plan.allowTreasury),
+      POS: Boolean(plan.allowPOS),
+      INVENTORY: Boolean(plan.allowInventory),
+      RECEIVABLES: Boolean(plan.allowReceivables),
+      PAYABLES: Boolean(plan.allowPayables),
+      REPORTS: Boolean(plan.allowReports),
     };
+
+    if (!(feature in featureMap)) {
+      throw new ForbiddenException(
+        `Feature inválida: ${feature}`,
+      );
+    }
 
     const allowed = featureMap[feature];
 
