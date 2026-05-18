@@ -20,7 +20,6 @@ import { SyncQueueModule } from './sync-queue/sync-queue.module';
 import { SalesModule } from './sales/sales.module';
 import { InventoryModule } from './inventory/inventory.module';
 import { AccountingModule } from './accounting/accounting.module';
-import { PurchasesModule } from './purchases/purchases.module';
 import { TreasuryModule } from './treasury/treasury.module';
 import { RealtimeModule } from './realtime/realtime.module';
 
@@ -65,7 +64,6 @@ import { FeatureGuard } from './auth/feature/feature.guard';
     SalesModule,
     InventoryModule,
     AccountingModule,
-    PurchasesModule,
     TreasuryModule,
     RealtimeModule,
   ],
