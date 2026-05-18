@@ -10,8 +10,19 @@ export class UsersService {
     private usersRepository: Repository<User>,
   ) {}
 
-  create(email: string, password: string) {
-    const user = this.usersRepository.create({ email, password });
+  create(
+    email: string,
+    password: string,
+    tenantId?: string,
+    role = 'ADMIN',
+  ) {
+    const user = this.usersRepository.create({
+      email,
+      password,
+      tenantId,
+      role,
+    });
+
     return this.usersRepository.save(user);
   }
 
