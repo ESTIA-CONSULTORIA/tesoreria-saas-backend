@@ -3,10 +3,13 @@ import {
   Injectable,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import {
+  DataSource,
+  Repository,
+} from 'typeorm';
 
-import { Product } from './entities/product.entity';
 import { InventoryMovement } from './entities/inventory-movement.entity';
+import { Product } from './entities/product.entity';
 
 @Injectable()
 export class InventoryService {
@@ -16,6 +19,8 @@ export class InventoryService {
 
     @InjectRepository(InventoryMovement)
     private inventoryMovementsRepository: Repository<InventoryMovement>,
+
+    private dataSource: DataSource,
   ) {}
 
   async createProduct(data: Partial<Product>) {
@@ -48,69 +53,76 @@ export class InventoryService {
   }
 
   async registerMovement(data: Partial<InventoryMovement>) {
-    const product = await this.productsRepository.findOne({
-      where: {
-        id: data.productId,
-      },
-    });
+    return this.dataSource.transaction(async (manager) => {
+      const product = await manager.findOne(Product, {
+        where: {
+          id: data.productId,
+        },
+      });
 
-    if (!product) {
-      throw new BadRequestException(
-        'Producto no encontrado',
-      );
-    }
-
-    const movementType = String(data.type || '').toUpperCase();
-
-    const allowedTypes = [
-      'IN',
-      'OUT',
-      'SALE',
-      'ADJUSTMENT',
-    ];
-
-    if (!allowedTypes.includes(movementType)) {
-      throw new BadRequestException(
-        'Tipo de movimiento inválido',
-      );
-    }
-
-    const quantity = Number(data.quantity || 0);
-
-    if (quantity <= 0) {
-      throw new BadRequestException(
-        'Cantidad inválida',
-      );
-    }
-
-    const previousStock = Number(product.stock || 0);
-
-    let newStock = previousStock;
-
-    if (['OUT', 'SALE'].includes(movementType)) {
-      if (previousStock < quantity) {
+      if (!product) {
         throw new BadRequestException(
-          'Stock insuficiente',
+          'Producto no encontrado',
         );
       }
 
-      newStock -= quantity;
-    } else {
-      newStock += quantity;
-    }
+      const movementType = String(
+        data.type || '',
+      ).toUpperCase();
 
-    await this.productsRepository.update(product.id, {
-      stock: newStock,
+      const allowedTypes = [
+        'IN',
+        'OUT',
+        'SALE',
+        'ADJUSTMENT',
+      ];
+
+      if (!allowedTypes.includes(movementType)) {
+        throw new BadRequestException(
+          'Tipo de movimiento inválido',
+        );
+      }
+
+      const quantity = Number(data.quantity || 0);
+
+      if (quantity <= 0) {
+        throw new BadRequestException(
+          'Cantidad inválida',
+        );
+      }
+
+      const previousStock = Number(product.stock || 0);
+
+      let newStock = previousStock;
+
+      if (['OUT', 'SALE'].includes(movementType)) {
+        if (previousStock < quantity) {
+          throw new BadRequestException(
+            'Stock insuficiente',
+          );
+        }
+
+        newStock -= quantity;
+      } else {
+        newStock += quantity;
+      }
+
+      product.stock = newStock;
+
+      await manager.save(product);
+
+      const movement = manager.create(
+        InventoryMovement,
+        {
+          ...data,
+          type: movementType,
+          quantity,
+          previousStock,
+          newStock,
+        },
+      );
+
+      return manager.save(movement);
     });
-
-    const movement = this.inventoryMovementsRepository.create({
-      ...data,
-      type: movementType,
-      quantity,
-      previousStock,
-      newStock,
-    });
-
-    return this.inventoryMovementsRepository.save(movement);
   }
 }
