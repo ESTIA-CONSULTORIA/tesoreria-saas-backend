@@ -1,4 +1,7 @@
-import { Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+} from '@nestjs/common';
 
 @Injectable()
 export class DashboardBroadcastService {
@@ -9,6 +12,24 @@ export class DashboardBroadcastService {
     saleId: string;
     total: number;
   }) {
+    if (!payload.tenantId || !payload.companyId) {
+      throw new BadRequestException(
+        'Contexto SaaS inválido',
+      );
+    }
+
+    if (!payload.saleId) {
+      throw new BadRequestException(
+        'SaleId requerido',
+      );
+    }
+
+    if (Number(payload.total || 0) <= 0) {
+      throw new BadRequestException(
+        'Total inválido',
+      );
+    }
+
     return {
       success: true,
       broadcasted: true,
@@ -24,6 +45,24 @@ export class DashboardBroadcastService {
     purchaseId: string;
     total: number;
   }) {
+    if (!payload.tenantId || !payload.companyId) {
+      throw new BadRequestException(
+        'Contexto SaaS inválido',
+      );
+    }
+
+    if (!payload.purchaseId) {
+      throw new BadRequestException(
+        'PurchaseId requerido',
+      );
+    }
+
+    if (Number(payload.total || 0) <= 0) {
+      throw new BadRequestException(
+        'Total inválido',
+      );
+    }
+
     return {
       success: true,
       broadcasted: true,
