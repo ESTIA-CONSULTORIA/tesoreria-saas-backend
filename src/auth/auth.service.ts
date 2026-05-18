@@ -1,7 +1,8 @@
 import {
-  Injectable,
-  UnauthorizedException,
   BadRequestException,
+  Injectable,
+  Logger,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
@@ -10,6 +11,10 @@ import { UsersService } from '../users/users.service';
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(
+    AuthService.name,
+  );
+
   constructor(
     private usersService: UsersService,
     private jwtService: JwtService,
@@ -28,6 +33,18 @@ export class AuthService {
     const normalizedRole = String(role || 'ADMIN')
       .trim()
       .toUpperCase();
+
+    if (!normalizedEmail) {
+      throw new BadRequestException(
+        'Email requerido',
+      );
+    }
+
+    if (!String(password || '').trim()) {
+      throw new BadRequestException(
+        'Password requerido',
+      );
+    }
 
     const allowedRoles = ['ADMIN', 'MANAGER', 'USER'];
 
@@ -57,6 +74,10 @@ export class AuthService {
       normalizedRole,
     );
 
+    this.logger.log(
+      `Usuario registrado: ${normalizedEmail}`,
+    );
+
     return {
       message: 'Usuario creado correctamente',
       userId: user.id,
@@ -68,11 +89,21 @@ export class AuthService {
       .trim()
       .toLowerCase();
 
+    if (!normalizedEmail) {
+      throw new UnauthorizedException(
+        'Credenciales incorrectas',
+      );
+    }
+
     const user = await this.usersService.findByEmail(
       normalizedEmail,
     );
 
     if (!user) {
+      this.logger.warn(
+        `Login inválido para ${normalizedEmail}`,
+      );
+
       throw new UnauthorizedException(
         'Credenciales incorrectas',
       );
@@ -84,6 +115,10 @@ export class AuthService {
     );
 
     if (!isPasswordValid) {
+      this.logger.warn(
+        `Password inválido para ${normalizedEmail}`,
+      );
+
       throw new UnauthorizedException(
         'Credenciales incorrectas',
       );
@@ -95,6 +130,10 @@ export class AuthService {
       tenantId: user.tenantId,
       role: user.role,
     });
+
+    this.logger.log(
+      `Login exitoso: ${normalizedEmail}`,
+    );
 
     return {
       access_token: token,
