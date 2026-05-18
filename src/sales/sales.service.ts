@@ -1,4 +1,7 @@
-import { Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
@@ -21,19 +24,54 @@ export class SalesService {
   ) {}
 
   async createSale(data: Partial<Sale> & { items?: Partial<SaleItem>[] }) {
-    const sale = this.salesRepository.create(data);
+    if (!data.items?.length) {
+      throw new BadRequestException(
+        'La venta requiere al menos un item',
+      );
+    }
+
+    const calculatedTotal = data.items.reduce(
+      (acc, item) => {
+        return (
+          acc +
+          Number(item.quantity || 0) *
+            Number(item.unitPrice || 0)
+        );
+      },
+      0,
+    );
+
+    const incomingTotal = Number(data.total || 0);
+
+    if (incomingTotal <= 0) {
+      throw new BadRequestException(
+        'Total inválido',
+      );
+    }
+
+    if (
+      Math.abs(calculatedTotal - incomingTotal) > 0.01
+    ) {
+      throw new BadRequestException(
+        'El total no coincide con los items',
+      );
+    }
+
+    const sale = this.salesRepository.create({
+      ...data,
+      total: incomingTotal,
+    });
+
     const savedSale = await this.salesRepository.save(sale);
 
-    if (data.items?.length) {
-      const items = data.items.map((item) =>
-        this.saleItemsRepository.create({
-          ...item,
-          saleId: savedSale.id,
-        }),
-      );
+    const items = data.items.map((item) =>
+      this.saleItemsRepository.create({
+        ...item,
+        saleId: savedSale.id,
+      }),
+    );
 
-      await this.saleItemsRepository.save(items);
-    }
+    await this.saleItemsRepository.save(items);
 
     await this.salesFinancialService.generateTreasuryMovement({
       saleId: savedSale.id,
