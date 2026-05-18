@@ -1,4 +1,7 @@
-import { Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+} from '@nestjs/common';
 import { randomUUID } from 'crypto';
 
 import { TreasuryMovementService } from '../../treasury/services/treasury-movement.service';
@@ -28,6 +31,31 @@ export class SalesFlowService {
       unitPrice: number;
     }>;
   }) {
+    if (!payload.tenantId || !payload.companyId) {
+      throw new BadRequestException(
+        'Contexto SaaS inválido',
+      );
+    }
+
+    if (!payload.items?.length) {
+      throw new BadRequestException(
+        'La venta requiere items',
+      );
+    }
+
+    const calculatedTotal = payload.items.reduce(
+      (acc, item) => {
+        return acc + item.quantity * item.unitPrice;
+      },
+      0,
+    );
+
+    if (Math.abs(calculatedTotal - payload.total) > 0.01) {
+      throw new BadRequestException(
+        'El total no coincide con los items',
+      );
+    }
+
     const saleId = randomUUID();
 
     for (const item of payload.items) {
@@ -35,7 +63,7 @@ export class SalesFlowService {
         productId: item.productId,
         quantity: item.quantity,
         type: 'SALE',
-        referenceId: saleId,
+        reference: saleId,
       });
     }
 
