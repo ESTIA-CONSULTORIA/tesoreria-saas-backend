@@ -10,4 +10,10 @@ export class User {
 
   @Column()
   password: string;
+
+  @Column({ nullable: true })
+  tenantId: string;
+
+  @Column({ default: 'ADMIN' })
+  role: string;
 }
