@@ -1,4 +1,7 @@
-import { Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+} from '@nestjs/common';
 
 import { MovementsService } from '../../movements/movements.service';
 
@@ -17,6 +20,18 @@ export class TreasuryMovementService {
     amount: number;
     currency?: string;
   }) {
+    if (!payload.saleId) {
+      throw new BadRequestException(
+        'SaleId requerido',
+      );
+    }
+
+    if (Number(payload.amount || 0) <= 0) {
+      throw new BadRequestException(
+        'Monto inválido',
+      );
+    }
+
     if (payload.accountId) {
       await this.movementsService.create(
         payload.accountId,
@@ -45,6 +60,18 @@ export class TreasuryMovementService {
     amount: number;
     currency?: string;
   }) {
+    if (!payload.purchaseId) {
+      throw new BadRequestException(
+        'PurchaseId requerido',
+      );
+    }
+
+    if (Number(payload.amount || 0) <= 0) {
+      throw new BadRequestException(
+        'Monto inválido',
+      );
+    }
+
     if (payload.accountId) {
       await this.movementsService.create(
         payload.accountId,
