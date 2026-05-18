@@ -14,30 +14,48 @@ export class JwtAuthGuard implements CanActivate {
   canActivate(context: ExecutionContext): boolean {
     const request = context.switchToHttp().getRequest();
 
-    const authHeader = request.headers.authorization;
+    const authHeader = String(
+      request.headers.authorization || '',
+    ).trim();
 
     if (!authHeader) {
-      throw new UnauthorizedException('Authorization header missing');
+      throw new UnauthorizedException(
+        'Authorization header missing',
+      );
     }
 
     const [scheme, token] = authHeader.split(' ');
 
-    if (scheme !== 'Bearer') {
-      throw new UnauthorizedException('Invalid authorization scheme');
+    if (String(scheme).toLowerCase() !== 'bearer') {
+      throw new UnauthorizedException(
+        'Invalid authorization scheme',
+      );
     }
 
-    if (!token) {
+    if (!token?.trim()) {
       throw new UnauthorizedException('Token missing');
     }
 
     try {
-      const payload = this.tokenService.verifyToken(token);
+      const payload = this.tokenService.verifyToken(
+        token.trim(),
+      );
+
+      if (!payload || !payload.sub) {
+        throw new UnauthorizedException(
+          'Invalid token payload',
+        );
+      }
 
       request.user = payload;
 
       return true;
-    } catch {
-      throw new UnauthorizedException('Invalid token');
+    } catch (error) {
+      throw new UnauthorizedException(
+        error instanceof Error
+          ? error.message
+          : 'Invalid token',
+      );
     }
   }
 }
