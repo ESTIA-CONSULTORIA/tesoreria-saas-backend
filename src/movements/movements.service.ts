@@ -54,10 +54,22 @@ export class MovementsService {
     const numericAmount = Number(amount);
     const currentBalance = Number(account.balance);
 
+    if (numericAmount <= 0) {
+      throw new BadRequestException(
+        'El monto debe ser mayor a cero',
+      );
+    }
+
     // 4. actualizar saldo
     if (type === 'INCOME') {
       account.balance = Number(currentBalance + numericAmount);
     } else if (type === 'EXPENSE') {
+      if (currentBalance < numericAmount) {
+        throw new BadRequestException(
+          'Fondos insuficientes',
+        );
+      }
+
       account.balance = Number(currentBalance - numericAmount);
     } else {
       throw new BadRequestException('Tipo inválido');
