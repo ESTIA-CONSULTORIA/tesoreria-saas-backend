@@ -1,6 +1,8 @@
 import {
   BadRequestException,
   Injectable,
+  InternalServerErrorException,
+  Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
@@ -15,6 +17,10 @@ import { SalesReportingService } from './services/sales-reporting.service';
 
 @Injectable()
 export class SalesService {
+  private readonly logger = new Logger(
+    SalesService.name,
+  );
+
   constructor(
     @InjectRepository(Sale)
     private salesRepository: Repository<Sale>,
@@ -65,49 +71,76 @@ export class SalesService {
       );
     }
 
-    const savedSale = await this.dataSource.transaction(
-      async (manager) => {
-        const sale = manager.create(Sale, {
-          ...data,
-          total: incomingTotal,
-        });
+    const queryRunner =
+      this.dataSource.createQueryRunner();
 
-        const persistedSale = await manager.save(sale);
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
 
-        const items = data.items!.map((item) =>
-          manager.create(SaleItem, {
-            ...item,
-            saleId: persistedSale.id,
-          }),
-        );
+    try {
+      const sale = queryRunner.manager.create(Sale, {
+        ...data,
+        total: incomingTotal,
+      });
 
-        await manager.save(items);
+      const persistedSale = await queryRunner.manager.save(
+        sale,
+      );
 
-        return persistedSale;
-      },
-    );
+      const items = data.items!.map((item) =>
+        queryRunner.manager.create(SaleItem, {
+          ...item,
+          saleId: persistedSale.id,
+        }),
+      );
 
-    await this.salesFinancialService.generateTreasuryMovement({
-      saleId: savedSale.id,
-      tenantId: savedSale.tenantId,
-      companyId: savedSale.companyId,
-      branchId: savedSale.branchId,
-      total: Number(savedSale.total || 0),
-      currency: savedSale.currency,
-    });
+      await queryRunner.manager.save(items);
 
-    await this.salesReportingService.generateKpis({
-      saleId: savedSale.id,
-      total: Number(savedSale.total || 0),
-      subtotal: Number(savedSale.subtotal || 0),
-      taxes: Number(savedSale.taxes || 0),
-      discounts: Number(savedSale.discounts || 0),
-      branchId: savedSale.branchId,
-      companyId: savedSale.companyId,
-      tenantId: savedSale.tenantId,
-    });
+      await this.salesFinancialService.generateTreasuryMovement({
+        saleId: persistedSale.id,
+        tenantId: persistedSale.tenantId,
+        companyId: persistedSale.companyId,
+        branchId: persistedSale.branchId,
+        total: Number(persistedSale.total || 0),
+        currency: persistedSale.currency,
+      });
 
-    return this.findSale(savedSale.id);
+      await this.salesReportingService.generateKpis({
+        saleId: persistedSale.id,
+        total: Number(persistedSale.total || 0),
+        subtotal: Number(
+          persistedSale.subtotal || 0,
+        ),
+        taxes: Number(persistedSale.taxes || 0),
+        discounts: Number(
+          persistedSale.discounts || 0,
+        ),
+        branchId: persistedSale.branchId,
+        companyId: persistedSale.companyId,
+        tenantId: persistedSale.tenantId,
+      });
+
+      await queryRunner.commitTransaction();
+
+      this.logger.log(
+        `Venta creada correctamente: ${persistedSale.id}`,
+      );
+
+      return this.findSale(persistedSale.id);
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+
+      this.logger.error(
+        'Error creando venta',
+        error instanceof Error ? error.stack : undefined,
+      );
+
+      throw new InternalServerErrorException(
+        'No fue posible completar la venta',
+      );
+    } finally {
+      await queryRunner.release();
+    }
   }
 
   async findSale(id: string) {
