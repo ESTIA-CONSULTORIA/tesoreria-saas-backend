@@ -1,4 +1,7 @@
-import { Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+} from '@nestjs/common';
 
 @Injectable()
 export class PostingEngineService {
@@ -8,10 +11,17 @@ export class PostingEngineService {
     taxes: number;
     paymentMethod?: string;
   }) {
-    // Future implementation:
-    // DR Cash/Bank
-    // CR Sales Revenue
-    // CR VAT Payable
+    if (!payload.saleId) {
+      throw new BadRequestException(
+        'SaleId requerido',
+      );
+    }
+
+    if (Number(payload.total || 0) <= 0) {
+      throw new BadRequestException(
+        'Total inválido',
+      );
+    }
 
     return {
       success: true,
@@ -25,10 +35,17 @@ export class PostingEngineService {
     total: number;
     taxes: number;
   }) {
-    // Future implementation:
-    // DR Inventory/Expense
-    // DR VAT Credit
-    // CR Accounts Payable
+    if (!payload.purchaseId) {
+      throw new BadRequestException(
+        'PurchaseId requerido',
+      );
+    }
+
+    if (Number(payload.total || 0) <= 0) {
+      throw new BadRequestException(
+        'Total inválido',
+      );
+    }
 
     return {
       success: true,
@@ -42,8 +59,23 @@ export class PostingEngineService {
     amount: number;
     type: string;
   }) {
-    // Future implementation:
-    // payments and collections postings
+    if (!payload.referenceId) {
+      throw new BadRequestException(
+        'ReferenceId requerido',
+      );
+    }
+
+    if (Number(payload.amount || 0) <= 0) {
+      throw new BadRequestException(
+        'Monto inválido',
+      );
+    }
+
+    if (!payload.type) {
+      throw new BadRequestException(
+        'Tipo requerido',
+      );
+    }
 
     return {
       success: true,
