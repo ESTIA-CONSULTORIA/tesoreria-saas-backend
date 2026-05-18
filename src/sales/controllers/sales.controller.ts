@@ -4,9 +4,9 @@ import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { TenantGuard } from '../../security/guards/tenant.guard';
 import { SalesFlowService } from '../services/sales-flow.service';
 
-@Controller('sales')
+@Controller('sales/flow')
 @UseGuards(JwtAuthGuard, TenantGuard)
-export class SalesController {
+export class SalesFlowController {
   constructor(private readonly salesFlowService: SalesFlowService) {}
 
   @Post()
