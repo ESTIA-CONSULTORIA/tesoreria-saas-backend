@@ -1,21 +1,20 @@
-import { Body, Controller, Get, Param, Post } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Post,
+} from '@nestjs/common';
+
 import { CompaniesService } from './companies.service';
+import { CreateCompanyDto } from './dto/create-company.dto';
 
 @Controller('companies')
 export class CompaniesController {
   constructor(private companiesService: CompaniesService) {}
 
   @Post()
-  create(
-    @Body()
-    body: {
-      tenantId: string;
-      legalName: string;
-      tradeName: string;
-      taxId?: string;
-      baseCurrency?: string;
-    },
-  ) {
+  create(@Body() body: CreateCompanyDto) {
     return this.companiesService.create(
       body.tenantId,
       body.legalName,
