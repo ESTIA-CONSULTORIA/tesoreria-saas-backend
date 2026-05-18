@@ -10,6 +10,7 @@ import {
   Repository,
 } from 'typeorm';
 
+import { InventoryService } from '../inventory/inventory.service';
 import { SaleItem } from './entities/sale-item.entity';
 import { Sale } from './entities/sale.entity';
 import { SalesFinancialService } from './services/sales-financial.service';
@@ -30,6 +31,7 @@ export class SalesService {
 
     private salesFinancialService: SalesFinancialService,
     private salesReportingService: SalesReportingService,
+    private inventoryService: InventoryService,
     private dataSource: DataSource,
   ) {}
 
@@ -95,6 +97,19 @@ export class SalesService {
       );
 
       await queryRunner.manager.save(items);
+
+      for (const item of data.items) {
+        if (!item.productId) {
+          continue;
+        }
+
+        await this.inventoryService.registerMovement({
+          productId: item.productId,
+          quantity: Number(item.quantity || 0),
+          type: 'SALE',
+          referenceId: persistedSale.id,
+        });
+      }
 
       await this.salesFinancialService.generateTreasuryMovement({
         saleId: persistedSale.id,
