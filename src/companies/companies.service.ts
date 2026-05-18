@@ -1,7 +1,11 @@
-import { Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Company } from './entities/company.entity';
 import { Repository } from 'typeorm';
+
+import { Company } from './entities/company.entity';
 
 @Injectable()
 export class CompaniesService {
@@ -10,19 +14,62 @@ export class CompaniesService {
     private companiesRepository: Repository<Company>,
   ) {}
 
-  create(
+  async create(
     tenantId: string,
     legalName: string,
     tradeName: string,
     taxId?: string,
     baseCurrency?: string,
   ) {
+    const normalizedTenantId = String(
+      tenantId || '',
+    ).trim();
+
+    const normalizedLegalName = String(
+      legalName || '',
+    ).trim();
+
+    const normalizedTradeName = String(
+      tradeName || '',
+    ).trim();
+
+    const normalizedTaxId = String(
+      taxId || '',
+    )
+      .trim()
+      .toUpperCase();
+
+    const normalizedCurrency = String(
+      baseCurrency || 'MXN',
+    )
+      .trim()
+      .toUpperCase();
+
+    if (!normalizedTenantId) {
+      throw new BadRequestException(
+        'tenantId requerido',
+      );
+    }
+
+    const existingCompany = await this.companiesRepository.findOne({
+      where: {
+        tenantId: normalizedTenantId,
+        tradeName: normalizedTradeName,
+      },
+    });
+
+    if (existingCompany) {
+      throw new BadRequestException(
+        'La empresa ya existe',
+      );
+    }
+
     const company = this.companiesRepository.create({
-      tenantId,
-      legalName,
-      tradeName,
-      taxId,
-      baseCurrency: baseCurrency || 'MXN',
+      tenantId: normalizedTenantId,
+      legalName: normalizedLegalName,
+      tradeName: normalizedTradeName,
+      taxId: normalizedTaxId || null,
+      baseCurrency: normalizedCurrency,
       isActive: true,
     });
 
@@ -30,12 +77,21 @@ export class CompaniesService {
   }
 
   findAll() {
-    return this.companiesRepository.find();
+    return this.companiesRepository.find({
+      order: {
+        createdAt: 'DESC',
+      },
+    });
   }
 
   findByTenant(tenantId: string) {
     return this.companiesRepository.find({
-      where: { tenantId },
+      where: {
+        tenantId: String(tenantId || '').trim(),
+      },
+      order: {
+        createdAt: 'DESC',
+      },
     });
   }
 }
