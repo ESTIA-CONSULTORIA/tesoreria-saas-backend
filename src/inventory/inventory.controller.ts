@@ -1,15 +1,15 @@
 import { Body, Controller, Get, Post } from '@nestjs/common';
 
 import { InventoryService } from './inventory.service';
-import { Product } from './entities/product.entity';
-import { InventoryMovement } from './entities/inventory-movement.entity';
+import { CreateProductDto } from './dto/create-product.dto';
+import { CreateInventoryMovementDto } from './dto/create-inventory-movement.dto';
 
 @Controller('inventory')
 export class InventoryController {
   constructor(private inventoryService: InventoryService) {}
 
   @Post('products')
-  createProduct(@Body() body: Partial<Product>) {
+  createProduct(@Body() body: CreateProductDto) {
     return this.inventoryService.createProduct(body);
   }
 
@@ -19,7 +19,7 @@ export class InventoryController {
   }
 
   @Post('movements')
-  registerMovement(@Body() body: Partial<InventoryMovement>) {
+  registerMovement(@Body() body: CreateInventoryMovementDto) {
     return this.inventoryService.registerMovement(body);
   }
 }
