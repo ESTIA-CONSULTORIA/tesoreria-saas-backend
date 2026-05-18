@@ -1,6 +1,8 @@
 import {
   BadRequestException,
   Injectable,
+  InternalServerErrorException,
+  Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
@@ -13,6 +15,10 @@ import { Product } from './entities/product.entity';
 
 @Injectable()
 export class InventoryService {
+  private readonly logger = new Logger(
+    InventoryService.name,
+  );
+
   constructor(
     @InjectRepository(Product)
     private productsRepository: Repository<Product>,
@@ -53,8 +59,13 @@ export class InventoryService {
   }
 
   async registerMovement(data: Partial<InventoryMovement>) {
-    return this.dataSource.transaction(async (manager) => {
-      const product = await manager.findOne(Product, {
+    const queryRunner = this.dataSource.createQueryRunner();
+
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    try {
+      const product = await queryRunner.manager.findOne(Product, {
         where: {
           id: data.productId,
         },
@@ -66,9 +77,7 @@ export class InventoryService {
         );
       }
 
-      const movementType = String(
-        data.type || '',
-      ).toUpperCase();
+      const movementType = String(data.type || '').toUpperCase();
 
       const allowedTypes = [
         'IN',
@@ -109,9 +118,9 @@ export class InventoryService {
 
       product.stock = newStock;
 
-      await manager.save(product);
+      await queryRunner.manager.save(product);
 
-      const movement = manager.create(
+      const movement = queryRunner.manager.create(
         InventoryMovement,
         {
           ...data,
@@ -122,7 +131,28 @@ export class InventoryService {
         },
       );
 
-      return manager.save(movement);
-    });
+      const savedMovement = await queryRunner.manager.save(movement);
+
+      await queryRunner.commitTransaction();
+
+      this.logger.log(
+        `Movimiento inventory registrado: ${savedMovement.id}`,
+      );
+
+      return savedMovement;
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+
+      this.logger.error(
+        'Error registrando movimiento inventory',
+        error instanceof Error ? error.stack : undefined,
+      );
+
+      throw new InternalServerErrorException(
+        'No fue posible registrar el movimiento',
+      );
+    } finally {
+      await queryRunner.release();
+    }
   }
 }
