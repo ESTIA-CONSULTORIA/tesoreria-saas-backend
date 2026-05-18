@@ -1,7 +1,11 @@
-import { Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Subscription } from './entities/subscription.entity';
 import { Repository } from 'typeorm';
+
+import { Subscription } from './entities/subscription.entity';
 
 @Injectable()
 export class SubscriptionsService {
@@ -11,18 +15,29 @@ export class SubscriptionsService {
   ) {}
 
   async create(data: Partial<Subscription>) {
-    if (!data.tenantId) {
-      throw new Error('tenantId es requerido');
+    const tenantId = String(data.tenantId || '').trim();
+
+    if (!tenantId) {
+      throw new BadRequestException(
+        'tenantId es requerido',
+      );
     }
 
+    const normalizedStatus = String(
+      data.status || 'ACTIVE',
+    )
+      .trim()
+      .toUpperCase();
+
     await this.subscriptionRepo.update(
-      { tenantId: data.tenantId },
+      { tenantId },
       { status: 'EXPIRED' },
     );
 
     const sub = this.subscriptionRepo.create({
       ...data,
-      status: data.status || 'ACTIVE',
+      tenantId,
+      status: normalizedStatus,
     });
 
     return this.subscriptionRepo.save(sub);
@@ -31,7 +46,7 @@ export class SubscriptionsService {
   findByTenant(tenantId: string) {
     return this.subscriptionRepo.findOne({
       where: {
-        tenantId,
+        tenantId: String(tenantId || '').trim(),
         status: 'ACTIVE',
       },
       order: {
