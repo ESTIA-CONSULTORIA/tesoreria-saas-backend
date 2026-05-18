@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   Injectable,
+  Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -9,6 +10,10 @@ import { User } from './entities/user.entity';
 
 @Injectable()
 export class UsersService {
+  private readonly logger = new Logger(
+    UsersService.name,
+  );
+
   constructor(
     @InjectRepository(User)
     private usersRepository: Repository<User>,
@@ -28,6 +33,8 @@ export class UsersService {
       .trim()
       .toUpperCase();
 
+    const allowedRoles = ['ADMIN', 'MANAGER', 'USER'];
+
     if (!normalizedEmail) {
       throw new BadRequestException(
         'Email requerido',
@@ -37,6 +44,12 @@ export class UsersService {
     if (!password?.trim()) {
       throw new BadRequestException(
         'Password requerido',
+      );
+    }
+
+    if (!allowedRoles.includes(normalizedRole)) {
+      throw new BadRequestException(
+        'Rol inválido',
       );
     }
 
@@ -59,7 +72,13 @@ export class UsersService {
       role: normalizedRole,
     });
 
-    return this.usersRepository.save(user);
+    const savedUser = await this.usersRepository.save(user);
+
+    this.logger.log(
+      `Usuario creado: ${normalizedEmail}`,
+    );
+
+    return savedUser;
   }
 
   findByEmail(email: string) {
