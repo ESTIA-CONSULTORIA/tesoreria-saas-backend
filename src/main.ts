@@ -5,6 +5,7 @@ import { DataSource } from 'typeorm';
 import { AppModule } from './app.module';
 import { runBaseOrganizationSeed } from './database/seeds/run-base-organization.seed';
 import { runBaseFinancialSeed } from './database/seeds/run-base-financial.seed';
+import { runBaseSubscriptionSeed } from './database/seeds/run-base-subscription.seed';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -26,6 +27,7 @@ async function bootstrap() {
 
   await runBaseOrganizationSeed(dataSource);
   await runBaseFinancialSeed(dataSource);
+  await runBaseSubscriptionSeed(dataSource);
 
   await app.listen(process.env.PORT ?? 3000);
 }
