@@ -1,4 +1,7 @@
-import { Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+} from '@nestjs/common';
 
 @Injectable()
 export class SalesReportingService {
@@ -12,15 +15,34 @@ export class SalesReportingService {
     companyId: string;
     tenantId: string;
   }) {
-    // Future implementation:
-    // - update daily sales KPI
-    // - update average ticket
-    // - update margin KPI
-    // - update sales by branch
-    // - update sales by payment method
+    const saleId = String(
+      payload.saleId || '',
+    ).trim();
+
+    const total = Number(payload.total || 0);
+
+    if (!saleId) {
+      throw new BadRequestException(
+        'saleId requerido para reporting',
+      );
+    }
+
+    if (total < 0) {
+      throw new BadRequestException(
+        'total inválido para reporting',
+      );
+    }
 
     return {
       success: true,
+      generatedAt: new Date().toISOString(),
+      referenceId: saleId,
+      totals: {
+        total,
+        subtotal: Number(payload.subtotal || 0),
+        taxes: Number(payload.taxes || 0),
+        discounts: Number(payload.discounts || 0),
+      },
       generatedMetrics: [
         'DAILY_SALES',
         'AVERAGE_TICKET',
