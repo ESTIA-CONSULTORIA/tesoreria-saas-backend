@@ -1,4 +1,8 @@
-import { Injectable, Logger } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+} from '@nestjs/common';
 
 @Injectable()
 export class SalesFinancialService {
@@ -14,16 +18,41 @@ export class SalesFinancialService {
     total: number;
     currency?: string;
   }) {
+    const normalizedSaleId = String(
+      payload.saleId || '',
+    ).trim();
+
+    const total = Number(payload.total || 0);
+
+    const currency = String(
+      payload.currency || 'MXN',
+    )
+      .trim()
+      .toUpperCase();
+
+    if (!normalizedSaleId) {
+      throw new BadRequestException(
+        'saleId requerido',
+      );
+    }
+
+    if (!total || total <= 0) {
+      throw new BadRequestException(
+        'Total inválido para treasury',
+      );
+    }
+
     this.logger.log(
-      `Generating treasury movement for sale ${payload.saleId}`,
+      `Generating treasury movement for sale ${normalizedSaleId}`,
     );
 
     return {
       success: true,
       type: 'SALE_TREASURY_MOVEMENT',
-      referenceId: payload.saleId,
-      total: payload.total,
-      currency: payload.currency || 'MXN',
+      referenceId: normalizedSaleId,
+      total,
+      currency,
+      generatedAt: new Date().toISOString(),
     };
   }
 }
