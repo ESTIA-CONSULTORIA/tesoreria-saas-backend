@@ -1,6 +1,8 @@
 import { Body, Controller, Post } from '@nestjs/common';
-import { TransfersService } from './transfers.service';
+
 import { Feature } from '../auth/feature/decorator';
+import { CreateTransferDto } from './dto/create-transfer.dto';
+import { TransfersService } from './transfers.service';
 
 @Controller('transfers')
 export class TransfersController {
@@ -8,15 +10,7 @@ export class TransfersController {
 
   @Post()
   @Feature('TREASURY')
-  create(
-    @Body()
-    body: {
-      fromAccountId: string;
-      toAccountId: string;
-      amount: number;
-      concept?: string;
-    },
-  ) {
+  create(@Body() body: CreateTransferDto) {
     return this.transfersService.create(
       body.fromAccountId,
       body.toAccountId,
