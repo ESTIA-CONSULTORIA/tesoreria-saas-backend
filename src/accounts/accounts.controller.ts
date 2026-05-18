@@ -1,4 +1,11 @@
-import { Body, Controller, Get, Param, Post } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Get,
+  Param,
+  Post,
+} from '@nestjs/common';
 
 import { AccountsService } from './accounts.service';
 import { CreateAccountDto } from './dto/create-account.dto';
@@ -24,6 +31,18 @@ export class AccountsController {
 
   @Get('branch/:branchId')
   findByBranch(@Param('branchId') branchId: string) {
-    return this.accountsService.findByBranch(branchId);
+    const normalizedBranchId = String(
+      branchId || '',
+    ).trim();
+
+    if (!normalizedBranchId) {
+      throw new BadRequestException(
+        'branchId requerido',
+      );
+    }
+
+    return this.accountsService.findByBranch(
+      normalizedBranchId,
+    );
   }
 }
