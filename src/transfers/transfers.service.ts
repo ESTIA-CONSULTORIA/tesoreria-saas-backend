@@ -1,7 +1,14 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  BadRequestException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import {
+  Repository,
+  DataSource,
+} from 'typeorm';
+
 import { Transfer } from './entities/transfer.entity';
-import { Repository, DataSource } from 'typeorm';
 import { Account } from '../accounts/entities/account.entity';
 import { Movement } from '../movements/entities/movement.entity';
 
@@ -19,57 +26,94 @@ export class TransfersService {
     amount: number,
     concept?: string,
   ) {
+    const normalizedFromAccountId = String(
+      fromAccountId || '',
+    ).trim();
+
+    const normalizedToAccountId = String(
+      toAccountId || '',
+    ).trim();
+
+    const normalizedConcept = String(
+      concept || '',
+    ).trim();
+
     const numericAmount = Number(amount);
 
-    if (fromAccountId === toAccountId) {
-      throw new BadRequestException('No puedes transferir a la misma cuenta');
+    if (
+      normalizedFromAccountId === normalizedToAccountId
+    ) {
+      throw new BadRequestException(
+        'No puedes transferir a la misma cuenta',
+      );
     }
 
     if (!numericAmount || numericAmount <= 0) {
-      throw new BadRequestException('El monto debe ser mayor a cero');
+      throw new BadRequestException(
+        'El monto debe ser mayor a cero',
+      );
     }
 
     return this.dataSource.transaction(async (manager) => {
       const fromAccount = await manager.findOne(Account, {
-        where: { id: fromAccountId },
+        where: {
+          id: normalizedFromAccountId,
+        },
       });
 
       const toAccount = await manager.findOne(Account, {
-        where: { id: toAccountId },
+        where: {
+          id: normalizedToAccountId,
+        },
       });
 
       if (!fromAccount || !toAccount) {
-        throw new BadRequestException('Cuenta no encontrada');
+        throw new BadRequestException(
+          'Cuenta no encontrada',
+        );
       }
 
       const fromBalance = Number(fromAccount.balance);
       const toBalance = Number(toAccount.balance);
 
       if (fromBalance < numericAmount) {
-        throw new BadRequestException('Saldo insuficiente');
+        throw new BadRequestException(
+          'Saldo insuficiente',
+        );
       }
 
-      fromAccount.balance = Number(fromBalance - numericAmount);
-      toAccount.balance = Number(toBalance + numericAmount);
+      fromAccount.balance = Number(
+        fromBalance - numericAmount,
+      );
+
+      toAccount.balance = Number(
+        toBalance + numericAmount,
+      );
 
       await manager.save(fromAccount);
       await manager.save(toAccount);
 
+      const transferReference = `TRANSFER-${Date.now()}`;
+
       const outMovement = manager.create(Movement, {
-        accountId: fromAccountId,
+        accountId: normalizedFromAccountId,
         type: 'EXPENSE',
         category: 'TRANSFER',
-        concept: concept || `Transferencia a ${toAccountId}`,
-        reference: `TRANSFER-OUT-${Date.now()}`,
+        concept:
+          normalizedConcept ||
+          `Transferencia a ${normalizedToAccountId}`,
+        reference: `${transferReference}-OUT`,
         amount: numericAmount,
       });
 
       const inMovement = manager.create(Movement, {
-        accountId: toAccountId,
+        accountId: normalizedToAccountId,
         type: 'INCOME',
         category: 'TRANSFER',
-        concept: concept || `Transferencia desde ${fromAccountId}`,
-        reference: `TRANSFER-IN-${Date.now()}`,
+        concept:
+          normalizedConcept ||
+          `Transferencia desde ${normalizedFromAccountId}`,
+        reference: `${transferReference}-IN`,
         amount: numericAmount,
       });
 
@@ -77,10 +121,10 @@ export class TransfersService {
       await manager.save(inMovement);
 
       const transfer = manager.create(Transfer, {
-        fromAccountId,
-        toAccountId,
+        fromAccountId: normalizedFromAccountId,
+        toAccountId: normalizedToAccountId,
         amount: numericAmount,
-        concept,
+        concept: normalizedConcept || null,
       });
 
       return manager.save(transfer);
