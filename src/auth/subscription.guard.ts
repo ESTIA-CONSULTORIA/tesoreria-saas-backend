@@ -15,7 +15,7 @@ export class SubscriptionGuard implements CanActivate {
 
     const path = request.url;
 
-    // Rutas públicas (login, planes, suscripciones)
+    // Rutas públicas
     if (
       path.startsWith('/auth') ||
       path.startsWith('/plans') ||
@@ -24,7 +24,8 @@ export class SubscriptionGuard implements CanActivate {
       return true;
     }
 
-    const tenantId = request.headers['tenant-id'];
+    const tenantId =
+      request.user?.tenantId || request.headers['tenant-id'];
 
     if (!tenantId) {
       throw new ForbiddenException('Tenant no identificado');
