@@ -3,10 +3,13 @@ import {
   Injectable,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import {
+  DataSource,
+  Repository,
+} from 'typeorm';
 
-import { Sale } from './entities/sale.entity';
 import { SaleItem } from './entities/sale-item.entity';
+import { Sale } from './entities/sale.entity';
 import { SalesFinancialService } from './services/sales-financial.service';
 import { SalesReportingService } from './services/sales-reporting.service';
 
@@ -21,9 +24,14 @@ export class SalesService {
 
     private salesFinancialService: SalesFinancialService,
     private salesReportingService: SalesReportingService,
+    private dataSource: DataSource,
   ) {}
 
-  async createSale(data: Partial<Sale> & { items?: Partial<SaleItem>[] }) {
+  async createSale(
+    data: Partial<Sale> & {
+      items?: Partial<SaleItem>[];
+    },
+  ) {
     if (!data.items?.length) {
       throw new BadRequestException(
         'La venta requiere al menos un item',
@@ -57,21 +65,27 @@ export class SalesService {
       );
     }
 
-    const sale = this.salesRepository.create({
-      ...data,
-      total: incomingTotal,
-    });
+    const savedSale = await this.dataSource.transaction(
+      async (manager) => {
+        const sale = manager.create(Sale, {
+          ...data,
+          total: incomingTotal,
+        });
 
-    const savedSale = await this.salesRepository.save(sale);
+        const persistedSale = await manager.save(sale);
 
-    const items = data.items.map((item) =>
-      this.saleItemsRepository.create({
-        ...item,
-        saleId: savedSale.id,
-      }),
+        const items = data.items!.map((item) =>
+          manager.create(SaleItem, {
+            ...item,
+            saleId: persistedSale.id,
+          }),
+        );
+
+        await manager.save(items);
+
+        return persistedSale;
+      },
     );
-
-    await this.saleItemsRepository.save(items);
 
     await this.salesFinancialService.generateTreasuryMovement({
       saleId: savedSale.id,
