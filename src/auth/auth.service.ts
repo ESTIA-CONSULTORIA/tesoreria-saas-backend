@@ -1,7 +1,12 @@
-import { Injectable, UnauthorizedException, BadRequestException } from '@nestjs/common';
-import { UsersService } from '../users/users.service';
+import {
+  Injectable,
+  UnauthorizedException,
+  BadRequestException,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
+
+import { UsersService } from '../users/users.service';
 
 @Injectable()
 export class AuthService {
@@ -16,19 +21,40 @@ export class AuthService {
     tenantId?: string,
     role = 'ADMIN',
   ) {
-    const existingUser = await this.usersService.findByEmail(email);
+    const normalizedEmail = String(email || '')
+      .trim()
+      .toLowerCase();
 
-    if (existingUser) {
-      throw new BadRequestException('El correo ya está registrado');
+    const normalizedRole = String(role || 'ADMIN')
+      .trim()
+      .toUpperCase();
+
+    const allowedRoles = ['ADMIN', 'MANAGER', 'USER'];
+
+    if (!allowedRoles.includes(normalizedRole)) {
+      throw new BadRequestException('Rol inválido');
     }
 
-    const hashedPassword = await bcrypt.hash(password, 10);
+    const existingUser = await this.usersService.findByEmail(
+      normalizedEmail,
+    );
+
+    if (existingUser) {
+      throw new BadRequestException(
+        'El correo ya está registrado',
+      );
+    }
+
+    const hashedPassword = await bcrypt.hash(
+      password.trim(),
+      10,
+    );
 
     const user = await this.usersService.create(
-      email,
+      normalizedEmail,
       hashedPassword,
-      tenantId,
-      role,
+      tenantId?.trim(),
+      normalizedRole,
     );
 
     return {
@@ -38,16 +64,29 @@ export class AuthService {
   }
 
   async login(email: string, password: string) {
-    const user = await this.usersService.findByEmail(email);
+    const normalizedEmail = String(email || '')
+      .trim()
+      .toLowerCase();
+
+    const user = await this.usersService.findByEmail(
+      normalizedEmail,
+    );
 
     if (!user) {
-      throw new UnauthorizedException('Credenciales incorrectas');
+      throw new UnauthorizedException(
+        'Credenciales incorrectas',
+      );
     }
 
-    const isPasswordValid = await bcrypt.compare(password, user.password);
+    const isPasswordValid = await bcrypt.compare(
+      password.trim(),
+      user.password,
+    );
 
     if (!isPasswordValid) {
-      throw new UnauthorizedException('Credenciales incorrectas');
+      throw new UnauthorizedException(
+        'Credenciales incorrectas',
+      );
     }
 
     const token = this.jwtService.sign({
