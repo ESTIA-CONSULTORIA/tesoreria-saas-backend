@@ -10,7 +10,12 @@ export class AuthService {
     private jwtService: JwtService,
   ) {}
 
-  async register(email: string, password: string) {
+  async register(
+    email: string,
+    password: string,
+    tenantId?: string,
+    role = 'ADMIN',
+  ) {
     const existingUser = await this.usersService.findByEmail(email);
 
     if (existingUser) {
@@ -18,7 +23,13 @@ export class AuthService {
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
-    const user = await this.usersService.create(email, hashedPassword);
+
+    const user = await this.usersService.create(
+      email,
+      hashedPassword,
+      tenantId,
+      role,
+    );
 
     return {
       message: 'Usuario creado correctamente',
