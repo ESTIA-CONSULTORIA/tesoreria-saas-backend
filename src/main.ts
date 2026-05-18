@@ -6,12 +6,15 @@ import { NestFactory } from '@nestjs/core';
 import { DataSource } from 'typeorm';
 
 import { AppModule } from './app.module';
+import { validateEnvironment } from './config/env.validation';
 import { runBaseFinancialSeed } from './database/seeds/run-base-financial.seed';
 import { runBaseOrganizationSeed } from './database/seeds/run-base-organization.seed';
 import { runBasePlansSeed } from './database/seeds/run-base-plans.seed';
 import { runBaseSubscriptionSeed } from './database/seeds/run-base-subscription.seed';
 
 async function bootstrap() {
+  validateEnvironment();
+
   const logger = new Logger('Bootstrap');
 
   const app = await NestFactory.create(AppModule);
