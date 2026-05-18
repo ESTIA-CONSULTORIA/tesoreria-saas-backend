@@ -1,22 +1,14 @@
 import { Body, Controller, Get, Param, Post } from '@nestjs/common';
+
 import { MovementsService } from './movements.service';
+import { CreateMovementDto } from './dto/create-movement.dto';
 
 @Controller('movements')
 export class MovementsController {
   constructor(private movementsService: MovementsService) {}
 
   @Post()
-  create(
-    @Body()
-    body: {
-      accountId: string;
-      type: string;
-      category: string;
-      concept: string;
-      reference?: string;
-      amount: number;
-    },
-  ) {
+  create(@Body() body: CreateMovementDto) {
     return this.movementsService.create(
       body.accountId,
       body.type,
