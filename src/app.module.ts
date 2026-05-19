@@ -17,6 +17,7 @@ import { BusinessTypesModule } from './business-types/business-types.module';
 import { CategoriesModule } from './categories/categories.module';
 import { RequestContextMiddleware } from './common/middleware/request-context.middleware';
 import { CompaniesModule } from './companies/companies.module';
+import { InfrastructureRedisModule } from './infrastructure/redis/redis.module';
 import { IntegrationsModule } from './integrations/integrations.module';
 import { InventoryModule } from './inventory/inventory.module';
 import { MovementsModule } from './movements/movements.module';
@@ -66,6 +67,7 @@ import { UsersModule } from './users/users.module';
       },
     }),
 
+    InfrastructureRedisModule,
     UsersModule,
     AuthModule,
     TenantsModule,
