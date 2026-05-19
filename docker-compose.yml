@@ -5,6 +5,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    container_name: tesoreria-api
+    restart: unless-stopped
     ports:
       - '3000:3000'
     environment:
@@ -23,6 +25,8 @@ services:
   frontend:
     build:
       context: ./frontend
+    container_name: tesoreria-frontend
+    restart: unless-stopped
     ports:
       - '3001:3000'
     environment:
@@ -30,17 +34,24 @@ services:
       NEXT_PUBLIC_SOCKET_URL: http://localhost:3000
 
   db:
-    image: postgres:16
-    restart: always
+    image: postgres:16-alpine
+    container_name: tesoreria-db
+    restart: unless-stopped
     environment:
       POSTGRES_DB: tesoreria
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
     ports:
       - '5432:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
 
   redis:
-    image: redis:7
-    restart: always
+    image: redis:7-alpine
+    container_name: tesoreria-redis
+    restart: unless-stopped
     ports:
       - '6379:6379'
+
+volumes:
+  postgres_data:
