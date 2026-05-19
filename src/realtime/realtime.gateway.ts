@@ -2,23 +2,40 @@ import {
   Logger,
 } from '@nestjs/common';
 import {
+  ConnectedSocket,
+  OnGatewayConnection,
+  OnGatewayDisconnect,
   WebSocketGateway,
   WebSocketServer,
 } from '@nestjs/websockets';
-import { Server } from 'socket.io';
+import { Server, Socket } from 'socket.io';
 
 @WebSocketGateway({
   cors: {
     origin: process.env.CORS_ORIGIN || '*',
   },
 })
-export class RealtimeGateway {
+export class RealtimeGateway
+  implements OnGatewayConnection, OnGatewayDisconnect
+{
   private readonly logger = new Logger(
     RealtimeGateway.name,
   );
 
   @WebSocketServer()
   server: Server;
+
+  handleConnection(@ConnectedSocket() client: Socket) {
+    this.logger.log(
+      `Realtime client connected: ${client.id}`,
+    );
+  }
+
+  handleDisconnect(@ConnectedSocket() client: Socket) {
+    this.logger.warn(
+      `Realtime client disconnected: ${client.id}`,
+    );
+  }
 
   emitEvent(event: string, payload: unknown) {
     const normalizedEvent = String(event || '').trim();
@@ -31,8 +48,11 @@ export class RealtimeGateway {
       return;
     }
 
+    const connectedClients =
+      this.server.sockets.sockets.size;
+
     this.logger.log(
-      `Realtime event emitted: ${normalizedEvent}`,
+      `Realtime event emitted: ${normalizedEvent} :: clients=${connectedClients}`,
     );
 
     this.server.emit(normalizedEvent, {
