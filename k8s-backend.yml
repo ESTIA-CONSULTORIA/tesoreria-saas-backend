@@ -1,0 +1,32 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tesoreria-backend
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: tesoreria-backend
+  template:
+    metadata:
+      labels:
+        app: tesoreria-backend
+    spec:
+      containers:
+        - name: backend
+          image: tesoreria-backend:latest
+          ports:
+            - containerPort: 3000
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: tesoreria-backend-service
+spec:
+  selector:
+    app: tesoreria-backend
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 3000
+  type: LoadBalancer
