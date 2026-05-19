@@ -19,6 +19,8 @@ async function bootstrap() {
 
   const logger = new Logger('Bootstrap');
 
+  logger.log('Inicializando backend...');
+
   const app = await NestFactory.create(AppModule);
 
   app.enableShutdownHooks();
@@ -44,6 +46,8 @@ async function bootstrap() {
 
   const dataSource = app.get(DataSource);
 
+  logger.log('Conexión TypeORM inicializada');
+
   try {
     await runBaseOrganizationSeed(dataSource);
     await runBaseFinancialSeed(dataSource);
@@ -63,6 +67,9 @@ async function bootstrap() {
   await app.listen(port);
 
   logger.log(`Backend ejecutándose en puerto ${port}`);
+  logger.log(
+    `Environment: ${process.env.NODE_ENV || 'development'}`,
+  );
 }
 
 bootstrap();
