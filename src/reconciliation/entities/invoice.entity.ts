@@ -54,6 +54,9 @@ export class Invoice {
   @Column({ nullable: true })
   bankAccountId?: string;
 
+  @Column({ nullable: true })
+  movementId?: string;
+
   @Column()
   dueDate: Date;
 

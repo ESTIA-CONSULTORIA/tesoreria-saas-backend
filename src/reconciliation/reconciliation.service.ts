@@ -2,12 +2,18 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Invoice, InvoiceStatus, ReconciliationStatus, InvoiceType } from './entities/invoice.entity';
+import { Movement } from '../movements/entities/movement.entity';
+import { Bank } from '../banks/entities/bank.entity';
 
 @Injectable()
 export class ReconciliationService {
   constructor(
     @InjectRepository(Invoice)
     private invoicesRepo: Repository<Invoice>,
+    @InjectRepository(Movement)
+    private movementsRepo: Repository<Movement>,
+    @InjectRepository(Bank)
+    private banksRepo: Repository<Bank>,
   ) {}
 
   async getAllInvoices() {
@@ -59,5 +65,89 @@ export class ReconciliationService {
       emitidas: all.filter((i) => i.type === InvoiceType.EMITIDA).length,
       recibidas: all.filter((i) => i.type === InvoiceType.RECIBIDA).length,
     };
+  }
+
+  async getReconciliationData(filters?: {
+    bankAccountId?: string;
+    startDate?: string;
+    endDate?: string;
+    type?: InvoiceType;
+  }) {
+    // Obtener movimientos bancarios
+    const movementsQuery = this.movementsRepo.createQueryBuilder('movement');
+    if (filters?.bankAccountId) {
+      movementsQuery.andWhere('movement.accountId = :accountId', { accountId: filters.bankAccountId });
+    }
+    if (filters?.startDate) {
+      movementsQuery.andWhere('movement.createdAt >= :startDate', { startDate: filters.startDate });
+    }
+    if (filters?.endDate) {
+      movementsQuery.andWhere('movement.createdAt <= :endDate', { endDate: `${filters.endDate} 23:59:59` });
+    }
+    const movements = await movementsQuery.getMany();
+
+    // Obtener facturas
+    const invoicesQuery = this.invoicesRepo.createQueryBuilder('invoice');
+    if (filters?.bankAccountId) {
+      invoicesQuery.andWhere('invoice.bankAccountId = :bankAccountId', { bankAccountId: filters.bankAccountId });
+    }
+    if (filters?.type) {
+      invoicesQuery.andWhere('invoice.type = :type', { type: filters.type });
+    }
+    if (filters?.startDate) {
+      invoicesQuery.andWhere('invoice.dueDate >= :startDate', { startDate: filters.startDate });
+    }
+    if (filters?.endDate) {
+      invoicesQuery.andWhere('invoice.dueDate <= :endDate', { endDate: filters.endDate });
+    }
+    const invoices = await invoicesQuery.getMany();
+
+    // Cruzar datos
+    const reconciled = invoices.filter((invoice) => invoice.movementId && invoice.reconciliationStatus === ReconciliationStatus.CONCILIADA);
+    const pending = invoices.filter((invoice) => !invoice.movementId && invoice.reconciliationStatus === ReconciliationStatus.PENDIENTE);
+    const notReconciled = movements.filter((movement) => !invoices.find((invoice) => invoice.movementId === movement.id));
+
+    // Obtener nombres de cuentas
+    const banks = await this.banksRepo.find();
+    const getBankName = (accountId: string) => banks.find((b) => b.id === accountId)?.name || accountId;
+
+    return {
+      reconciled: await Promise.all(
+        reconciled.map(async (invoice) => {
+          const movement = await this.movementsRepo.findOne({ where: { id: invoice.movementId } });
+          return {
+            invoice: {
+              ...invoice,
+              bankName: invoice.bankAccountId ? getBankName(invoice.bankAccountId) : null,
+            },
+            movement,
+          };
+        }),
+      ),
+      pending: pending.map((invoice) => ({
+        ...invoice,
+        bankName: invoice.bankAccountId ? getBankName(invoice.bankAccountId) : null,
+      })),
+      notReconciled: notReconciled.map((movement) => ({
+        ...movement,
+        bankName: getBankName(movement.accountId),
+      })),
+    };
+  }
+
+  async manualReconciliation(invoiceId: string, movementId: string) {
+    await this.invoicesRepo.update(invoiceId, {
+      movementId,
+      reconciliationStatus: ReconciliationStatus.CONCILIADA,
+    });
+    return this.invoicesRepo.findOne({ where: { id: invoiceId } });
+  }
+
+  async getAvailableMovements(bankAccountId?: string) {
+    const query = this.movementsRepo.createQueryBuilder('movement');
+    if (bankAccountId) {
+      query.andWhere('movement.accountId = :accountId', { accountId: bankAccountId });
+    }
+    return query.orderBy('movement.createdAt', 'DESC').getMany();
   }
 }

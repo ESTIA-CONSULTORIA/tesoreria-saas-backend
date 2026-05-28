@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Put, Body, Param } from '@nestjs/common';
+import { Controller, Get, Post, Put, Body, Param, Query } from '@nestjs/common';
 import { ReconciliationService } from './reconciliation.service';
 import { Invoice, InvoiceType, InvoiceStatus, ReconciliationStatus } from './entities/invoice.entity';
 
@@ -19,6 +19,26 @@ export class ReconciliationController {
   @Get('status/:status')
   getInvoicesByStatus(@Param('status') status: ReconciliationStatus) {
     return this.reconciliationService.getInvoicesByStatus(status);
+  }
+
+  @Get('data')
+  getReconciliationData(
+    @Query('bankAccountId') bankAccountId?: string,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+    @Query('type') type?: InvoiceType,
+  ) {
+    return this.reconciliationService.getReconciliationData({
+      bankAccountId,
+      startDate,
+      endDate,
+      type,
+    });
+  }
+
+  @Get('movements')
+  getAvailableMovements(@Query('bankAccountId') bankAccountId?: string) {
+    return this.reconciliationService.getAvailableMovements(bankAccountId);
   }
 
   @Post()
@@ -46,5 +66,13 @@ export class ReconciliationController {
   @Put(':id/manual-review')
   markForManualReview(@Param('id') id: string) {
     return this.reconciliationService.markForManualReview(id);
+  }
+
+  @Post(':invoiceId/reconcile')
+  manualReconciliation(
+    @Param('invoiceId') invoiceId: string,
+    @Body('movementId') movementId: string,
+  ) {
+    return this.reconciliationService.manualReconciliation(invoiceId, movementId);
   }
 }
