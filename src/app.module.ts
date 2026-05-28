@@ -28,6 +28,7 @@ import { TenantSettingsModule } from './tenant-settings/tenant-settings.module';
 import { TreasuryModule } from './treasury/treasury.module';
 import { ReconciliationModule } from './reconciliation/reconciliation.module';
 import { AdministrationModule } from './administration/administration.module';
+import { PosModule } from './pos/pos.module';
 
 @Module({
   imports: [
@@ -70,6 +71,7 @@ import { AdministrationModule } from './administration/administration.module';
     TreasuryModule,
     ReconciliationModule,
     AdministrationModule,
+    PosModule,
   ],
 
   providers: [
