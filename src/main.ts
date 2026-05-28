@@ -1,5 +1,7 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
+import { getDataSourceToken } from '@nestjs/typeorm';
+import { seedDatabase } from './seed/seed';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -8,6 +10,10 @@ async function bootstrap() {
     origin: ['http://localhost:5173', 'http://localhost:5174'],
     credentials: true,
   });
+
+  // Ejecutar seed después de iniciar la aplicación
+  const dataSource = app.get(getDataSourceToken());
+  await seedDatabase(dataSource);
 
   await app.listen(process.env.PORT ?? 3000);
 }

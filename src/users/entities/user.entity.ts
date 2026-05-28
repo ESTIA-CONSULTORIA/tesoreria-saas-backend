@@ -20,6 +20,9 @@ export class User {
   @Column({ default: 'USER' })
   roleCode: string;
 
+  @Column({ nullable: true })
+  branchId: string;
+
   @Column({ default: true })
   isActive: boolean;
 }
