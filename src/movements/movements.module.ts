@@ -3,11 +3,10 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { MovementsService } from './movements.service';
 import { MovementsController } from './movements.controller';
 import { Movement } from './entities/movement.entity';
-import { Account } from '../accounts/entities/account.entity';
-import { Category } from '../categories/entities/category.entity';
+import { Bank } from '../banks/entities/bank.entity';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Movement, Account, Category])],
+  imports: [TypeOrmModule.forFeature([Movement, Bank])],
   controllers: [MovementsController],
   providers: [MovementsService],
   exports: [MovementsService],

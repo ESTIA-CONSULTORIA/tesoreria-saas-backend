@@ -2,8 +2,7 @@ import { Injectable, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Movement } from './entities/movement.entity';
 import { Repository } from 'typeorm';
-import { Account } from '../accounts/entities/account.entity';
-import { Category } from '../categories/entities/category.entity';
+import { Bank } from '../banks/entities/bank.entity';
 
 @Injectable()
 export class MovementsService {
@@ -11,23 +10,22 @@ export class MovementsService {
     @InjectRepository(Movement)
     private movementsRepository: Repository<Movement>,
 
-    @InjectRepository(Account)
-    private accountsRepository: Repository<Account>,
-
-    @InjectRepository(Category)
-    private categoriesRepository: Repository<Category>,
+    @InjectRepository(Bank)
+    private banksRepository: Repository<Bank>,
   ) {}
 
   async create(
     accountId: string,
     type: string,
-    categoryCode: string,
+    category: string,
     concept: string,
     amount: number,
     reference?: string,
   ) {
-    // 1. validar cuenta
-    const account = await this.accountsRepository.findOne({
+    const normalizedType =
+      type === 'INGRESO' ? 'INCOME' : type === 'EGRESO' ? 'EXPENSE' : type;
+
+    const account = await this.banksRepository.findOne({
       where: { id: accountId },
     });
 
@@ -35,42 +33,25 @@ export class MovementsService {
       throw new BadRequestException('Cuenta no encontrada');
     }
 
-    // 2. validar categoría
-    const category = await this.categoriesRepository.findOne({
-      where: { code: categoryCode },
-    });
-
-    if (!category) {
-      throw new BadRequestException('Categoría no existe');
-    }
-
-    // 3. validar tipo vs categoría
-    if (category.type !== type) {
-      throw new BadRequestException(
-        `La categoría ${category.code} no corresponde a ${type}`,
-      );
-    }
-
     const numericAmount = Number(amount);
     const currentBalance = Number(account.balance);
-
-    // 4. actualizar saldo
-    if (type === 'INCOME') {
+    if (normalizedType === 'INCOME') {
       account.balance = Number(currentBalance + numericAmount);
-    } else if (type === 'EXPENSE') {
+    } else if (normalizedType === 'EXPENSE') {
+      if (currentBalance < numericAmount) {
+        throw new BadRequestException('Saldo insuficiente');
+      }
       account.balance = Number(currentBalance - numericAmount);
     } else {
       throw new BadRequestException('Tipo inválido');
     }
 
-    await this.accountsRepository.save(account);
+    await this.banksRepository.save(account);
 
-    // 5. guardar movimiento
     const movement = this.movementsRepository.create({
       accountId,
-      type,
-      category: category.code,
-      categoryId: category.id,
+      type: normalizedType,
+      category,
       concept,
       reference,
       amount: numericAmount,
@@ -83,6 +64,58 @@ export class MovementsService {
     return this.movementsRepository.find({
       order: { createdAt: 'DESC' },
     });
+  }
+
+  async findWithFilters(
+    accountId?: string,
+    type?: string,
+    category?: string,
+    startDate?: string,
+    endDate?: string,
+    page = 1,
+    limit = 10,
+  ) {
+    const query = this.movementsRepository.createQueryBuilder('movement');
+
+    if (accountId) {
+      query.andWhere('movement.accountId = :accountId', { accountId });
+    }
+
+    if (type) {
+      const normalizedType =
+        type === 'INGRESO' ? 'INCOME' : type === 'EGRESO' ? 'EXPENSE' : type;
+      query.andWhere('movement.type = :type', { type: normalizedType });
+    }
+
+    if (category) {
+      query.andWhere('LOWER(movement.category) LIKE LOWER(:category)', {
+        category: `%${category}%`,
+      });
+    }
+
+    if (startDate) {
+      query.andWhere('movement.createdAt >= :startDate', { startDate });
+    }
+
+    if (endDate) {
+      query.andWhere('movement.createdAt <= :endDate', {
+        endDate: `${endDate} 23:59:59`,
+      });
+    }
+
+    const [data, total] = await query
+      .orderBy('movement.createdAt', 'DESC')
+      .skip((page - 1) * limit)
+      .take(limit)
+      .getManyAndCount();
+
+    return {
+      data,
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit),
+    };
   }
 
   findByAccount(accountId: string) {
