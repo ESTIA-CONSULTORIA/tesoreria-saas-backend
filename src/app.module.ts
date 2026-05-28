@@ -23,6 +23,7 @@ import { RolesModule } from './roles/roles.module';
 import { BanksModule } from './banks/banks.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { ReportsModule } from './reports/reports.module';
+import { TenantSettingsModule } from './tenant-settings/tenant-settings.module';
 
 @Module({
   imports: [
@@ -61,6 +62,7 @@ import { ReportsModule } from './reports/reports.module';
     BanksModule,
     DashboardModule,
     ReportsModule,
+    TenantSettingsModule,
   ],
 
   providers: [
