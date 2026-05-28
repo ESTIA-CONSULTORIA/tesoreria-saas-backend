@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Put, Delete, Body, Param } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Body, Param, Query } from '@nestjs/common';
 import { PurchasesService } from './purchases.service';
 import { Modulo } from '../auth/modulo.decorator';
 
@@ -9,8 +9,11 @@ export class PurchasesController {
 
   // Purchase Orders
   @Get('orders')
-  findAllOrders(@Param('tenantId') tenantId?: string) {
-    return this.purchasesService.findAllOrders(tenantId);
+  findAllOrders(
+    @Query('tenantId') tenantId?: string,
+    @Query('status') status?: string,
+  ) {
+    return this.purchasesService.findAllOrders(tenantId, status);
   }
 
   @Get('orders/:id')
@@ -28,6 +31,21 @@ export class PurchasesController {
     return this.purchasesService.updateOrder(id, data);
   }
 
+  @Put('orders/:id/send')
+  async markOrderAsSent(@Param('id') id: string) {
+    return this.purchasesService.markOrderAsSent(id);
+  }
+
+  @Put('orders/:id/cancel')
+  async cancelOrder(@Param('id') id: string) {
+    return this.purchasesService.cancelOrder(id);
+  }
+
+  @Put('orders/:id/receive')
+  async receiveOrder(@Param('id') id: string, @Body() data: { receivedItems: any[] }) {
+    return this.purchasesService.receiveOrder(id, data.receivedItems);
+  }
+
   @Delete('orders/:id')
   deleteOrder(@Param('id') id: string) {
     return this.purchasesService.deleteOrder(id);
@@ -35,8 +53,11 @@ export class PurchasesController {
 
   // Purchases (Facturas)
   @Get('invoices')
-  findAllPurchases(@Param('tenantId') tenantId?: string) {
-    return this.purchasesService.findAllPurchases(tenantId);
+  findAllPurchases(
+    @Query('tenantId') tenantId?: string,
+    @Query('status') status?: string,
+  ) {
+    return this.purchasesService.findAllPurchases(tenantId, status);
   }
 
   @Get('invoices/:id')
@@ -54,8 +75,19 @@ export class PurchasesController {
     return this.purchasesService.updatePurchase(id, data);
   }
 
+  @Put('invoices/:id/payment')
+  async registerPayment(@Param('id') id: string, @Body() data: { amount: number }) {
+    return this.purchasesService.registerPayment(id, data.amount);
+  }
+
   @Delete('invoices/:id')
   deletePurchase(@Param('id') id: string) {
     return this.purchasesService.deletePurchase(id);
+  }
+
+  // Cuentas por Pagar
+  @Get('accounts-payable')
+  async getAccountsPayable(@Query('tenantId') tenantId?: string) {
+    return this.purchasesService.getAccountsPayable(tenantId);
   }
 }

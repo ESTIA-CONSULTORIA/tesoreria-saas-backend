@@ -29,6 +29,9 @@ export class Purchase {
   @Column({ type: 'decimal', precision: 10, scale: 2, default: 0 })
   total: number;
 
+  @Column({ type: 'decimal', precision: 10, scale: 2, default: 0 })
+  montoPagado: number;
+
   @Column({ default: 'PENDIENTE' })
   status: string; // PENDIENTE/PAGADA/PARCIAL/CANCELADA
 
