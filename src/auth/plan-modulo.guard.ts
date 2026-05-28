@@ -34,6 +34,11 @@ export class PlanModuloGuard implements CanActivate {
       return true;
     }
 
+    // El módulo dashboard está disponible para todos los planes
+    if (requiredModulo === 'dashboard') {
+      return true;
+    }
+
     const request = context.switchToHttp().getRequest();
     const tenantId = request.headers['tenant-id'];
 
