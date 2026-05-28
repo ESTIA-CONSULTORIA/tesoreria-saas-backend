@@ -5,7 +5,7 @@ export class Category {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column()
+  @Column({ default: '' })
   code: string; // SALE, RENT, PAYROLL
 
   @Column()
