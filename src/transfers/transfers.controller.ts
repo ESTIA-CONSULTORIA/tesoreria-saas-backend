@@ -1,4 +1,4 @@
-import { Body, Controller, Post } from '@nestjs/common';
+import { Body, Controller, Get, Post } from '@nestjs/common';
 import { TransfersService } from './transfers.service';
 import { Feature } from '../auth/feature/decorator';
 
@@ -23,5 +23,10 @@ export class TransfersController {
       body.amount,
       body.concept,
     );
+  }
+
+  @Get()
+  findAll() {
+    return this.transfersService.findAll();
   }
 }

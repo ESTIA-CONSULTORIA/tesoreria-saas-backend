@@ -2,7 +2,7 @@ import { Injectable, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Transfer } from './entities/transfer.entity';
 import { Repository, DataSource } from 'typeorm';
-import { Account } from '../accounts/entities/account.entity';
+import { Bank } from '../banks/entities/bank.entity';
 import { Movement } from '../movements/entities/movement.entity';
 
 @Injectable()
@@ -30,11 +30,11 @@ export class TransfersService {
     }
 
     return this.dataSource.transaction(async (manager) => {
-      const fromAccount = await manager.findOne(Account, {
+      const fromAccount = await manager.findOne(Bank, {
         where: { id: fromAccountId },
       });
 
-      const toAccount = await manager.findOne(Account, {
+      const toAccount = await manager.findOne(Bank, {
         where: { id: toAccountId },
       });
 
@@ -84,6 +84,12 @@ export class TransfersService {
       });
 
       return manager.save(transfer);
+    });
+  }
+
+  findAll() {
+    return this.transferRepo.find({
+      order: { createdAt: 'DESC' },
     });
   }
 }
