@@ -1,6 +1,7 @@
 import { Body, Controller, Get, Param, Post, Put } from '@nestjs/common';
 import { RolesService } from './roles.service';
 import { Module } from './entities/permission.entity';
+import { Public } from '../auth/public.decorator';
 
 @Controller('roles')
 export class RolesController {
@@ -29,6 +30,7 @@ export class RolesController {
   }
 
   @Post('initialize-default')
+  @Public()
   initializeDefaultRoles() {
     return this.rolesService.initializeDefaultRoles();
   }
