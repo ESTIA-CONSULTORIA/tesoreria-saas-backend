@@ -21,6 +21,7 @@ import { FeatureGuard } from './auth/feature/feature.guard';
 import { IntegrationsModule } from './integrations/integrations.module';
 import { RolesModule } from './roles/roles.module';
 import { BanksModule } from './banks/banks.module';
+import { DashboardModule } from './dashboard/dashboard.module';
 
 @Module({
   imports: [
@@ -57,6 +58,7 @@ import { BanksModule } from './banks/banks.module';
     IntegrationsModule,
     RolesModule,
     BanksModule,
+    DashboardModule,
   ],
 
   providers: [
