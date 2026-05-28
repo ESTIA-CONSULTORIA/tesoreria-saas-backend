@@ -58,7 +58,7 @@ export class RolesService {
     });
   }
 
-  async updatePermission(roleId: string, module: Module, data: { canView?: boolean; canCreate?: boolean; canEdit?: boolean; canDelete?: boolean }) {
+  async updatePermission(roleId: string, module: Module, data: { canView?: boolean; canCreate?: boolean; canEdit?: boolean; canDelete?: boolean; subPermissions?: string[] }) {
     const permission = await this.permissionsRepository.findOne({
       where: { roleId, module },
     });

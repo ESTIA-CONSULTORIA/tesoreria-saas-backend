@@ -41,7 +41,7 @@ export class RolesController {
   updatePermission(
     @Param('roleId') roleId: string,
     @Param('module') module: Module,
-    @Body() data: { canView?: boolean; canCreate?: boolean; canEdit?: boolean; canDelete?: boolean },
+    @Body() data: { canView?: boolean; canCreate?: boolean; canEdit?: boolean; canDelete?: boolean; subPermissions?: string[] },
   ) {
     return this.rolesService.updatePermission(roleId, module, data);
   }

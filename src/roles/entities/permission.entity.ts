@@ -11,6 +11,7 @@ export enum Module {
   MOVEMENTS = 'MOVEMENTS',
   TRANSFERS = 'TRANSFERS',
   REPORTS = 'REPORTS',
+  POS = 'POS',
   TREASURY = 'TREASURY',
   RECONCILIATION = 'RECONCILIATION',
   ADMINISTRATION = 'ADMINISTRATION',
@@ -39,6 +40,13 @@ export class Permission {
 
   @Column({ default: false })
   canDelete: boolean;
+
+  @Column({
+    type: 'json',
+    nullable: true,
+    default: null,
+  })
+  subPermissions: string[] | null;
 
   @ManyToOne(() => Role, (role) => role.permissions)
   role: Role;
