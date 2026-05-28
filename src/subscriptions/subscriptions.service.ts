@@ -15,27 +15,31 @@ export class SubscriptionsService {
       throw new Error('tenantId es requerido');
     }
 
+    // Expirar suscripciones anteriores
     await this.subscriptionRepo.update(
       { tenantId: data.tenantId },
       { status: 'EXPIRED' },
     );
 
+    // Crear nueva suscripción
     const sub = this.subscriptionRepo.create({
-      ...data,
-      status: data.status || 'ACTIVE',
-    });
+  ...data,
+  startDate: new Date().toISOString().split('T')[0],
+  endDate: null,
+  status: data.status || 'ACTIVE',
+});
 
     return this.subscriptionRepo.save(sub);
   }
 
-  findByTenant(tenantId: string) {
+  async findByTenant(tenantId: string) {
     return this.subscriptionRepo.findOne({
       where: {
         tenantId,
         status: 'ACTIVE',
       },
       order: {
-        endDate: 'DESC',
+        startDate: 'DESC',
       },
     });
   }

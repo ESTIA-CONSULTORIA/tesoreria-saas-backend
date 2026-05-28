@@ -14,8 +14,11 @@ export class Subscription {
   @Column({ type: 'date' })
   startDate: string;
 
-  @Column({ type: 'date' })
-  endDate: string;
+  @Column({
+  type: 'date',
+  nullable: true,
+})
+endDate: string | null;
 
   @Column({ default: 'ACTIVE' })
   status: string; // ACTIVE, EXPIRED, SUSPENDED

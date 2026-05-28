@@ -37,9 +37,14 @@ export class SubscriptionGuard implements CanActivate {
     }
 
     const today = new Date();
-    const endDate = new Date(subscription.endDate);
+    const endDate = subscription.endDate
+  ? new Date(subscription.endDate)
+  : null;
 
-    if (subscription.status !== 'ACTIVE' || endDate < today) {
+    if (
+  subscription.status !== 'ACTIVE' ||
+  (endDate && endDate < today)
+) {
       throw new ForbiddenException('Suscripción vencida');
     }
 

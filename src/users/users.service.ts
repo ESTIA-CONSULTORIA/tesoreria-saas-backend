@@ -10,12 +10,38 @@ export class UsersService {
     private usersRepository: Repository<User>,
   ) {}
 
-  create(email: string, password: string) {
-    const user = this.usersRepository.create({ email, password });
+  create(
+    email: string,
+    password: string,
+    name?: string,
+    roleId?: string,
+    roleCode?: string,
+  ) {
+    const user = this.usersRepository.create({
+      email,
+      password,
+      name,
+      roleId,
+      roleCode: roleCode || 'USER',
+      isActive: true,
+    });
     return this.usersRepository.save(user);
   }
 
   findByEmail(email: string) {
     return this.usersRepository.findOne({ where: { email } });
+  }
+
+  findAll() {
+    return this.usersRepository.find({
+      order: { email: 'ASC' },
+    });
+  }
+
+  findByRole(roleCode: string) {
+    return this.usersRepository.find({
+      where: { roleCode },
+      order: { email: 'ASC' },
+    });
   }
 }

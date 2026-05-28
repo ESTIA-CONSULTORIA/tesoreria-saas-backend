@@ -18,6 +18,8 @@ import { BusinessTypesModule } from './business-types/business-types.module';
 
 import { SubscriptionGuard } from './auth/subscription.guard';
 import { FeatureGuard } from './auth/feature/feature.guard';
+import { IntegrationsModule } from './integrations/integrations.module';
+import { RolesModule } from './roles/roles.module';
 
 @Module({
   imports: [
@@ -51,6 +53,8 @@ import { FeatureGuard } from './auth/feature/feature.guard';
     SubscriptionsModule,
     TransfersModule,
     BusinessTypesModule,
+    IntegrationsModule,
+    RolesModule,
   ],
 
   providers: [
