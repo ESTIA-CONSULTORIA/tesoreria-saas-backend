@@ -18,6 +18,7 @@ import { BusinessTypesModule } from './business-types/business-types.module';
 
 import { SubscriptionGuard } from './auth/subscription.guard';
 import { FeatureGuard } from './auth/feature/feature.guard';
+import { PlanModuloGuard } from './auth/plan-modulo.guard';
 import { IntegrationsModule } from './integrations/integrations.module';
 import { RolesModule } from './roles/roles.module';
 import { BanksModule } from './banks/banks.module';
@@ -79,6 +80,10 @@ import { AdministrationModule } from './administration/administration.module';
     {
       provide: APP_GUARD,
       useClass: FeatureGuard,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: PlanModuloGuard,
     },
   ],
 })

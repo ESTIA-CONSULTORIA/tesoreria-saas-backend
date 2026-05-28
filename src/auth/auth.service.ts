@@ -1,6 +1,8 @@
 import { Injectable, UnauthorizedException, BadRequestException } from '@nestjs/common';
 import { UsersService } from '../users/users.service';
 import { JwtService } from '@nestjs/jwt';
+import { SubscriptionsService } from '../subscriptions/subscriptions.service';
+import { getModulesByPlan, Plan } from '../config/modules-by-plan.config';
 import * as bcrypt from 'bcrypt';
 
 @Injectable()
@@ -8,6 +10,7 @@ export class AuthService {
   constructor(
     private usersService: UsersService,
     private jwtService: JwtService,
+    private subscriptionsService: SubscriptionsService,
   ) {}
 
   async register(email: string, password: string) {
@@ -26,7 +29,7 @@ export class AuthService {
     };
   }
 
-  async login(email: string, password: string) {
+  async login(email: string, password: string, tenantId?: string) {
     const user = await this.usersService.findByEmail(email);
 
     if (!user) {
@@ -44,8 +47,19 @@ export class AuthService {
       email: user.email,
     });
 
+    // Obtener módulos activos según el plan del tenant
+    let modulosActivos: string[] = [];
+    if (tenantId) {
+      const subscription = await this.subscriptionsService.findByTenant(tenantId);
+      if (subscription) {
+        const plan = subscription.planCode as Plan;
+        modulosActivos = getModulesByPlan(plan);
+      }
+    }
+
     return {
       access_token: token,
+      modulosActivos,
     };
   }
 }
