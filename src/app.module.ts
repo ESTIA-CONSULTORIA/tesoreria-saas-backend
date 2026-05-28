@@ -22,6 +22,7 @@ import { IntegrationsModule } from './integrations/integrations.module';
 import { RolesModule } from './roles/roles.module';
 import { BanksModule } from './banks/banks.module';
 import { DashboardModule } from './dashboard/dashboard.module';
+import { ReportsModule } from './reports/reports.module';
 
 @Module({
   imports: [
@@ -59,6 +60,7 @@ import { DashboardModule } from './dashboard/dashboard.module';
     RolesModule,
     BanksModule,
     DashboardModule,
+    ReportsModule,
   ],
 
   providers: [
