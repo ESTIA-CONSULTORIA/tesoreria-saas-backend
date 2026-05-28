@@ -26,6 +26,7 @@ import { ReportsModule } from './reports/reports.module';
 import { TenantSettingsModule } from './tenant-settings/tenant-settings.module';
 import { TreasuryModule } from './treasury/treasury.module';
 import { ReconciliationModule } from './reconciliation/reconciliation.module';
+import { AdministrationModule } from './administration/administration.module';
 
 @Module({
   imports: [
@@ -67,6 +68,7 @@ import { ReconciliationModule } from './reconciliation/reconciliation.module';
     TenantSettingsModule,
     TreasuryModule,
     ReconciliationModule,
+    AdministrationModule,
   ],
 
   providers: [
