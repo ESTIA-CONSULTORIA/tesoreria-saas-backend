@@ -25,6 +25,7 @@ import { DashboardModule } from './dashboard/dashboard.module';
 import { ReportsModule } from './reports/reports.module';
 import { TenantSettingsModule } from './tenant-settings/tenant-settings.module';
 import { TreasuryModule } from './treasury/treasury.module';
+import { ReconciliationModule } from './reconciliation/reconciliation.module';
 
 @Module({
   imports: [
@@ -65,6 +66,7 @@ import { TreasuryModule } from './treasury/treasury.module';
     ReportsModule,
     TenantSettingsModule,
     TreasuryModule,
+    ReconciliationModule,
   ],
 
   providers: [
