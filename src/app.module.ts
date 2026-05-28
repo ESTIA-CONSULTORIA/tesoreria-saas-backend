@@ -24,6 +24,7 @@ import { BanksModule } from './banks/banks.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { ReportsModule } from './reports/reports.module';
 import { TenantSettingsModule } from './tenant-settings/tenant-settings.module';
+import { TreasuryModule } from './treasury/treasury.module';
 
 @Module({
   imports: [
@@ -63,6 +64,7 @@ import { TenantSettingsModule } from './tenant-settings/tenant-settings.module';
     DashboardModule,
     ReportsModule,
     TenantSettingsModule,
+    TreasuryModule,
   ],
 
   providers: [
