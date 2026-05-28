@@ -25,4 +25,20 @@ export class ReportsController {
   ) {
     return this.reportsService.categorySummary(startDate, endDate);
   }
+
+  @Get('income-statement')
+  incomeStatement(
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+  ) {
+    return this.reportsService.incomeStatement(startDate, endDate);
+  }
+
+  @Get('break-even-point')
+  breakEvenPoint(
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+  ) {
+    return this.reportsService.breakEvenPoint(startDate, endDate);
+  }
 }

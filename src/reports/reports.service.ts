@@ -67,4 +67,104 @@ export class ReportsService {
     await this.reportsRepo.save(this.reportsRepo.create({ type: 'category-summary', payload: data }));
     return data;
   }
+
+  async incomeStatement(startDate?: string, endDate?: string) {
+    const query = this.movementsRepo.createQueryBuilder('movement');
+    if (startDate) query.andWhere('movement.createdAt >= :startDate', { startDate });
+    if (endDate) query.andWhere('movement.createdAt <= :endDate', { endDate: `${endDate} 23:59:59` });
+
+    const movements = await query.getMany();
+
+    // Categorías para el Estado de Resultados
+    const ventas = movements
+      .filter((m) => m.type === 'INCOME' && m.category === 'VENTAS')
+      .reduce((acc, m) => acc + Number(m.amount), 0);
+
+    const cortesiasDescuentos = movements
+      .filter((m) => m.type === 'EXPENSE' && (m.category === 'CORTESIAS' || m.category === 'DESCUENTOS'))
+      .reduce((acc, m) => acc + Number(m.amount), 0);
+
+    const costoVenta = movements
+      .filter((m) => m.type === 'EXPENSE' && m.category === 'COSTO_VENTA')
+      .reduce((acc, m) => acc + Number(m.amount), 0);
+
+    const gastosFijos = movements
+      .filter((m) => m.type === 'EXPENSE' && m.category === 'GASTOS_FIJOS')
+      .reduce((acc, m) => acc + Number(m.amount), 0);
+
+    const gastosVariables = movements
+      .filter((m) => m.type === 'EXPENSE' && m.category === 'GASTOS_VARIABLES')
+      .reduce((acc, m) => acc + Number(m.amount), 0);
+
+    const impuestos = movements
+      .filter((m) => m.type === 'EXPENSE' && m.category === 'IMPUESTOS')
+      .reduce((acc, m) => acc + Number(m.amount), 0);
+
+    const inversiones = movements
+      .filter((m) => m.type === 'EXPENSE' && m.category === 'INVERSIONES')
+      .reduce((acc, m) => acc + Number(m.amount), 0);
+
+    const utilidadBruta = ventas - cortesiasDescuentos - costoVenta;
+    const utilidadNetaAntesImpuestos = utilidadBruta - gastosFijos - gastosVariables;
+    const utilidadReal = utilidadNetaAntesImpuestos - impuestos - inversiones;
+
+    const data = {
+      ventas,
+      cortesiasDescuentos,
+      costoVenta,
+      utilidadBruta,
+      gastosFijos,
+      gastosVariables,
+      utilidadNetaAntesImpuestos,
+      impuestos,
+      inversiones,
+      utilidadReal,
+    };
+
+    await this.reportsRepo.save(this.reportsRepo.create({ type: 'income-statement', payload: data }));
+    return data;
+  }
+
+  async breakEvenPoint(startDate?: string, endDate?: string) {
+    const query = this.movementsRepo.createQueryBuilder('movement');
+    if (startDate) query.andWhere('movement.createdAt >= :startDate', { startDate });
+    if (endDate) query.andWhere('movement.createdAt <= :endDate', { endDate: `${endDate} 23:59:59` });
+
+    const movements = await query.getMany();
+
+    const ventas = movements
+      .filter((m) => m.type === 'INCOME' && m.category === 'VENTAS')
+      .reduce((acc, m) => acc + Number(m.amount), 0);
+
+    const costoVenta = movements
+      .filter((m) => m.type === 'EXPENSE' && m.category === 'COSTO_VENTA')
+      .reduce((acc, m) => acc + Number(m.amount), 0);
+
+    const gastosVariables = movements
+      .filter((m) => m.type === 'EXPENSE' && m.category === 'GASTOS_VARIABLES')
+      .reduce((acc, m) => acc + Number(m.amount), 0);
+
+    const gastosFijos = movements
+      .filter((m) => m.type === 'EXPENSE' && m.category === 'GASTOS_FIJOS')
+      .reduce((acc, m) => acc + Number(m.amount), 0);
+
+    // Cálculo del Punto de Equilibrio
+    // Punto de Equilibrio = Gastos Fijos / (1 - (Costo Variable Total / Ventas))
+    const costoVariableTotal = costoVenta + gastosVariables;
+    const margenContribucion = ventas > 0 ? 1 - costoVariableTotal / ventas : 0;
+    const puntoEquilibrio = margenContribucion > 0 ? gastosFijos / margenContribucion : 0;
+
+    const data = {
+      ventas,
+      costoVenta,
+      gastosVariables,
+      gastosFijos,
+      costoVariableTotal,
+      margenContribucion,
+      puntoEquilibrio,
+    };
+
+    await this.reportsRepo.save(this.reportsRepo.create({ type: 'break-even-point', payload: data }));
+    return data;
+  }
 }
