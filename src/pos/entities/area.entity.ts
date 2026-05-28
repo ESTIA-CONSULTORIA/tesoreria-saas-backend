@@ -5,10 +5,10 @@ export class Area {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column()
+  @Column({ nullable: true })
   branchId: string;
 
-  @Column()
+  @Column({ default: '' })
   name: string;
 
   @Column({ default: 0 })

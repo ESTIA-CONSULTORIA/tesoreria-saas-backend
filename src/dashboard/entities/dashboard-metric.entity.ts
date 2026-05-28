@@ -5,7 +5,7 @@ export class DashboardMetric {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column()
+  @Column({ default: '' })
   key: string;
 
   @Column({ type: 'decimal', default: 0 })

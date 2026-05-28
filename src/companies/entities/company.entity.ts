@@ -5,13 +5,13 @@ export class Company {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column()
+  @Column({ nullable: true })
   tenantId: string;
 
-  @Column()
+  @Column({ default: '' })
   legalName: string;
 
-  @Column()
+  @Column({ default: '' })
   tradeName: string;
 
   @Column({ nullable: true })

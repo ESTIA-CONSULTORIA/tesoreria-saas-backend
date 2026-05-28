@@ -5,16 +5,16 @@ export class Product {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column()
+  @Column({ nullable: true })
   branchId: string;
 
-  @Column()
+  @Column({ nullable: true })
   categoryId: string;
 
-  @Column()
+  @Column({ default: '' })
   name: string;
 
-  @Column({ type: 'decimal', precision: 10, scale: 2 })
+  @Column({ type: 'decimal', precision: 10, scale: 2, default: 0 })
   price: number;
 
   @Column({ nullable: true })

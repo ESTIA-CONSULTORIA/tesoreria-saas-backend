@@ -5,16 +5,16 @@ export class Bank {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column()
+  @Column({ nullable: true })
   branchId: string;
 
-  @Column()
+  @Column({ default: '' })
   name: string;
 
-  @Column()
+  @Column({ default: '' })
   accountNumber: string;
 
-  @Column()
+  @Column({ default: '' })
   bank: string;
 
   @Column({ type: 'decimal', default: 0 })
@@ -26,7 +26,7 @@ export class Bank {
   @Column({ default: 'MXN' })
   currency: string;
 
-  @Column()
+  @Column({ default: 'EFECTIVO' })
   type: string; // EFECTIVO | BANCO | CAJA
 
   @Column({ default: true })

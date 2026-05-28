@@ -11,19 +11,19 @@ export class Movement {
   @Column()
   type: string; // INCOME o EXPENSE
 
-  @Column()
+  @Column({ default: '' })
   category: string; // SALE, RENT, PAYROLL, TRANSFER, etc.
 
   @Column({ nullable: true })
 categoryId: string;
 
-  @Column()
+  @Column({ default: '' })
   concept: string;
 
   @Column({ nullable: true })
   reference: string;
 
-  @Column({ type: 'decimal' })
+  @Column({ type: 'decimal', default: 0 })
   amount: number;
 
   @CreateDateColumn()

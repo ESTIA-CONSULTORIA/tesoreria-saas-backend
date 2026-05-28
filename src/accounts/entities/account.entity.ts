@@ -5,13 +5,13 @@ export class Account {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column()
+  @Column({ nullable: true })
   branchId: string;
 
-  @Column()
+  @Column({ default: '' })
   name: string;
 
-  @Column()
+  @Column({ default: 'CASH' })
   type: string; // CASH, BANK, CARD
 
   @Column({ default: 'MXN' })

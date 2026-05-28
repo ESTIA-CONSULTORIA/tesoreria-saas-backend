@@ -26,6 +26,7 @@ export class Permission {
   @Column({
     type: 'enum',
     enum: Module,
+    nullable: true,
   })
   module: Module;
 
@@ -51,6 +52,6 @@ export class Permission {
   @ManyToOne(() => Role, (role) => role.permissions)
   role: Role;
 
-  @Column()
+  @Column({ nullable: true })
   roleId: string;
 }

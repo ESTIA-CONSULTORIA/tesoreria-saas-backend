@@ -5,10 +5,10 @@ export class Category {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column()
+  @Column({ nullable: true })
   branchId: string;
 
-  @Column()
+  @Column({ default: '' })
   name: string;
 
   @Column({ nullable: true })

@@ -5,10 +5,10 @@ export class BusinessType {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column({ unique: true })
+  @Column({ unique: true, default: '' })
   code: string;
 
-  @Column()
+  @Column({ default: '' })
   name: string;
 
   @Column({ default: false })

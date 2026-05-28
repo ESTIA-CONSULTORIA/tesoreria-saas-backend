@@ -22,7 +22,7 @@ export class Invoice {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column()
+  @Column({ default: '' })
   invoiceNumber: string;
 
   @Column({
@@ -45,7 +45,7 @@ export class Invoice {
   })
   reconciliationStatus: ReconciliationStatus;
 
-  @Column('decimal', { precision: 10, scale: 2 })
+  @Column('decimal', { precision: 10, scale: 2, default: 0 })
   amount: number;
 
   @Column({ nullable: true })
@@ -57,7 +57,7 @@ export class Invoice {
   @Column({ nullable: true })
   movementId?: string;
 
-  @Column()
+  @Column({ nullable: true })
   dueDate: Date;
 
   @Column({ nullable: true })

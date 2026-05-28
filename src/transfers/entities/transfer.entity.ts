@@ -5,13 +5,13 @@ export class Transfer {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column()
+  @Column({ nullable: true })
   fromAccountId: string;
 
-  @Column()
+  @Column({ nullable: true })
   toAccountId: string;
 
-  @Column('decimal')
+  @Column('decimal', { default: 0 })
   amount: number;
 
   @Column({ nullable: true })

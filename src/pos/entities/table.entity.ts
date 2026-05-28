@@ -5,10 +5,10 @@ export class Table {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column()
+  @Column({ nullable: true })
   branchId: string;
 
-  @Column()
+  @Column({ nullable: true })
   areaId: string;
 
   @Column()

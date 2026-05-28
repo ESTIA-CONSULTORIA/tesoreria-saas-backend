@@ -5,10 +5,10 @@ export class Tenant {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column()
+  @Column({ default: '' })
   legalName: string;
 
-  @Column()
+  @Column({ default: '' })
   tradeName: string;
 
   @Column({ nullable: true })

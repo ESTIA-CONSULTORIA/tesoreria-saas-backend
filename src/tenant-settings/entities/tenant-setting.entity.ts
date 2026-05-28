@@ -5,7 +5,7 @@ export class TenantSetting {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column()
+  @Column({ nullable: true })
   tenantId: string;
 
   @Column({ nullable: true })

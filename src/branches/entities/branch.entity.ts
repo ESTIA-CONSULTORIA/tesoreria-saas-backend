@@ -8,10 +8,10 @@ export class Branch {
   @Column()
   companyId: string;
 
-  @Column()
+  @Column({ default: '' })
   code: string;
 
-  @Column()
+  @Column({ default: '' })
   name: string;
 
   @Column({ nullable: true })

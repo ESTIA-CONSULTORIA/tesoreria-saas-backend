@@ -5,7 +5,7 @@ export class PosConfig {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column()
+  @Column({ nullable: true })
   branchId: string;
 
   // Parámetros de operación

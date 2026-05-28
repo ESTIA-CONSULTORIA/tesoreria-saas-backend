@@ -5,7 +5,7 @@ export class Report {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column()
+  @Column({ default: '' })
   type: string;
 
   @Column({ type: 'json', nullable: true })

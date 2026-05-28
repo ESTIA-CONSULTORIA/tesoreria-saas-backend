@@ -10,16 +10,16 @@ export class Integration {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column()
+  @Column({ nullable: true })
   tenantId: string;
 
-  @Column()
+  @Column({ nullable: true })
   companyId: string;
 
-  @Column()
+  @Column({ default: '' })
   provider: string;
 
-  @Column()
+  @Column({ default: '' })
   type: string;
 
   @Column({ nullable: true })

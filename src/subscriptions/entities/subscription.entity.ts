@@ -5,13 +5,13 @@ export class Subscription {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column()
+  @Column({ nullable: true })
   tenantId: string;
 
-  @Column()
+  @Column({ default: 'BASIC' })
   planCode: string; // BASIC, PRO, ENTERPRISE
 
-  @Column({ type: 'date' })
+  @Column({ type: 'date', nullable: true })
   startDate: string;
 
   @Column({
