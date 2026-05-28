@@ -44,4 +44,9 @@ export class UsersService {
       order: { email: 'ASC' },
     });
   }
+
+  async update(id: string, data: { name?: string; roleId?: string; roleCode?: string; isActive?: boolean }) {
+    await this.usersRepository.update(id, data);
+    return this.usersRepository.findOne({ where: { id } });
+  }
 }

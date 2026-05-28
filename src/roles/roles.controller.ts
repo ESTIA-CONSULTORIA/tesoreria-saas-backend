@@ -20,11 +20,13 @@ export class RolesController {
   }
 
   @Get()
+  @Public()
   findAll() {
     return this.rolesService.findAll();
   }
 
   @Get('code/:code')
+  @Public()
   findByCode(@Param('code') code: string) {
     return this.rolesService.findByCode(code);
   }
