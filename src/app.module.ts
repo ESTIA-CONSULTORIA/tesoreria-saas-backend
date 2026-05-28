@@ -20,6 +20,7 @@ import { SubscriptionGuard } from './auth/subscription.guard';
 import { FeatureGuard } from './auth/feature/feature.guard';
 import { IntegrationsModule } from './integrations/integrations.module';
 import { RolesModule } from './roles/roles.module';
+import { BanksModule } from './banks/banks.module';
 
 @Module({
   imports: [
@@ -55,6 +56,7 @@ import { RolesModule } from './roles/roles.module';
     BusinessTypesModule,
     IntegrationsModule,
     RolesModule,
+    BanksModule,
   ],
 
   providers: [
