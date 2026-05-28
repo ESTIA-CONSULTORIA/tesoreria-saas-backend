@@ -24,6 +24,8 @@ export const MODULES_BY_PLAN: Record<Plan, string[]> = {
     'reportes',
     'tesoreria',
     'conciliacion',
+    'proveedores',
+    'compras',
   ],
   [Plan.BUSINESS]: [
     'dashboard',
@@ -37,6 +39,9 @@ export const MODULES_BY_PLAN: Record<Plan, string[]> = {
     'conciliacion',
     'configuracion-pos',
     'integraciones',
+    'proveedores',
+    'compras',
+    'costos',
   ],
   [Plan.ENTERPRISE]: [
     'dashboard',
@@ -53,6 +58,9 @@ export const MODULES_BY_PLAN: Record<Plan, string[]> = {
     'rh',
     'sat-cfdi',
     'white-label',
+    'proveedores',
+    'compras',
+    'costos',
   ],
 };
 

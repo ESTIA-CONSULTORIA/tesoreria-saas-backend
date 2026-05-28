@@ -29,6 +29,10 @@ import { TreasuryModule } from './treasury/treasury.module';
 import { ReconciliationModule } from './reconciliation/reconciliation.module';
 import { AdministrationModule } from './administration/administration.module';
 import { PosModule } from './pos/pos.module';
+import { SuppliersModule } from './suppliers/suppliers.module';
+import { PurchasesModule } from './purchases/purchases.module';
+import { CostsModule } from './costs/costs.module';
+import { AddonsModule } from './addons/addons.module';
 
 @Module({
   imports: [
@@ -72,6 +76,10 @@ import { PosModule } from './pos/pos.module';
     ReconciliationModule,
     AdministrationModule,
     PosModule,
+    SuppliersModule,
+    PurchasesModule,
+    CostsModule,
+    AddonsModule,
   ],
 
   providers: [
