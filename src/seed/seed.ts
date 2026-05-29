@@ -14,42 +14,42 @@ export async function seedDatabase(dataSource: DataSource) {
   const existingAdmin = await usersRepository.findOne({ where: { email: 'admin@estia.com' } });
   
   if (!existingAdmin) {
-    // Buscar o crear rol SUPER_ADMIN
-    let superAdminRole = await rolesRepository.findOne({ where: { code: 'SUPER_ADMIN' } });
+    // Buscar o crear rol SOPORTE (antes SUPER_ADMIN)
+    let soporteRole = await rolesRepository.findOne({ where: { code: 'SOPORTE' } });
     
-    if (!superAdminRole) {
-      superAdminRole = await rolesRepository.save({
-        code: 'SUPER_ADMIN',
-        name: 'Super Administrador',
-        description: 'Acceso total al sistema',
+    if (!soporteRole) {
+      soporteRole = await rolesRepository.save({
+        code: 'SOPORTE',
+        name: 'Soporte',
+        description: 'Acceso total al sistema (proveedor del sistema)',
         isActive: true,
       });
     }
 
-    // Crear usuario admin
+    // Crear usuario admin con rol SOPORTE
     const hashedPassword = await bcrypt.hash('admin123', 10);
     await usersRepository.save({
       email: 'admin@estia.com',
       password: hashedPassword,
-      name: 'Administrador',
-      roleId: superAdminRole.id,
-      roleCode: 'SUPER_ADMIN',
+      name: 'Administrador Soporte',
+      roleId: soporteRole.id,
+      roleCode: 'SOPORTE',
       isActive: true,
     });
 
-    console.log('✅ Usuario admin@estia.com creado exitosamente');
+    console.log('✅ Usuario admin@estia.com (SOPORTE) creado exitosamente');
   } else {
     // Actualizar si existe pero no tiene los datos correctos
-    if (existingAdmin.name !== 'Administrador' || existingAdmin.roleCode !== 'SUPER_ADMIN') {
-      const superAdminRole = await rolesRepository.findOne({ where: { code: 'SUPER_ADMIN' } });
+    if (existingAdmin.name !== 'Administrador Soporte' || existingAdmin.roleCode !== 'SOPORTE') {
+      const soporteRole = await rolesRepository.findOne({ where: { code: 'SOPORTE' } });
       
       await usersRepository.update(existingAdmin.id, {
-        name: 'Administrador',
-        roleId: superAdminRole?.id,
-        roleCode: 'SUPER_ADMIN',
+        name: 'Administrador Soporte',
+        roleId: soporteRole?.id,
+        roleCode: 'SOPORTE',
       });
       
-      console.log('✅ Usuario admin@estia.com actualizado exitosamente');
+      console.log('✅ Usuario admin@estia.com actualizado a rol SOPORTE');
     }
   }
 
@@ -66,6 +66,36 @@ export async function seedDatabase(dataSource: DataSource) {
       isActive: true,
     });
     console.log('✅ Tenant de prueba creado');
+  }
+
+  // Crear usuario de prueba con rol ADMIN (administrador del cliente)
+  const existingAdminUser = await usersRepository.findOne({ where: { email: 'admin@empresademo.com' } });
+  
+  if (!existingAdminUser) {
+    // Buscar o crear rol ADMIN
+    let adminRole = await rolesRepository.findOne({ where: { code: 'ADMIN' } });
+    
+    if (!adminRole) {
+      adminRole = await rolesRepository.save({
+        code: 'ADMIN',
+        name: 'Administrador',
+        description: 'Administrador del cliente (tenant)',
+        isActive: true,
+      });
+    }
+
+    // Crear usuario admin del cliente
+    const hashedPassword = await bcrypt.hash('admin123', 10);
+    await usersRepository.save({
+      email: 'admin@empresademo.com',
+      password: hashedPassword,
+      name: 'Administrador Cliente',
+      roleId: adminRole.id,
+      roleCode: 'ADMIN',
+      isActive: true,
+    });
+
+    console.log('✅ Usuario admin@empresademo.com (ADMIN) creado exitosamente');
   }
 
   // Crear empresas de prueba

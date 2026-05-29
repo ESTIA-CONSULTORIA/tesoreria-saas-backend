@@ -38,9 +38,9 @@ export class SubscriptionGuard implements CanActivate {
       return true;
     }
 
-    // SUPER_ADMIN tiene acceso a todo sin restricciones de suscripción
+    // SOPORTE tiene acceso a todo sin restricciones de suscripción
     const user = request.user;
-    if (user && user.rol === 'SUPER_ADMIN') {
+    if (user && user.rol === 'SOPORTE') {
       return true;
     }
 

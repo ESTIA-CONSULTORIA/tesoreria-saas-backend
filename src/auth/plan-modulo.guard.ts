@@ -43,8 +43,8 @@ export class PlanModuloGuard implements CanActivate {
     const user = request.user;
     const tenantId = request.headers['tenant-id'];
 
-    // SUPER_ADMIN tiene acceso a todos los módulos
-    if (user?.rol === 'SUPER_ADMIN') {
+    // SOPORTE tiene acceso a todos los módulos
+    if (user?.rol === 'SOPORTE') {
       return true;
     }
 
