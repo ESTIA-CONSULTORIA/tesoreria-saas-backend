@@ -24,4 +24,13 @@ export class TenantsService {
   findAll() {
     return this.tenantsRepository.find();
   }
+
+  findOne(id: string) {
+    return this.tenantsRepository.findOne({ where: { id } });
+  }
+
+  async updatePlan(id: string, plan: string) {
+    await this.tenantsRepository.update(id, { plan });
+    return this.tenantsRepository.findOne({ where: { id } });
+  }
 }

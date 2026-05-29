@@ -14,6 +14,9 @@ export class Tenant {
   @Column({ nullable: true })
   taxId: string;
 
+  @Column({ default: 'BASIC' })
+  plan: string; // BASIC, PROFESIONAL, BUSINESS, ENTERPRISE
+
   @Column({ default: true })
   isActive: boolean;
 }
