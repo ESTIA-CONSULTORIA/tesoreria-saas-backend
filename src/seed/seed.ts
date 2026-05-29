@@ -318,4 +318,22 @@ export async function seedDatabase(dataSource: DataSource) {
   } else {
     console.log('ℹ️ Datos de prueba ya existen, omitiendo creación');
   }
+
+  // Resumen final del seed
+  const totalCompanies = await companiesRepository.count({ where: { tenantId: testTenant.id } });
+  const totalBranches = await branchesRepository.count();
+  const totalBanks = await banksRepository.count();
+  const totalMovements = await movementsRepository.count();
+  const totalSuppliers = await suppliersRepository.count({ where: { tenantId: testTenant.id } });
+
+  console.log('═══════════════════════════════════════');
+  console.log('✅ SEED COMPLETADO');
+  console.log('═══════════════════════════════════════');
+  console.log(`📊 Resumen de datos creados:`);
+  console.log(`   - Empresas: ${totalCompanies}`);
+  console.log(`   - Sucursales: ${totalBranches}`);
+  console.log(`   - Cuentas bancarias: ${totalBanks}`);
+  console.log(`   - Movimientos: ${totalMovements}`);
+  console.log(`   - Proveedores: ${totalSuppliers}`);
+  console.log('═══════════════════════════════════════');
 }

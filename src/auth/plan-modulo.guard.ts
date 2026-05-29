@@ -40,7 +40,13 @@ export class PlanModuloGuard implements CanActivate {
     }
 
     const request = context.switchToHttp().getRequest();
+    const user = request.user;
     const tenantId = request.headers['tenant-id'];
+
+    // SUPER_ADMIN tiene acceso a todos los módulos
+    if (user?.rol === 'SUPER_ADMIN') {
+      return true;
+    }
 
     if (!tenantId) {
       throw new ForbiddenException('Tenant ID requerido');
