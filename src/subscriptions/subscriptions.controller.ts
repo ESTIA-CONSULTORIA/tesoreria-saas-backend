@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Put } from '@nestjs/common';
 import { SubscriptionsService } from './subscriptions.service';
 import { Subscription } from './entities/subscription.entity';
 
@@ -14,5 +14,10 @@ export class SubscriptionsController {
   @Get('tenant/:tenantId')
   findByTenant(@Param('tenantId') tenantId: string) {
     return this.subsService.findByTenant(tenantId);
+  }
+
+  @Put(':tenantId/plan')
+  updatePlan(@Param('tenantId') tenantId: string, @Body('planCode') planCode: string) {
+    return this.subsService.updatePlan(tenantId, planCode);
   }
 }

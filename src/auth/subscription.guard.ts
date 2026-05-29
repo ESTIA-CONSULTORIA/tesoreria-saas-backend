@@ -38,6 +38,12 @@ export class SubscriptionGuard implements CanActivate {
       return true;
     }
 
+    // SUPER_ADMIN tiene acceso a todo sin restricciones de suscripción
+    const user = request.user;
+    if (user && user.rol === 'SUPER_ADMIN') {
+      return true;
+    }
+
     const tenantId = request.headers['tenant-id'];
 
     if (!tenantId) {

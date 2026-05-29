@@ -43,4 +43,23 @@ export class SubscriptionsService {
       },
     });
   }
+
+  async updatePlan(tenantId: string, planCode: string) {
+    // Expirar suscripción anterior
+    await this.subscriptionRepo.update(
+      { tenantId, status: 'ACTIVE' },
+      { status: 'EXPIRED' },
+    );
+
+    // Crear nueva suscripción con el nuevo plan
+    const sub = this.subscriptionRepo.create({
+      tenantId,
+      planCode,
+      startDate: new Date().toISOString().split('T')[0],
+      endDate: null,
+      status: 'ACTIVE',
+    });
+
+    return this.subscriptionRepo.save(sub);
+  }
 }
