@@ -6,6 +6,7 @@ import { SubscriptionsModule } from '../subscriptions/subscriptions.module';
 import { AddonsModule } from '../addons/addons.module';
 import { JwtModule } from '@nestjs/jwt';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import { JwtMiddleware } from './jwt.middleware';
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService],
+  providers: [AuthService, JwtMiddleware],
+  exports: [JwtMiddleware],
 })
 export class AuthModule {}

@@ -2,6 +2,7 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { getDataSourceToken } from '@nestjs/typeorm';
 import { seedDatabase } from './seed/seed';
+import { JwtMiddleware } from './auth/jwt.middleware';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -18,6 +19,10 @@ async function bootstrap() {
     });
     next();
   });
+
+  // JWT Middleware para decodificar el token y asignar usuario a request.user
+  const jwtMiddleware = app.get(JwtMiddleware);
+  app.use(jwtMiddleware);
 
   // Ejecutar seed después de iniciar la aplicación
   const dataSource = app.get(getDataSourceToken());

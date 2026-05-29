@@ -47,6 +47,7 @@ export class AuthService {
     const token = this.jwtService.sign({
       sub: user.id,
       email: user.email,
+      roleCode: user.roleCode,
     });
 
     // Obtener módulos activos según el plan del tenant + addons activos
