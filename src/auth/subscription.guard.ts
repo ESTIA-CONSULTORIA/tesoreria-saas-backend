@@ -40,12 +40,7 @@ export class SubscriptionGuard implements CanActivate {
 
     // SUPER_ADMIN tiene acceso a todo sin restricciones de suscripción
     const user = request.user;
-    console.log('SubscriptionGuard - user:', user);
-    console.log('SubscriptionGuard - user.rol:', user?.rol);
-    console.log('SubscriptionGuard - user.roleCode:', user?.roleCode);
-    
     if (user && user.rol === 'SUPER_ADMIN') {
-      console.log('SubscriptionGuard - SUPER_ADMIN bypass activated');
       return true;
     }
 
