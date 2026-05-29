@@ -43,8 +43,14 @@ export class PlanModuloGuard implements CanActivate {
     const user = request.user;
     const tenantId = request.headers['tenant-id'];
 
+    console.log('PlanModuloGuard - user:', user);
+    console.log('PlanModuloGuard - user.rol:', user?.rol);
+    console.log('PlanModuloGuard - user.roleCode:', user?.roleCode);
+    console.log('PlanModuloGuard - requiredModulo:', requiredModulo);
+
     // SUPER_ADMIN tiene acceso a todos los módulos
     if (user?.rol === 'SUPER_ADMIN') {
+      console.log('PlanModuloGuard - SUPER_ADMIN bypass activated');
       return true;
     }
 

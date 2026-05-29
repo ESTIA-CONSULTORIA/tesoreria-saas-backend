@@ -22,7 +22,7 @@ async function bootstrap() {
 
   // JWT Middleware para decodificar el token y asignar usuario a request.user
   const jwtMiddleware = app.get(JwtMiddleware);
-  app.use(jwtMiddleware);
+  app.use((req, res, next) => jwtMiddleware.use(req, res, next));
 
   // Ejecutar seed después de iniciar la aplicación
   const dataSource = app.get(getDataSourceToken());
