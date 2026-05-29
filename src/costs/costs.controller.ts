@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Put, Delete, Body, Param } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Body, Param, Query } from '@nestjs/common';
 import { CostsService } from './costs.service';
 import { Modulo } from '../auth/modulo.decorator';
 
@@ -9,8 +9,11 @@ export class CostsController {
 
   // Insumos
   @Get('insumos')
-  findAllInsumos(@Param('tenantId') tenantId?: string) {
-    return this.costsService.findAllInsumos(tenantId);
+  findAllInsumos(
+    @Query('tenantId') tenantId?: string,
+    @Query('categoriaId') categoriaId?: string,
+  ) {
+    return this.costsService.findAllInsumos(tenantId, categoriaId);
   }
 
   @Get('insumos/:id')
@@ -35,8 +38,11 @@ export class CostsController {
 
   // Recetas
   @Get('recipes')
-  findAllRecipes(@Param('tenantId') tenantId?: string) {
-    return this.costsService.findAllRecipes(tenantId);
+  findAllRecipes(
+    @Query('tenantId') tenantId?: string,
+    @Query('tipo') tipo?: string,
+  ) {
+    return this.costsService.findAllRecipes(tenantId, tipo);
   }
 
   @Get('recipes/:id')
@@ -57,5 +63,46 @@ export class CostsController {
   @Delete('recipes/:id')
   deleteRecipe(@Param('id') id: string) {
     return this.costsService.deleteRecipe(id);
+  }
+
+  // Inventario
+  @Get('inventory')
+  async findInventoryByPeriod(
+    @Query('tenantId') tenantId?: string,
+    @Query('periodo') periodo?: string,
+  ) {
+    return this.costsService.findInventoryByPeriod(tenantId, periodo);
+  }
+
+  @Get('inventory/:insumoId/:periodo')
+  async findInventoryByInsumo(
+    @Param('insumoId') insumoId: string,
+    @Param('periodo') periodo: string,
+  ) {
+    return this.costsService.findInventoryByInsumo(insumoId, periodo);
+  }
+
+  @Post('inventory')
+  async createInventory(@Body() data: any) {
+    return this.costsService.createInventory(data);
+  }
+
+  @Put('inventory/:id')
+  async updateInventory(@Param('id') id: string, @Body() data: any) {
+    return this.costsService.updateInventory(id, data);
+  }
+
+  @Delete('inventory/:id')
+  async deleteInventory(@Param('id') id: string) {
+    return this.costsService.deleteInventory(id);
+  }
+
+  // Costo de Venta
+  @Get('cost-of-sales')
+  async calculateCostOfSales(
+    @Query('tenantId') tenantId?: string,
+    @Query('periodo') periodo?: string,
+  ) {
+    return this.costsService.calculateCostOfSales(tenantId, periodo);
   }
 }
