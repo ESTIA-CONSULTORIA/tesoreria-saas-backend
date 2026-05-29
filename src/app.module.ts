@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import { APP_GUARD } from '@nestjs/core';
+import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 
 import { UsersModule } from './users/users.module';
 import { AuthModule } from './auth/auth.module';
@@ -19,6 +19,7 @@ import { BusinessTypesModule } from './business-types/business-types.module';
 import { SubscriptionGuard } from './auth/subscription.guard';
 import { FeatureGuard } from './auth/feature/feature.guard';
 import { PlanModuloGuard } from './auth/plan-modulo.guard';
+import { AuditInterceptor } from './audit/audit.interceptor';
 import { IntegrationsModule } from './integrations/integrations.module';
 import { RolesModule } from './roles/roles.module';
 import { BanksModule } from './banks/banks.module';
@@ -33,6 +34,7 @@ import { SuppliersModule } from './suppliers/suppliers.module';
 import { PurchasesModule } from './purchases/purchases.module';
 import { CostsModule } from './costs/costs.module';
 import { AddonsModule } from './addons/addons.module';
+import { AuditModule } from './audit/audit.module';
 
 @Module({
   imports: [
@@ -80,9 +82,14 @@ import { AddonsModule } from './addons/addons.module';
     PurchasesModule,
     CostsModule,
     AddonsModule,
+    AuditModule,
   ],
 
   providers: [
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: AuditInterceptor,
+    },
     {
       provide: APP_GUARD,
       useClass: SubscriptionGuard,
