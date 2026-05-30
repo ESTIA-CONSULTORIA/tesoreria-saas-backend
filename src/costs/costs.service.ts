@@ -78,14 +78,18 @@ export class CostsService {
 
   // Inventario
   async findInventoryByPeriod(tenantId?: string, periodo?: string) {
-    const where: any = {};
-    if (tenantId) where.tenantId = tenantId;
-    if (periodo) where.periodo = periodo;
+    try {
+      const where: any = {};
+      if (tenantId) where.tenantId = tenantId;
+      if (periodo) where.periodo = periodo;
 
-    return this.inventoryRepo.find({
-      where,
-      order: { createdAt: 'DESC' },
-    });
+      return this.inventoryRepo.find({
+        where,
+        order: { createdAt: 'DESC' },
+      });
+    } catch (error) {
+      throw new Error(`Error al obtener inventario: ${error.message}`);
+    }
   }
 
   async findInventoryByInsumo(insumoId: string, periodo: string) {
@@ -110,35 +114,39 @@ export class CostsService {
 
   // Costo de Venta
   async calculateCostOfSales(tenantId?: string, periodo?: string) {
-    const where: any = {};
-    if (tenantId) where.tenantId = tenantId;
-    if (periodo) where.periodo = periodo;
+    try {
+      const where: any = {};
+      if (tenantId) where.tenantId = tenantId;
+      if (periodo) where.periodo = periodo;
 
-    const inventories = await this.inventoryRepo.find({
-      where,
-      order: { createdAt: 'DESC' },
-    });
+      const inventories = await this.inventoryRepo.find({
+        where,
+        order: { createdAt: 'DESC' },
+      });
 
-    const results = inventories.map((inv) => {
-      const costoVenta = Number(inv.inventarioInicial) + Number(inv.entradas) - Number(inv.inventarioFinal);
+      const results = inventories.map((inv) => {
+        const costoVenta = Number(inv.inventarioInicial) + Number(inv.entradas) - Number(inv.inventarioFinal);
+        return {
+          insumoId: inv.insumoId,
+          periodo: inv.periodo,
+          inventarioInicial: inv.inventarioInicial,
+          entradas: inv.entradas,
+          salidas: inv.salidas,
+          inventarioFinal: inv.inventarioFinal,
+          costoPromedio: inv.costoPromedio,
+          costoVenta,
+        };
+      });
+
+      const totalGeneral = results.reduce((sum, r) => sum + r.costoVenta, 0);
+
       return {
-        insumoId: inv.insumoId,
-        periodo: inv.periodo,
-        inventarioInicial: inv.inventarioInicial,
-        entradas: inv.entradas,
-        salidas: inv.salidas,
-        inventarioFinal: inv.inventarioFinal,
-        costoPromedio: inv.costoPromedio,
-        costoVenta,
+        periodo,
+        detalles: results,
+        totalGeneral,
       };
-    });
-
-    const totalGeneral = results.reduce((sum, r) => sum + r.costoVenta, 0);
-
-    return {
-      periodo,
-      detalles: results,
-      totalGeneral,
-    };
+    } catch (error) {
+      throw new Error(`Error al calcular costo de venta: ${error.message}`);
+    }
   }
 }
