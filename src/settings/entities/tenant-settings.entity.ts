@@ -1,16 +1,16 @@
-import { Entity, PrimaryGeneratedColumn, Column, UpdateDateColumn, CreateDateColumn } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn } from 'typeorm';
 
-@Entity()
-export class TenantSetting {
+@Entity('tenant_settings')
+export class TenantSettings {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column({ nullable: true })
+  @Column()
   tenantId: string;
 
   // Identidad
   @Column({ nullable: true })
-  name: string;
+  systemName: string;
 
   @Column({ nullable: true })
   logoUrl: string;
@@ -18,43 +18,43 @@ export class TenantSetting {
   @Column({ nullable: true })
   faviconUrl: string;
 
-  @Column({ default: '#2563eb' })
+  @Column({ nullable: true })
   primaryColor: string;
 
-  @Column({ default: '#64748b' })
+  @Column({ nullable: true })
   secondaryColor: string;
 
-  @Column({ default: '#0ea5e9' })
+  @Column({ nullable: true })
   accentColor: string;
 
   // Tipografía
-  @Column({ default: 'Inter' })
+  @Column({ nullable: true })
   fontFamily: string;
 
-  @Column({ default: 16, type: 'int' })
+  @Column({ nullable: true, type: 'int' })
   fontSize: number;
 
   // Sidebar
-  @Column({ default: '#0f172a' })
-  sidebarColor: string;
+  @Column({ nullable: true })
+  sidebarBgColor: string;
 
-  @Column({ default: '#e2e8f0' })
+  @Column({ nullable: true })
   sidebarTextColor: string;
 
-  @Column({ default: '#2563eb' })
+  @Column({ nullable: true })
   sidebarActiveColor: string;
 
-  @Column({ default: 'normal' })
+  @Column({ nullable: true })
   sidebarStyle: 'compact' | 'normal' | 'expanded';
 
   // Botones y controles
-  @Column({ default: '#2563eb' })
+  @Column({ nullable: true })
   primaryButtonColor: string;
 
-  @Column({ default: '#64748b' })
+  @Column({ nullable: true })
   secondaryButtonColor: string;
 
-  @Column({ default: 'rounded' })
+  @Column({ nullable: true })
   buttonBorderRadius: 'square' | 'rounded' | 'pill';
 
   @CreateDateColumn()

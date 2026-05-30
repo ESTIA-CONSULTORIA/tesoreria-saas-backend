@@ -10,6 +10,11 @@ export class TenantSettingsController {
     return this.service.findByTenant(tenantId);
   }
 
+  @Get('defaults')
+  getDefaults() {
+    return this.service.getDefaults();
+  }
+
   @Post(':tenantId')
   upsert(
     @Param('tenantId') tenantId: string,
@@ -17,8 +22,19 @@ export class TenantSettingsController {
     body: {
       name?: string;
       logoUrl?: string;
+      faviconUrl?: string;
       primaryColor?: string;
+      secondaryColor?: string;
+      accentColor?: string;
+      fontFamily?: string;
+      fontSize?: number;
       sidebarColor?: string;
+      sidebarTextColor?: string;
+      sidebarActiveColor?: string;
+      sidebarStyle?: 'compact' | 'normal' | 'expanded';
+      primaryButtonColor?: string;
+      secondaryButtonColor?: string;
+      buttonBorderRadius?: 'square' | 'rounded' | 'pill';
     },
   ) {
     return this.service.upsert(tenantId, body);
