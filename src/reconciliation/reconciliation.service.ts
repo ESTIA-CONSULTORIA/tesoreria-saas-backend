@@ -150,4 +150,28 @@ export class ReconciliationService {
     }
     return query.orderBy('movement.createdAt', 'DESC').getMany();
   }
+
+  async importInvoices(invoices: any[]) {
+    try {
+      const results: Invoice[] = [];
+      for (const invoiceData of invoices) {
+        const invoice = this.invoicesRepo.create({
+          invoiceNumber: invoiceData.invoiceNumber,
+          type: invoiceData.type as InvoiceType,
+          status: invoiceData.status as InvoiceStatus,
+          amount: Number(invoiceData.amount),
+          dueDate: new Date(invoiceData.dueDate),
+          bankAccountId: invoiceData.bankAccountId,
+          concept: invoiceData.concept,
+          reconciliationStatus: ReconciliationStatus.PENDIENTE,
+          needsManualReview: false,
+        });
+        const saved = await this.invoicesRepo.save(invoice);
+        results.push(saved);
+      }
+      return { imported: results.length, invoices: results };
+    } catch (error) {
+      throw new Error(`Error al importar facturas: ${error.message}`);
+    }
+  }
 }

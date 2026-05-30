@@ -75,4 +75,9 @@ export class ReconciliationController {
   ) {
     return this.reconciliationService.manualReconciliation(invoiceId, movementId);
   }
+
+  @Post('import')
+  importInvoices(@Body() data: { invoices: any[] }) {
+    return this.reconciliationService.importInvoices(data.invoices);
+  }
 }
