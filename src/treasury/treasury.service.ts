@@ -163,51 +163,55 @@ export class TreasuryService {
   }
 
   async getBankPosition() {
-    const accounts = await this.banksRepo.find({ where: { isActive: true } });
+    try {
+      const accounts = await this.banksRepo.find({ where: { isActive: true } });
 
-    const today = new Date();
-    const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-    const endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
+      const today = new Date();
+      const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+      const endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
 
-    const accountsWithDetails = await Promise.all(
-      accounts.map(async (account) => {
-        // Movimientos del día
-        const todayMovements = await this.movementsRepo
-          .createQueryBuilder('movement')
-          .where('movement.bankId = :bankId', { bankId: account.id })
-          .andWhere('movement.createdAt >= :startDate', { startDate: startOfDay })
-          .andWhere('movement.createdAt < :endDate', { endDate: endOfDay })
-          .getMany();
+      const accountsWithDetails = await Promise.all(
+        accounts.map(async (account) => {
+          // Movimientos del día
+          const todayMovements = await this.movementsRepo
+            .createQueryBuilder('movement')
+            .where('movement.bankId = :bankId', { bankId: account.id })
+            .andWhere('movement.createdAt >= :startDate', { startDate: startOfDay })
+            .andWhere('movement.createdAt < :endDate', { endDate: endOfDay })
+            .getMany();
 
-        const todayIncome = todayMovements
-          .filter((m) => m.type === 'INCOME')
-          .reduce((acc, m) => acc + Number(m.amount), 0);
-        const todayExpense = todayMovements
-          .filter((m) => m.type === 'EXPENSE')
-          .reduce((acc, m) => acc + Number(m.amount), 0);
+          const todayIncome = todayMovements
+            .filter((m) => m.type === 'INCOME')
+            .reduce((acc, m) => acc + Number(m.amount), 0);
+          const todayExpense = todayMovements
+            .filter((m) => m.type === 'EXPENSE')
+            .reduce((acc, m) => acc + Number(m.amount), 0);
 
-        return {
-          id: account.id,
-          name: account.name,
-          bank: account.bank,
-          accountNumber: account.accountNumber,
-          balance: Number(account.balance),
-          minBalance: 0,
-          todayMovements: todayMovements.length,
-          todayIncome,
-          todayExpense,
-          todayNet: todayIncome - todayExpense,
-          lastReconciliation: null,
-        };
-      }),
-    );
+          return {
+            id: account.id,
+            name: account.name,
+            bank: account.bank,
+            accountNumber: account.accountNumber,
+            balance: Number(account.balance),
+            minBalance: 0,
+            todayMovements: todayMovements.length,
+            todayIncome,
+            todayExpense,
+            todayNet: todayIncome - todayExpense,
+            lastReconciliation: null,
+          };
+        }),
+      );
 
-    return {
-      accounts: accountsWithDetails,
-      totalBalance: accountsWithDetails.reduce((acc, accItem) => acc + accItem.balance, 0),
-      totalTodayIncome: accountsWithDetails.reduce((acc, accItem) => acc + accItem.todayIncome, 0),
-      totalTodayExpense: accountsWithDetails.reduce((acc, accItem) => acc + accItem.todayExpense, 0),
-    };
+      return {
+        accounts: accountsWithDetails,
+        totalBalance: accountsWithDetails.reduce((acc, accItem) => acc + accItem.balance, 0),
+        totalTodayIncome: accountsWithDetails.reduce((acc, accItem) => acc + accItem.todayIncome, 0),
+        totalTodayExpense: accountsWithDetails.reduce((acc, accItem) => acc + accItem.todayExpense, 0),
+      };
+    } catch (error) {
+      throw new Error(`Error al obtener posición bancaria: ${error.message}`);
+    }
   }
 
   async getAlerts() {
