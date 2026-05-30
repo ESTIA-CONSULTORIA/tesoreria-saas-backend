@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { AuditLog, AuditAction, AuditModule } from './entities/audit-log.entity';
 import { Tenant } from '../tenants/entities/tenant.entity';
+import { TenantSetting } from '../tenant-settings/entities/tenant-setting.entity';
 
 @Injectable()
 export class AdministrationService {
@@ -11,6 +12,8 @@ export class AdministrationService {
     private auditLogRepo: Repository<AuditLog>,
     @InjectRepository(Tenant)
     private tenantsRepo: Repository<Tenant>,
+    @InjectRepository(TenantSetting)
+    private tenantSettingsRepo: Repository<TenantSetting>,
   ) {}
 
   async createAuditLog(data: {
@@ -109,5 +112,59 @@ export class AdministrationService {
   }) {
     // En un sistema real esto actualizaría la tabla de configuración
     return { ...data, updatedAt: new Date() };
+  }
+
+  async getGlobalConfig() {
+    // Buscar configuración global en tenant_settings
+    let setting = await this.tenantSettingsRepo.findOne({
+      where: { tenantId: 'global' },
+    });
+
+    if (!setting) {
+      // Crear configuración por defecto
+      setting = this.tenantSettingsRepo.create({
+        tenantId: 'global',
+        globalConfig: {
+          nombreSistema: 'ESTIA Financial Suite',
+          zonaHoraria: 'America/Mexico_City',
+          monedaDefault: 'MXN',
+          formatoFecha: 'DD/MM/YYYY',
+          limiteSessiones: 3,
+        },
+      });
+      await this.tenantSettingsRepo.save(setting);
+    }
+
+    return setting.globalConfig || {
+      nombreSistema: 'ESTIA Financial Suite',
+      zonaHoraria: 'America/Mexico_City',
+      monedaDefault: 'MXN',
+      formatoFecha: 'DD/MM/YYYY',
+      limiteSessiones: 3,
+    };
+  }
+
+  async updateGlobalConfig(data: {
+    nombreSistema?: string;
+    zonaHoraria?: string;
+    monedaDefault?: string;
+    formatoFecha?: string;
+    limiteSessiones?: number;
+  }) {
+    let setting = await this.tenantSettingsRepo.findOne({
+      where: { tenantId: 'global' },
+    });
+
+    if (!setting) {
+      setting = this.tenantSettingsRepo.create({
+        tenantId: 'global',
+        globalConfig: data,
+      });
+    } else {
+      setting.globalConfig = { ...setting.globalConfig, ...data };
+    }
+
+    await this.tenantSettingsRepo.save(setting);
+    return setting.globalConfig;
   }
 }

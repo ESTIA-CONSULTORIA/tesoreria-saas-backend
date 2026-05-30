@@ -57,6 +57,16 @@ export class TenantSetting {
   @Column({ default: 'rounded' })
   buttonBorderRadius: 'square' | 'rounded' | 'pill';
 
+  // Configuración global (JSON)
+  @Column({ type: 'json', nullable: true })
+  globalConfig: {
+    nombreSistema?: string;
+    zonaHoraria?: string;
+    monedaDefault?: string;
+    formatoFecha?: string;
+    limiteSessiones?: number;
+  };
+
   @CreateDateColumn()
   createdAt: Date;
 

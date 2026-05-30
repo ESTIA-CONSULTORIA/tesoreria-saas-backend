@@ -77,4 +77,20 @@ export class AdministrationController {
   }) {
     return this.administrationService.updateSystemConfig(data);
   }
+
+  @Get('global-config')
+  getGlobalConfig() {
+    return this.administrationService.getGlobalConfig();
+  }
+
+  @Put('global-config')
+  updateGlobalConfig(@Body() data: {
+    nombreSistema?: string;
+    zonaHoraria?: string;
+    monedaDefault?: string;
+    formatoFecha?: string;
+    limiteSessiones?: number;
+  }) {
+    return this.administrationService.updateGlobalConfig(data);
+  }
 }
