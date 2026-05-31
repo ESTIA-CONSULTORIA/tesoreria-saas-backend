@@ -12,13 +12,13 @@ import { TablesController } from './tables.controller';
 import { TablesService } from './tables.service';
 import { PosConfig } from './entities/pos-config.entity';
 import { Product } from './entities/product.entity';
-import { Category } from './entities/category.entity';
+import { PosCategory } from './entities/category.entity';
 import { Area } from './entities/area.entity';
 import { Table } from './entities/table.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([PosConfig, Product, Category, Area, Table]),
+    TypeOrmModule.forFeature([PosConfig, Product, PosCategory, Area, Table]),
   ],
   controllers: [
     PosController,

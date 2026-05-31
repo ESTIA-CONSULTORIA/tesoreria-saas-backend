@@ -1,13 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Category } from './entities/category.entity';
+import { PosCategory } from './entities/category.entity';
 
 @Injectable()
 export class CategoriesService {
   constructor(
-    @InjectRepository(Category)
-    private categoriesRepo: Repository<Category>,
+    @InjectRepository(PosCategory)
+    private categoriesRepo: Repository<PosCategory>,
   ) {}
 
   findAll(branchId?: string) {
@@ -21,12 +21,12 @@ export class CategoriesService {
     return this.categoriesRepo.findOne({ where: { id } });
   }
 
-  create(data: Partial<Category>) {
+  create(data: Partial<PosCategory>) {
     const category = this.categoriesRepo.create(data);
     return this.categoriesRepo.save(category);
   }
 
-  async update(id: string, data: Partial<Category>) {
+  async update(id: string, data: Partial<PosCategory>) {
     await this.categoriesRepo.update(id, { ...data, updatedAt: new Date() });
     return this.categoriesRepo.findOne({ where: { id } });
   }
