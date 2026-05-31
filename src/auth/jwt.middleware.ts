@@ -24,7 +24,7 @@ export class JwtMiddleware implements NestMiddleware {
         req['user'] = {
           id: decoded.sub,
           email: decoded.email,
-          rol: decoded.rol,
+          roleCode: decoded.roleCode,
         };
       } catch (error) {
         // Si el token es inválido, no asignar usuario

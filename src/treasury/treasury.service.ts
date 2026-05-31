@@ -185,7 +185,7 @@ export class TreasuryService {
           // Movimientos del día
           const todayMovements = await this.movementsRepo
             .createQueryBuilder('movement')
-            .where('movement.bankId = :bankId', { bankId: account.id })
+            .where('movement.accountId = :accountId', { accountId: account.id })
             .andWhere('movement.createdAt >= :startDate', { startDate: startOfDay })
             .andWhere('movement.createdAt < :endDate', { endDate: endOfDay })
             .getMany();

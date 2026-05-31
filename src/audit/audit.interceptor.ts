@@ -33,17 +33,17 @@ export class AuditInterceptor implements NestInterceptor {
     let action: string;
     switch (method) {
       case 'POST':
-        action = 'CREÓ';
+        action = 'CREATE';
         break;
       case 'PUT':
       case 'PATCH':
-        action = 'ACTUALIZÓ';
+        action = 'UPDATE';
         break;
       case 'DELETE':
-        action = 'ELIMINÓ';
+        action = 'DELETE';
         break;
       default:
-        action = 'ACCESÓ';
+        action = 'ACCESS';
     }
 
     // Obtener IP y User Agent
