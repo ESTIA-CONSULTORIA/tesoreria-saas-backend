@@ -43,8 +43,10 @@ export class PlanModuloGuard implements CanActivate {
     const user = request.user;
     const tenantId = request.headers['tenant-id'];
 
+    console.log('PlanModuloGuard - request.user:', user);
+
     // SOPORTE tiene acceso a todos los módulos
-    if (user?.rol === 'SOPORTE') {
+    if (user?.roleCode === 'SOPORTE') {
       return true;
     }
 

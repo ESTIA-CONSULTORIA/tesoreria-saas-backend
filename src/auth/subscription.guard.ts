@@ -40,7 +40,8 @@ export class SubscriptionGuard implements CanActivate {
 
     // SOPORTE tiene acceso a todo sin restricciones de suscripción
     const user = request.user;
-    if (user && user.rol === 'SOPORTE') {
+    console.log('SubscriptionGuard - request.user:', user);
+    if (user && user.roleCode === 'SOPORTE') {
       return true;
     }
 
