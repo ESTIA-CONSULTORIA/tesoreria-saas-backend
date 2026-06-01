@@ -8,7 +8,7 @@ export class Inventory {
   @Column({ nullable: true })
   insumoId: string;
 
-  @Column({ type: 'date', nullable: true })
+  @Column({ type: 'varchar', nullable: true })
   periodo: string; // formato YYYY-MM
 
   @Column({ type: 'decimal', precision: 10, scale: 2, default: 0 })

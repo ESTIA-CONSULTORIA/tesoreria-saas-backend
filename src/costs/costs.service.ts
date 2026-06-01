@@ -88,6 +88,7 @@ export class CostsService {
         order: { createdAt: 'DESC' },
       });
     } catch (error) {
+      console.error('CostsService.findInventoryByPeriod error:', error);
       throw new Error(`Error al obtener inventario: ${error.message}`);
     }
   }
