@@ -31,7 +31,7 @@ export class AuthService {
     };
   }
 
-  async login(email: string, password: string, tenantId?: string) {
+  async login(email: string, password: string) {
     const user = await this.usersService.findByEmail(email);
 
     if (!user) {
@@ -50,23 +50,11 @@ export class AuthService {
       roleCode: user.roleCode,
     });
 
-    // Obtener módulos activos según el plan del tenant + addons activos
-    let modulosActivos: string[] = [];
-    if (tenantId) {
-      const subscription = await this.subscriptionsService.findByTenant(tenantId);
-      if (subscription) {
-        const plan = subscription.planCode as Plan;
-        modulosActivos = getModulesByPlan(plan);
-      }
-
-      // Agregar módulos de addons activos
-      const addonModules = await this.addonsService.getActiveModulesByTenant(tenantId);
-      modulosActivos = [...modulosActivos, ...addonModules];
-    }
-
+    // El tenantId se obtendrá después del login desde el JWT o desde el usuario
+    // Por ahora, no enviamos modulosActivos en el login
     return {
       access_token: token,
-      modulosActivos,
+      modulosActivos: [],
       user: {
         id: user.id,
         email: user.email,

@@ -14,10 +14,7 @@ export class AuthController {
 
   @Public()
   @Post('login')
-  login(
-    @Body() body: { email: string; password: string },
-    @Headers('tenant-id') tenantId?: string,
-  ) {
-    return this.authService.login(body.email, body.password, tenantId);
+  login(@Body() body: { email: string; password: string }) {
+    return this.authService.login(body.email, body.password);
   }
 }
