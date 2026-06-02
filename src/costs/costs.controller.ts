@@ -113,4 +113,31 @@ export class CostsController {
   ) {
     return this.costsService.calculateCostOfSales(tenantId, periodo);
   }
+
+  // Conteo Físico
+  @Get('physical-counts')
+  async findPhysicalCounts(
+    @Query('tenantId') tenantId?: string,
+    @Query('insumoId') insumoId?: string,
+  ) {
+    return this.costsService.findPhysicalCounts(tenantId, insumoId);
+  }
+
+  @Get('physical-counts/period')
+  async findPhysicalCountsByPeriod(
+    @Query('fechaInicio') fechaInicio: string,
+    @Query('fechaFin') fechaFin: string,
+    @Query('tenantId') tenantId?: string,
+  ) {
+    return this.costsService.findPhysicalCountsByPeriod(
+      new Date(fechaInicio),
+      new Date(fechaFin),
+      tenantId,
+    );
+  }
+
+  @Post('physical-counts')
+  async createPhysicalCount(@Body() data: any) {
+    return this.costsService.createPhysicalCount(data);
+  }
 }

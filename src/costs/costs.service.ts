@@ -1,9 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, Between } from 'typeorm';
 import { Insumo } from './entities/insumo.entity';
 import { Recipe } from './entities/recipe.entity';
 import { Inventory } from './entities/inventory.entity';
+import { PhysicalCount } from './entities/physical-count.entity';
 
 @Injectable()
 export class CostsService {
@@ -14,6 +15,8 @@ export class CostsService {
     private recipesRepo: Repository<Recipe>,
     @InjectRepository(Inventory)
     private inventoryRepo: Repository<Inventory>,
+    @InjectRepository(PhysicalCount)
+    private physicalCountRepo: Repository<PhysicalCount>,
   ) {}
 
   // Insumos
@@ -169,5 +172,61 @@ export class CostsService {
     } catch (error) {
       throw new Error(`Error al calcular costo de venta: ${error.message}`);
     }
+  }
+
+  // Physical Count (Conteo Físico)
+  async createPhysicalCount(data: {
+    fecha: Date;
+    insumoId: string;
+    existenciaFisica: number;
+    motivo?: string;
+    tenantId?: string;
+    branchId?: string;
+  }) {
+    // Get theoretical existence from insumo
+    const insumo = await this.insumosRepo.findOne({ where: { id: data.insumoId } });
+    if (!insumo) {
+      throw new Error('Insumo no encontrado');
+    }
+
+    const existenciaTeorica = Number(insumo.stockActual);
+    const diferencia = Number(data.existenciaFisica) - existenciaTeorica;
+
+    const physicalCount = this.physicalCountRepo.create({
+      ...data,
+      existenciaTeorica,
+      diferencia,
+    });
+
+    const saved = await this.physicalCountRepo.save(physicalCount);
+
+    // Update insumo stock to match physical count
+    insumo.stockActual = data.existenciaFisica;
+    await this.insumosRepo.save(insumo);
+
+    return saved;
+  }
+
+  findPhysicalCounts(tenantId?: string, insumoId?: string) {
+    const where: any = {};
+    if (tenantId) where.tenantId = tenantId;
+    if (insumoId) where.insumoId = insumoId;
+
+    return this.physicalCountRepo.find({
+      where,
+      order: { fecha: 'DESC' },
+    });
+  }
+
+  findPhysicalCountsByPeriod(fechaInicio: Date, fechaFin: Date, tenantId?: string) {
+    const where: any = {
+      fecha: Between(fechaInicio, fechaFin),
+    };
+    if (tenantId) where.tenantId = tenantId;
+
+    return this.physicalCountRepo.find({
+      where,
+      order: { fecha: 'DESC' },
+    });
   }
 }
