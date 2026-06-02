@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Between } from 'typeorm';
-import { Insumo } from './entities/insumo.entity';
+import { Insumo, InsumoFamilia } from './entities/insumo.entity';
 import { Recipe } from './entities/recipe.entity';
 import { Inventory } from './entities/inventory.entity';
 import { PhysicalCount } from './entities/physical-count.entity';
@@ -70,6 +70,15 @@ export class CostsService {
 
   async deleteInsumo(id: string) {
     await this.insumosRepo.delete(id);
+  }
+
+  async getNextInsumoCode(familia: InsumoFamilia): Promise<{ codigo: string }> {
+    const count = await this.insumosRepo.count({
+      where: { familia },
+    });
+    const nextNumber = count + 1;
+    const codigo = `${familia}-${String(nextNumber).padStart(3, '0')}`;
+    return { codigo };
   }
 
   // Recetas

@@ -1,6 +1,7 @@
 import { Controller, Get, Post, Put, Delete, Body, Param, Query } from '@nestjs/common';
 import { CostsService } from './costs.service';
 import { Modulo } from '../auth/modulo.decorator';
+import { InsumoFamilia } from './entities/insumo.entity';
 
 @Controller('costs')
 @Modulo('costos')
@@ -42,6 +43,11 @@ export class CostsController {
   @Delete('insumos/:id')
   deleteInsumo(@Param('id') id: string) {
     return this.costsService.deleteInsumo(id);
+  }
+
+  @Get('insumos/next-code')
+  getNextInsumoCode(@Query('familia') familia: string) {
+    return this.costsService.getNextInsumoCode(familia as InsumoFamilia);
   }
 
   // Recetas
