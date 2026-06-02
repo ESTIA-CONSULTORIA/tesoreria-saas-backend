@@ -85,7 +85,7 @@ export class PurchasesController {
     return this.purchasesService.updatePurchase(id, data);
   }
 
-  @Put('invoices/:id/payment')
+  @Post('invoices/:id/register-payment')
   async registerPayment(
     @Param('id') id: string,
     @Body() data: {
