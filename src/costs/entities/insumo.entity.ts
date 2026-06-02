@@ -6,10 +6,16 @@ export class Insumo {
   id: string;
 
   @Column({ default: '' })
+  codigo: string;
+
+  @Column({ default: '' })
   nombre: string;
 
   @Column({ nullable: true })
   descripcion: string;
+
+  @Column({ default: '' })
+  presentacion: string;
 
   @Column({ default: '' })
   unidadMedida: string;

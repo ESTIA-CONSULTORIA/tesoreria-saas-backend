@@ -16,6 +16,14 @@ export class CostsController {
     return this.costsService.findAllInsumos(tenantId, categoriaId);
   }
 
+  @Get('insumos/search')
+  searchInsumos(
+    @Query('search') search: string,
+    @Query('limit') limit?: number,
+  ) {
+    return this.costsService.searchInsumos(search, limit);
+  }
+
   @Get('insumos/:id')
   findOneInsumo(@Param('id') id: string) {
     return this.costsService.findOneInsumo(id);

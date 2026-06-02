@@ -28,6 +28,26 @@ export class CostsService {
     });
   }
 
+  async searchInsumos(search: string, limit: number = 10) {
+    if (!search || search.length < 2) {
+      return [];
+    }
+
+    const query = this.insumosRepo.createQueryBuilder('insumo');
+    
+    query.where(
+      '(LOWER(insumo.codigo) LIKE LOWER(:search) OR LOWER(insumo.nombre) LIKE LOWER(:search) OR LOWER(insumo.descripcion) LIKE LOWER(:search))',
+      { search: `%${search}%` }
+    );
+
+    query.andWhere('insumo.isActive = :isActive', { isActive: true });
+
+    query.orderBy('insumo.nombre', 'ASC');
+    query.limit(limit);
+
+    return query.getMany();
+  }
+
   findOneInsumo(id: string) {
     return this.insumosRepo.findOne({ where: { id } });
   }
