@@ -3,7 +3,7 @@ import { UsersService } from '../users/users.service';
 import { JwtService } from '@nestjs/jwt';
 import { SubscriptionsService } from '../subscriptions/subscriptions.service';
 import { AddonsService } from '../addons/addons.service';
-import { getModulesByPlan, Plan } from '../config/modules-by-plan.config';
+import { getModulesByPlan, Plan, ALL_MODULES } from '../config/modules-by-plan.config';
 import * as bcrypt from 'bcrypt';
 
 @Injectable()
@@ -48,18 +48,36 @@ export class AuthService {
       sub: user.id,
       email: user.email,
       roleCode: user.roleCode,
+      tenantId: user.tenantId,
     });
 
-    // El tenantId se obtendrá después del login desde el JWT o desde el usuario
-    // Por ahora, no enviamos modulosActivos en el login
+    // Calcular módulos activos según rol y tenant
+    let modulosActivos: string[] = [];
+    if (user.roleCode === 'SOPORTE') {
+      // SOPORTE tiene acceso a todos los módulos
+      modulosActivos = ALL_MODULES;
+    } else if (user.tenantId) {
+      // Otros roles: obtener módulos según plan del tenant
+      const subscription = await this.subscriptionsService.findByTenant(user.tenantId);
+      if (subscription) {
+        const plan = subscription.planCode as Plan;
+        modulosActivos = getModulesByPlan(plan);
+      }
+
+      // Agregar módulos de addons activos
+      const addonModules = await this.addonsService.getActiveModulesByTenant(user.tenantId);
+      modulosActivos = [...modulosActivos, ...addonModules];
+    }
+
     return {
       access_token: token,
-      modulosActivos: [],
+      modulosActivos,
       user: {
         id: user.id,
         email: user.email,
         name: user.name,
         roleCode: user.roleCode,
+        tenantId: user.tenantId,
       },
     };
   }

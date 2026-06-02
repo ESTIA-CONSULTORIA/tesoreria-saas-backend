@@ -23,6 +23,9 @@ export class User {
   @Column({ nullable: true })
   branchId: string;
 
+  @Column({ nullable: true })
+  tenantId: string;
+
   @Column({ default: true })
   isActive: boolean;
 }

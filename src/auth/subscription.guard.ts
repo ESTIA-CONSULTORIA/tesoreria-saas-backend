@@ -26,6 +26,12 @@ export class SubscriptionGuard implements CanActivate {
     }
 
     const request = context.switchToHttp().getRequest();
+    const user = request.user;
+
+    // SOPORTE tiene acceso a todo sin restricciones de suscripción
+    if (user && user.roleCode === 'SOPORTE') {
+      return true;
+    }
 
     const path = request.url;
 
@@ -38,17 +44,10 @@ export class SubscriptionGuard implements CanActivate {
       return true;
     }
 
-    // SOPORTE tiene acceso a todo sin restricciones de suscripción
-    const user = request.user;
-    console.log('SubscriptionGuard - request.user:', user);
-    if (user && user.roleCode === 'SOPORTE') {
-      return true;
-    }
-
     const tenantId = request.headers['tenant-id'];
 
     if (!tenantId) {
-      throw new ForbiddenException('Tenant no identificado');
+      throw new ForbiddenException('Sesión inválida');
     }
 
     const subscription = await this.subsService.findByTenant(tenantId);

@@ -34,6 +34,7 @@ export async function seedDatabase(dataSource: DataSource) {
       name: 'Administrador Soporte',
       roleId: soporteRole.id,
       roleCode: 'SOPORTE',
+      tenantId: null, // SOPORTE no pertenece a ningún tenant cliente
       isActive: true,
     });
 
@@ -47,6 +48,7 @@ export async function seedDatabase(dataSource: DataSource) {
         name: 'Administrador Soporte',
         roleId: soporteRole?.id,
         roleCode: 'SOPORTE',
+        tenantId: null, // SOPORTE no pertenece a ningún tenant cliente
       });
       
       console.log('✅ Usuario admin@estia.com actualizado a rol SOPORTE');
@@ -92,6 +94,7 @@ export async function seedDatabase(dataSource: DataSource) {
       name: 'Administrador Cliente',
       roleId: adminRole.id,
       roleCode: 'ADMIN',
+      tenantId: testTenant.id, // Asociado al tenant de prueba
       isActive: true,
     });
 

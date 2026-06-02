@@ -67,3 +67,24 @@ export const MODULES_BY_PLAN: Record<Plan, string[]> = {
 export function getModulesByPlan(plan: Plan): string[] {
   return MODULES_BY_PLAN[plan] || [];
 }
+
+// Todos los módulos disponibles para rol SOPORTE
+export const ALL_MODULES = [
+  'dashboard',
+  'empresas',
+  'sucursales',
+  'bancos',
+  'movimientos',
+  'transferencias',
+  'reportes',
+  'tesoreria',
+  'conciliacion',
+  'configuracion-pos',
+  'integraciones',
+  'rh',
+  'sat-cfdi',
+  'white-label',
+  'proveedores',
+  'compras',
+  'costos',
+];

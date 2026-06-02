@@ -23,6 +23,14 @@ export class PlanModuloGuard implements CanActivate {
       return true;
     }
 
+    const request = context.switchToHttp().getRequest();
+    const user = request.user;
+
+    // SOPORTE tiene acceso a todos los módulos
+    if (user?.roleCode === 'SOPORTE') {
+      return true;
+    }
+
     // Obtener el módulo requerido del decorator
     const requiredModulo = this.reflector.getAllAndOverride<string>(MODULO_KEY, [
       context.getHandler(),
@@ -39,19 +47,10 @@ export class PlanModuloGuard implements CanActivate {
       return true;
     }
 
-    const request = context.switchToHttp().getRequest();
-    const user = request.user;
     const tenantId = request.headers['tenant-id'];
 
-    console.log('PlanModuloGuard - request.user:', user);
-
-    // SOPORTE tiene acceso a todos los módulos
-    if (user?.roleCode === 'SOPORTE') {
-      return true;
-    }
-
     if (!tenantId) {
-      throw new ForbiddenException('Tenant ID requerido');
+      throw new ForbiddenException('Sesión inválida');
     }
 
     // Obtener suscripción del tenant
