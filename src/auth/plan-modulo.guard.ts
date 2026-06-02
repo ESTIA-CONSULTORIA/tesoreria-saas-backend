@@ -3,7 +3,7 @@ import { Reflector } from '@nestjs/core';
 import { SubscriptionsService } from '../subscriptions/subscriptions.service';
 import { getModulesByPlan, Plan } from '../config/modules-by-plan.config';
 import { MODULO_KEY } from './modulo.decorator';
-import { Public } from './public.decorator';
+import { IS_PUBLIC_KEY } from './public.decorator';
 
 @Injectable()
 export class PlanModuloGuard implements CanActivate {
@@ -14,7 +14,7 @@ export class PlanModuloGuard implements CanActivate {
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     // Verificar si es público
-    const isPublic = this.reflector.getAllAndOverride<boolean>(Public, [
+    const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
       context.getHandler(),
       context.getClass(),
     ]);
