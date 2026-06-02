@@ -1,11 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Between } from 'typeorm';
-import { Insumo, InsumoFamilia } from './entities/insumo.entity';
+import { Insumo } from './entities/insumo.entity';
 import { Recipe } from './entities/recipe.entity';
 import { Inventory } from './entities/inventory.entity';
 import { PhysicalCount } from './entities/physical-count.entity';
 import { Justifiable, JustifiableCategory } from './entities/justifiable.entity';
+import { Almacen } from './entities/almacen.entity';
+import { FamiliaInsumo } from './entities/familia-insumo.entity';
 
 @Injectable()
 export class CostsService {
@@ -20,6 +22,10 @@ export class CostsService {
     private physicalCountRepo: Repository<PhysicalCount>,
     @InjectRepository(Justifiable)
     private justifiableRepo: Repository<Justifiable>,
+    @InjectRepository(Almacen)
+    private almacenesRepo: Repository<Almacen>,
+    @InjectRepository(FamiliaInsumo)
+    private familiasRepo: Repository<FamiliaInsumo>,
   ) {}
 
   // Insumos
@@ -72,13 +78,77 @@ export class CostsService {
     await this.insumosRepo.delete(id);
   }
 
-  async getNextInsumoCode(familia: InsumoFamilia): Promise<{ codigo: string }> {
+  async getNextInsumoCode(familiaId: string): Promise<{ codigo: string }> {
+    const familia = await this.familiasRepo.findOne({ where: { id: familiaId } });
+    if (!familia) {
+      throw new Error('Familia no encontrada');
+    }
+
     const count = await this.insumosRepo.count({
-      where: { familia },
+      where: { familiaId },
     });
     const nextNumber = count + 1;
-    const codigo = `${familia}-${String(nextNumber).padStart(3, '0')}`;
+    const codigo = `${familia.prefijo}-${String(nextNumber).padStart(3, '0')}`;
     return { codigo };
+  }
+
+  // Almacenes
+  findAllAlmacenes(tenantId?: string, sucursalId?: string) {
+    const where: any = {};
+    if (tenantId) where.tenantId = tenantId;
+    if (sucursalId) where.sucursalId = sucursalId;
+
+    return this.almacenesRepo.find({
+      where,
+      order: { nombre: 'ASC' },
+    });
+  }
+
+  findOneAlmacen(id: string) {
+    return this.almacenesRepo.findOne({ where: { id } });
+  }
+
+  createAlmacen(data: Partial<Almacen>) {
+    const almacen = this.almacenesRepo.create(data);
+    return this.almacenesRepo.save(almacen);
+  }
+
+  async updateAlmacen(id: string, data: Partial<Almacen>) {
+    await this.almacenesRepo.update(id, { ...data, updatedAt: new Date() });
+    return this.almacenesRepo.findOne({ where: { id } });
+  }
+
+  async deleteAlmacen(id: string) {
+    await this.almacenesRepo.delete(id);
+  }
+
+  // Familias de Insumos
+  findAllFamilias(tenantId?: string) {
+    const where: any = {};
+    if (tenantId) where.tenantId = tenantId;
+
+    return this.familiasRepo.find({
+      where,
+      order: { nombre: 'ASC' },
+    });
+  }
+
+  findOneFamilia(id: string) {
+    return this.familiasRepo.findOne({ where: { id } });
+  }
+
+  createFamilia(data: Partial<FamiliaInsumo>) {
+    const familia = this.familiasRepo.create(data);
+    return this.familiasRepo.save(familia);
+  }
+
+  async updateFamilia(id: string, data: Partial<FamiliaInsumo>) {
+    await this.familiasRepo.update(id, { ...data, updatedAt: new Date() });
+    return this.familiasRepo.findOne({ where: { id } });
+  }
+
+  async deleteFamilia(id: string) {
+    await this.familiasRepo.delete(id);
   }
 
   // Recetas

@@ -1,7 +1,6 @@
 import { Controller, Get, Post, Put, Delete, Body, Param, Query } from '@nestjs/common';
 import { CostsService } from './costs.service';
 import { Modulo } from '../auth/modulo.decorator';
-import { InsumoFamilia } from './entities/insumo.entity';
 
 @Controller('costs')
 @Modulo('costos')
@@ -46,8 +45,63 @@ export class CostsController {
   }
 
   @Get('insumos/next-code')
-  getNextInsumoCode(@Query('familia') familia: string) {
-    return this.costsService.getNextInsumoCode(familia as InsumoFamilia);
+  getNextInsumoCode(@Query('familiaId') familiaId: string) {
+    return this.costsService.getNextInsumoCode(familiaId);
+  }
+
+  // Almacenes
+  @Get('almacenes')
+  findAllAlmacenes(
+    @Query('tenantId') tenantId?: string,
+    @Query('sucursalId') sucursalId?: string,
+  ) {
+    return this.costsService.findAllAlmacenes(tenantId, sucursalId);
+  }
+
+  @Get('almacenes/:id')
+  findOneAlmacen(@Param('id') id: string) {
+    return this.costsService.findOneAlmacen(id);
+  }
+
+  @Post('almacenes')
+  createAlmacen(@Body() data: any) {
+    return this.costsService.createAlmacen(data);
+  }
+
+  @Put('almacenes/:id')
+  updateAlmacen(@Param('id') id: string, @Body() data: any) {
+    return this.costsService.updateAlmacen(id, data);
+  }
+
+  @Delete('almacenes/:id')
+  deleteAlmacen(@Param('id') id: string) {
+    return this.costsService.deleteAlmacen(id);
+  }
+
+  // Familias de Insumos
+  @Get('familias')
+  findAllFamilias(@Query('tenantId') tenantId?: string) {
+    return this.costsService.findAllFamilias(tenantId);
+  }
+
+  @Get('familias/:id')
+  findOneFamilia(@Param('id') id: string) {
+    return this.costsService.findOneFamilia(id);
+  }
+
+  @Post('familias')
+  createFamilia(@Body() data: any) {
+    return this.costsService.createFamilia(data);
+  }
+
+  @Put('familias/:id')
+  updateFamilia(@Param('id') id: string, @Body() data: any) {
+    return this.costsService.updateFamilia(id, data);
+  }
+
+  @Delete('familias/:id')
+  deleteFamilia(@Param('id') id: string) {
+    return this.costsService.deleteFamilia(id);
   }
 
   // Recetas

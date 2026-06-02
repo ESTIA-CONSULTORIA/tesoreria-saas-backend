@@ -1,17 +1,5 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn } from 'typeorm';
-
-export enum InsumoFamilia {
-  PROT = 'PROT',
-  SECO = 'SECO',
-  FYV = 'FYV',
-  LACT = 'LACT',
-  BEB = 'BEB',
-  LIMP = 'LIMP',
-  DESC = 'DESC',
-  ROPA = 'ROPA',
-  CALZ = 'CALZ',
-  MISC = 'MISC',
-}
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, ManyToOne, JoinColumn } from 'typeorm';
+import { FamiliaInsumo } from './familia-insumo.entity';
 
 @Entity()
 export class Insumo {
@@ -27,12 +15,12 @@ export class Insumo {
   @Column({ nullable: true })
   descripcion: string;
 
-  @Column({
-    type: 'enum',
-    enum: InsumoFamilia,
-    nullable: true,
-  })
-  familia: InsumoFamilia;
+  @Column({ nullable: true })
+  familiaId: string;
+
+  @ManyToOne(() => FamiliaInsumo, { nullable: true })
+  @JoinColumn({ name: 'familiaId' })
+  familia: FamiliaInsumo;
 
   @Column({ default: '' })
   presentacion: string;

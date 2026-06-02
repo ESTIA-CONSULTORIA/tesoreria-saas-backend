@@ -9,6 +9,7 @@ export async function seedDatabase(dataSource: DataSource) {
   const banksRepository = dataSource.getRepository('Bank');
   const movementsRepository = dataSource.getRepository('Movement');
   const suppliersRepository = dataSource.getRepository('Supplier');
+  const familiasRepository = dataSource.getRepository('FamiliaInsumo');
 
   // Verificar si el usuario admin ya existe
   const existingAdmin = await usersRepository.findOne({ where: { email: 'admin@estia.com' } });
@@ -352,12 +353,83 @@ export async function seedDatabase(dataSource: DataSource) {
     console.log('ℹ️ Datos de prueba ya existen, omitiendo creación');
   }
 
+  // Crear familias de insumos por defecto si no existen
+  const existingFamilias = await familiasRepository.find();
+  
+  if (existingFamilias.length === 0) {
+    const familiasPorDefecto = [
+      {
+        nombre: 'Proteínas',
+        prefijo: 'PROT',
+        descripcion: 'Carnes, mariscos, huevo y otros alimentos proteicos',
+        color: '#EF4444',
+        isActive: true,
+      },
+      {
+        nombre: 'Secos y Abarrotes',
+        prefijo: 'SECO',
+        descripcion: 'Granos, cereales, pastas y alimentos secos',
+        color: '#F59E0B',
+        isActive: true,
+      },
+      {
+        nombre: 'Frutas y Verduras',
+        prefijo: 'FYV',
+        descripcion: 'Frutas frescas, verduras y hortalizas',
+        color: '#10B981',
+        isActive: true,
+      },
+      {
+        nombre: 'Lácteos',
+        prefijo: 'LACT',
+        descripcion: 'Leche, quesos, yogures y derivados lácteos',
+        color: '#3B82F6',
+        isActive: true,
+      },
+      {
+        nombre: 'Bebidas',
+        prefijo: 'BEB',
+        descripcion: 'Refrescos, jugos, aguas y bebidas alcohólicas',
+        color: '#8B5CF6',
+        isActive: true,
+      },
+      {
+        nombre: 'Limpieza',
+        prefijo: 'LIMP',
+        descripcion: 'Productos de limpieza y sanitización',
+        color: '#06B6D4',
+        isActive: true,
+      },
+      {
+        nombre: 'Desechables',
+        prefijo: 'DESC',
+        descripcion: 'Empaques, vasos, platos y utensilios desechables',
+        color: '#64748B',
+        isActive: true,
+      },
+      {
+        nombre: 'Misceláneos',
+        prefijo: 'MISC',
+        descripcion: 'Artículos varios que no encajan en otras categorías',
+        color: '#94A3B8',
+        isActive: true,
+      },
+    ];
+
+    for (const familia of familiasPorDefecto) {
+      await familiasRepository.save(familia);
+    }
+
+    console.log('✅ 8 familias de insumos por defecto creadas');
+  }
+
   // Resumen final del seed
   const totalCompanies = await companiesRepository.count({ where: { tenantId: testTenant.id } });
   const totalBranches = await branchesRepository.count();
   const totalBanks = await banksRepository.count();
   const totalMovements = await movementsRepository.count();
   const totalSuppliers = await suppliersRepository.count({ where: { tenantId: testTenant.id } });
+  const totalFamilias = await familiasRepository.count();
 
   console.log('═══════════════════════════════════════');
   console.log('✅ SEED COMPLETADO');
@@ -368,5 +440,6 @@ export async function seedDatabase(dataSource: DataSource) {
   console.log(`   - Cuentas bancarias: ${totalBanks}`);
   console.log(`   - Movimientos: ${totalMovements}`);
   console.log(`   - Proveedores: ${totalSuppliers}`);
+  console.log(`   - Familias de insumos: ${totalFamilias}`);
   console.log('═══════════════════════════════════════');
 }
