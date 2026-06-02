@@ -42,6 +42,9 @@ export class Purchase {
   metodoPago: string;
 
   @Column({ nullable: true })
+  diasCredito: number; // 0 = contado, 7, 15, 30, 45, 60 días
+
+  @Column({ nullable: true })
   tenantId: string;
 
   @CreateDateColumn()

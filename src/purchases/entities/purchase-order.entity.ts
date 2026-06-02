@@ -15,7 +15,13 @@ export class PurchaseOrder {
   supplierId: string;
 
   @Column({ default: 'BORRADOR' })
-  status: string; // BORRADOR/ENVIADA/PARCIAL/RECIBIDA/CANCELADA
+  status: string; // BORRADOR/ENVIADA/PARCIAL/RECIBIDA/CANCELACION_PENDIENTE/CANCELADA
+
+  @Column({ type: 'json', nullable: true })
+  statusHistory: any; // [{status, fecha, userId, motivo}]
+
+  @Column({ nullable: true })
+  motivoCancelacion: string;
 
   @Column({ type: 'json', nullable: true })
   items: any; // [{productoId, descripcion, cantidad, precioUnitario, subtotal}]

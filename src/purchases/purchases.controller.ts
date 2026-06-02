@@ -41,6 +41,16 @@ export class PurchasesController {
     return this.purchasesService.cancelOrder(id);
   }
 
+  @Post('orders/:id/request-cancellation')
+  async requestCancellation(@Param('id') id: string, @Body() data: { motivo: string, userId: string }) {
+    return this.purchasesService.requestCancellation(id, data.motivo, data.userId);
+  }
+
+  @Post('orders/:id/approve-cancellation')
+  async approveCancellation(@Param('id') id: string, @Body() data: { userId: string }) {
+    return this.purchasesService.approveCancellation(id, data.userId);
+  }
+
   @Put('orders/:id/receive')
   async receiveOrder(@Param('id') id: string, @Body() data: { receivedItems: any[] }) {
     return this.purchasesService.receiveOrder(id, data.receivedItems);
@@ -76,8 +86,18 @@ export class PurchasesController {
   }
 
   @Put('invoices/:id/payment')
-  async registerPayment(@Param('id') id: string, @Body() data: { amount: number }) {
-    return this.purchasesService.registerPayment(id, data.amount);
+  async registerPayment(
+    @Param('id') id: string,
+    @Body() data: {
+      amount: number;
+      accountId: string;
+      fechaPago: string;
+      referencia?: string;
+      notas?: string;
+      userId: string;
+    },
+  ) {
+    return this.purchasesService.registerPayment(id, data);
   }
 
   @Delete('invoices/:id')
