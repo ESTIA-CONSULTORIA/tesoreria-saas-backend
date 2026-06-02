@@ -5,6 +5,7 @@ import { Insumo } from './entities/insumo.entity';
 import { Recipe } from './entities/recipe.entity';
 import { Inventory } from './entities/inventory.entity';
 import { PhysicalCount } from './entities/physical-count.entity';
+import { Justifiable, JustifiableCategory } from './entities/justifiable.entity';
 
 @Injectable()
 export class CostsService {
@@ -17,6 +18,8 @@ export class CostsService {
     private inventoryRepo: Repository<Inventory>,
     @InjectRepository(PhysicalCount)
     private physicalCountRepo: Repository<PhysicalCount>,
+    @InjectRepository(Justifiable)
+    private justifiableRepo: Repository<Justifiable>,
   ) {}
 
   // Insumos
@@ -228,5 +231,48 @@ export class CostsService {
       where,
       order: { fecha: 'DESC' },
     });
+  }
+
+  // Justificables
+  async createJustifiable(data: {
+    periodo: string;
+    categoria: JustifiableCategory;
+    descripcion?: string;
+    monto: number;
+    detalles?: any;
+    tenantId?: string;
+    branchId?: string;
+  }) {
+    const justifiable = this.justifiableRepo.create(data);
+    return this.justifiableRepo.save(justifiable);
+  }
+
+  findJustificablesByPeriod(periodo: string, tenantId?: string) {
+    const where: any = { periodo };
+    if (tenantId) where.tenantId = tenantId;
+
+    return this.justifiableRepo.find({
+      where,
+      order: { categoria: 'ASC' },
+    });
+  }
+
+  async calculateTotalJustificables(periodo: string, tenantId?: string) {
+    const justificables = await this.findJustificablesByPeriod(periodo, tenantId);
+    
+    const totals = {
+      ENERGETICOS: 0,
+      INSUMOS_SERVICIO: 0,
+      CORTESIAS_DESCUENTOS: 0,
+      MERMAS_FALTANTES: 0,
+      TOTAL: 0,
+    };
+
+    justificables.forEach((j) => {
+      totals[j.categoria] += Number(j.monto);
+      totals.TOTAL += Number(j.monto);
+    });
+
+    return totals;
   }
 }

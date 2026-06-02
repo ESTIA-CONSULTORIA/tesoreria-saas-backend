@@ -6,9 +6,10 @@ import { Insumo } from './entities/insumo.entity';
 import { Recipe } from './entities/recipe.entity';
 import { Inventory } from './entities/inventory.entity';
 import { PhysicalCount } from './entities/physical-count.entity';
+import { Justifiable } from './entities/justifiable.entity';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Insumo, Recipe, Inventory, PhysicalCount])],
+  imports: [TypeOrmModule.forFeature([Insumo, Recipe, Inventory, PhysicalCount, Justifiable])],
   controllers: [CostsController],
   providers: [CostsService],
   exports: [CostsService],

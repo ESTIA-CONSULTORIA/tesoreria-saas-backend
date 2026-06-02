@@ -140,4 +140,26 @@ export class CostsController {
   async createPhysicalCount(@Body() data: any) {
     return this.costsService.createPhysicalCount(data);
   }
+
+  // Justificables
+  @Get('justificables')
+  async findJustificablesByPeriod(
+    @Query('periodo') periodo: string,
+    @Query('tenantId') tenantId?: string,
+  ) {
+    return this.costsService.findJustificablesByPeriod(periodo, tenantId);
+  }
+
+  @Get('justificables/totals')
+  async calculateTotalJustificables(
+    @Query('periodo') periodo: string,
+    @Query('tenantId') tenantId?: string,
+  ) {
+    return this.costsService.calculateTotalJustificables(periodo, tenantId);
+  }
+
+  @Post('justificables')
+  async createJustifiable(@Body() data: any) {
+    return this.costsService.createJustifiable(data);
+  }
 }
