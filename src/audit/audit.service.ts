@@ -13,6 +13,7 @@ export class AuditService {
   async createLog(data: {
     userId: string;
     userEmail: string;
+    roleCode?: string;
     tenantId: string;
     action: string;
     entity: string;
@@ -31,6 +32,8 @@ export class AuditService {
     entity?: string;
     startDate?: Date;
     endDate?: Date;
+    page?: number;
+    limit?: number;
   }) {
     const queryBuilder = this.auditLogRepository.createQueryBuilder('audit');
 
@@ -60,7 +63,21 @@ export class AuditService {
 
     queryBuilder.orderBy('audit.createdAt', 'DESC');
 
-    return queryBuilder.getMany();
+    const page = filters?.page || 1;
+    const limit = filters?.limit || 20;
+    const skip = (page - 1) * limit;
+
+    queryBuilder.skip(skip).take(limit);
+
+    const [data, total] = await queryBuilder.getManyAndCount();
+
+    return {
+      data,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
   }
 
   async exportToCSV(filters?: {
@@ -71,13 +88,15 @@ export class AuditService {
     startDate?: Date;
     endDate?: Date;
   }) {
-    const logs = await this.findAll(filters);
+    const result = await this.findAll({ ...filters, limit: 10000 });
+    const logs = result.data;
 
-    const headers = ['ID', 'Usuario', 'Email', 'Tenant', 'Acción', 'Entidad', 'IP', 'User Agent', 'Fecha'];
+    const headers = ['ID', 'Usuario', 'Email', 'Rol', 'Tenant', 'Acción', 'Entidad', 'IP', 'User Agent', 'Fecha'];
     const rows = logs.map(log => [
       log.id,
       log.userId,
       log.userEmail,
+      log.roleCode || '',
       log.tenantId,
       log.action,
       log.entity,

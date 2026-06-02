@@ -11,11 +11,14 @@ export class AuditLog {
   @Column()
   userEmail: string;
 
+  @Column({ nullable: true })
+  roleCode: string;
+
   @Column()
   tenantId: string;
 
   @Column()
-  action: string; // 'CREÓ', 'ACTUALIZÓ', 'ELIMINÓ'
+  action: string; // 'CREATE', 'UPDATE', 'DELETE', 'ACCESS'
 
   @Column()
   entity: string; // 'User', 'Company', 'Movement', etc.

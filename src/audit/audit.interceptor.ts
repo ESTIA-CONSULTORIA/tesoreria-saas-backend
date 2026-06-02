@@ -21,6 +21,7 @@ export class AuditInterceptor implements NestInterceptor {
       const url = request.url;
       const user = request.user;
       const tenantId = request.tenantId || user?.tenantId;
+      const roleCode = user?.roleCode || null;
 
       // Solo auditar POST, PUT, PATCH, DELETE
       if (!['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
@@ -59,6 +60,7 @@ export class AuditInterceptor implements NestInterceptor {
               await this.auditService.createLog({
                 userId: user?.id || 'system',
                 userEmail: user?.email || 'system',
+                roleCode,
                 tenantId: tenantId || 'system',
                 action,
                 entity: entity || 'SYSTEM',

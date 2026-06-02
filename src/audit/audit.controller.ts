@@ -14,6 +14,8 @@ export class AuditController {
     @Query('entity') entity?: string,
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
   ) {
     const user = req.user;
     const tenantId = req.tenantId || user?.tenantId;
@@ -22,7 +24,7 @@ export class AuditController {
     // Si es ADMIN, solo ve los logs de su tenant
     const filters: any = {};
     
-    if (user?.rol !== 'SOPORTE') {
+    if (user?.roleCode !== 'SOPORTE') {
       filters.tenantId = tenantId;
     }
 
@@ -46,6 +48,14 @@ export class AuditController {
       filters.endDate = new Date(endDate);
     }
 
+    if (page) {
+      filters.page = parseInt(page);
+    }
+
+    if (limit) {
+      filters.limit = parseInt(limit);
+    }
+
     return this.auditService.findAll(filters);
   }
 
@@ -64,7 +74,7 @@ export class AuditController {
 
     const filters: any = {};
     
-    if (user?.rol !== 'SOPORTE') {
+    if (user?.roleCode !== 'SOPORTE') {
       filters.tenantId = tenantId;
     }
 
