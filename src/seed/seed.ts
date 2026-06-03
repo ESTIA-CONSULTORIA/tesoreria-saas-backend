@@ -10,6 +10,10 @@ export async function seedDatabase(dataSource: DataSource) {
   const movementsRepository = dataSource.getRepository('Movement');
   const suppliersRepository = dataSource.getRepository('Supplier');
   const familiasRepository = dataSource.getRepository('FamiliaInsumo');
+  const insumosRepository = dataSource.getRepository('Insumo');
+  const recipesRepository = dataSource.getRepository('Recipe');
+  const posCategoriesRepository = dataSource.getRepository('PosCategory');
+  const productsRepository = dataSource.getRepository('Product');
 
   // Verificar si el usuario admin ya existe
   const existingAdmin = await usersRepository.findOne({ where: { email: 'admin@estia.com' } });
@@ -421,6 +425,276 @@ export async function seedDatabase(dataSource: DataSource) {
     }
 
     console.log('✅ 8 familias de insumos por defecto creadas');
+  }
+
+  // Crear insumos de restaurante demo si no existen
+  const existingInsumos = await insumosRepository.find();
+  
+  if (existingInsumos.length === 0) {
+    const familias = await familiasRepository.find();
+    const familiaSECO = familias.find(f => f.prefijo === 'SECO');
+    const familiaPROT = familias.find(f => f.prefijo === 'PROT');
+    const familiaFYV = familias.find(f => f.prefijo === 'FYV');
+    const familiaLACT = familias.find(f => f.prefijo === 'LACT');
+    const familiaBEB = familias.find(f => f.prefijo === 'BEB');
+
+    const insumosData = [
+      // Panes y masas
+      { nombre: 'Pan para hamburguesa', familia: 'SECO', familiaId: familiaSECO?.id, presentacion: 'pza', unidadMedida: 'pza', costoUnitario: 3.50, stockMinimo: 20, stockActual: 100 },
+      { nombre: 'Pan para hot dog', familia: 'SECO', familiaId: familiaSECO?.id, presentacion: 'pza', unidadMedida: 'pza', costoUnitario: 2.50, stockMinimo: 20, stockActual: 100 },
+      { nombre: 'Masa para pizza', familia: 'SECO', familiaId: familiaSECO?.id, presentacion: 'pza', unidadMedida: 'pza', costoUnitario: 15.00, stockMinimo: 10, stockActual: 50 },
+      
+      // Proteínas
+      { nombre: 'Carne molida', familia: 'PROT', familiaId: familiaPROT?.id, presentacion: 'kg', unidadMedida: 'kg', costoUnitario: 120.00, stockMinimo: 3, stockActual: 10 },
+      { nombre: 'Salchicha', familia: 'PROT', familiaId: familiaPROT?.id, presentacion: 'pza', unidadMedida: 'pza', costoUnitario: 8.00, stockMinimo: 20, stockActual: 100 },
+      
+      // Frutas y verduras
+      { nombre: 'Lechuga', familia: 'FYV', familiaId: familiaFYV?.id, presentacion: 'kg', unidadMedida: 'kg', costoUnitario: 25.00, stockMinimo: 2, stockActual: 5 },
+      { nombre: 'Tomate', familia: 'FYV', familiaId: familiaFYV?.id, presentacion: 'kg', unidadMedida: 'kg', costoUnitario: 18.00, stockMinimo: 2, stockActual: 5 },
+      { nombre: 'Jitomate', familia: 'FYV', familiaId: familiaFYV?.id, presentacion: 'kg', unidadMedida: 'kg', costoUnitario: 20.00, stockMinimo: 2, stockActual: 5 },
+      
+      // Lácteos
+      { nombre: 'Queso americano', familia: 'LACT', familiaId: familiaLACT?.id, presentacion: 'pza', unidadMedida: 'pza', costoUnitario: 4.00, stockMinimo: 50, stockActual: 200 },
+      { nombre: 'Mozzarella', familia: 'LACT', familiaId: familiaLACT?.id, presentacion: 'kg', unidadMedida: 'kg', costoUnitario: 180.00, stockMinimo: 1, stockActual: 3 },
+      
+      // Bebidas
+      { nombre: 'Refresco lata', familia: 'BEB', familiaId: familiaBEB?.id, presentacion: 'pza', unidadMedida: 'pza', costoUnitario: 12.00, stockMinimo: 20, stockActual: 100 },
+      { nombre: 'Agua embotellada', familia: 'BEB', familiaId: familiaBEB?.id, presentacion: 'pza', unidadMedida: 'pza', costoUnitario: 8.00, stockMinimo: 20, stockActual: 100 },
+      { nombre: 'Cerveza', familia: 'BEB', familiaId: familiaBEB?.id, presentacion: 'pza', unidadMedida: 'pza', costoUnitario: 18.00, stockMinimo: 15, stockActual: 50 },
+      { nombre: 'Jugo natural', familia: 'BEB', familiaId: familiaBEB?.id, presentacion: 'pza', unidadMedida: 'pza', costoUnitario: 15.00, stockMinimo: 15, stockActual: 50 },
+      
+      // Condimentos para sub-recetas
+      { nombre: 'Mayonesa', familia: 'SECO', familiaId: familiaSECO?.id, presentacion: 'kg', unidadMedida: 'kg', costoUnitario: 45.00, stockMinimo: 1, stockActual: 5 },
+      { nombre: 'Mostaza', familia: 'SECO', familiaId: familiaSECO?.id, presentacion: 'kg', unidadMedida: 'kg', costoUnitario: 50.00, stockMinimo: 1, stockActual: 5 },
+      { nombre: 'Ketchup', familia: 'SECO', familiaId: familiaSECO?.id, presentacion: 'kg', unidadMedida: 'kg', costoUnitario: 40.00, stockMinimo: 1, stockActual: 5 },
+      { nombre: 'Cebolla', familia: 'FYV', familiaId: familiaFYV?.id, presentacion: 'kg', unidadMedida: 'kg', costoUnitario: 22.00, stockMinimo: 2, stockActual: 5 },
+      { nombre: 'Ajo', familia: 'FYV', familiaId: familiaFYV?.id, presentacion: 'kg', unidadMedida: 'kg', costoUnitario: 80.00, stockMinimo: 0.5, stockActual: 2 },
+    ];
+
+    for (const insumoData of insumosData) {
+      const count = await insumosRepository.count({ where: { familiaId: insumoData.familiaId } });
+      const nextNumber = count + 1;
+      const codigo = `${insumoData.familia}-${String(nextNumber).padStart(3, '0')}`;
+      
+      await insumosRepository.save({
+        codigo,
+        nombre: insumoData.nombre,
+        descripcion: '',
+        familia: insumoData.familia,
+        familiaId: insumoData.familiaId,
+        presentacion: insumoData.presentacion,
+        unidadMedida: insumoData.unidadMedida,
+        costoUnitario: insumoData.costoUnitario,
+        moneda: 'MXN',
+        stockMinimo: insumoData.stockMinimo,
+        stockActual: insumoData.stockActual,
+        isActive: true,
+      });
+    }
+
+    console.log('✅ 18 insumos de restaurante demo creados');
+  }
+
+  // Crear sub-recetas si no existen
+  const existingRecipes = await recipesRepository.find();
+  const allInsumos = await insumosRepository.find({ where: { isActive: true } });
+  
+  if (existingRecipes.length === 0) {
+    // Sub-receta: Aderezo especial
+    const mayonesa = allInsumos.find(i => i.nombre === 'Mayonesa');
+    const mostaza = allInsumos.find(i => i.nombre === 'Mostaza');
+    const ketchup = allInsumos.find(i => i.nombre === 'Ketchup');
+    
+    if (mayonesa && mostaza && ketchup) {
+      const aderezoItems = [
+        { insumoId: mayonesa.id, cantidad: 0.030, unidadMedida: 'kg', costoUnitario: mayonesa.costoUnitario, costoTotal: 0.030 * mayonesa.costoUnitario },
+        { insumoId: mostaza.id, cantidad: 0.010, unidadMedida: 'kg', costoUnitario: mostaza.costoUnitario, costoTotal: 0.010 * mostaza.costoUnitario },
+        { insumoId: ketchup.id, cantidad: 0.015, unidadMedida: 'kg', costoUnitario: ketchup.costoUnitario, costoTotal: 0.015 * ketchup.costoUnitario },
+      ];
+      const aderezoCostoTotal = aderezoItems.reduce((sum, item) => sum + item.costoTotal, 0);
+      
+      await recipesRepository.save({
+        nombre: 'Aderezo especial',
+        descripcion: 'Mezcla de mayonesa, mostaza y ketchup',
+        tipo: 'INSUMO_ELABORADO',
+        rendimiento: 1,
+        unidadRendimiento: 'porción',
+        items: aderezoItems,
+        costoTotal: aderezoCostoTotal,
+        precioVentaSugerido: aderezoCostoTotal / 0.7,
+        margenDeseado: 0.3,
+        isActive: true,
+      });
+    }
+
+    // Sub-receta: Salsa de tomate
+    const jitomate = allInsumos.find(i => i.nombre === 'Jitomate');
+    const cebolla = allInsumos.find(i => i.nombre === 'Cebolla');
+    const ajo = allInsumos.find(i => i.nombre === 'Ajo');
+    
+    if (jitomate && cebolla && ajo) {
+      const salsaItems = [
+        { insumoId: jitomate.id, cantidad: 0.200, unidadMedida: 'kg', costoUnitario: jitomate.costoUnitario, costoTotal: 0.200 * jitomate.costoUnitario },
+        { insumoId: cebolla.id, cantidad: 0.050, unidadMedida: 'kg', costoUnitario: cebolla.costoUnitario, costoTotal: 0.050 * cebolla.costoUnitario },
+        { insumoId: ajo.id, cantidad: 0.010, unidadMedida: 'kg', costoUnitario: ajo.costoUnitario, costoTotal: 0.010 * ajo.costoUnitario },
+      ];
+      const salsaCostoTotal = salsaItems.reduce((sum, item) => sum + item.costoTotal, 0);
+      
+      await recipesRepository.save({
+        nombre: 'Salsa de tomate',
+        descripcion: 'Salsa base para pizzas',
+        tipo: 'INSUMO_ELABORADO',
+        rendimiento: 1,
+        unidadRendimiento: 'porción',
+        items: salsaItems,
+        costoTotal: salsaCostoTotal,
+        precioVentaSugerido: salsaCostoTotal / 0.7,
+        margenDeseado: 0.3,
+        isActive: true,
+      });
+    }
+
+    console.log('✅ 2 sub-recetas creadas');
+  }
+
+  // Crear recetas principales vinculadas a productos POS
+  const updatedRecipes = await recipesRepository.find();
+  const panHamburguesa = allInsumos.find(i => i.nombre === 'Pan para hamburguesa');
+  const carneMolida = allInsumos.find(i => i.nombre === 'Carne molida');
+  const lechuga = allInsumos.find(i => i.nombre === 'Lechuga');
+  const tomate = allInsumos.find(i => i.nombre === 'Tomate');
+  const quesoAmericano = allInsumos.find(i => i.nombre === 'Queso americano');
+  const aderezoEspecial = updatedRecipes.find(r => r.nombre === 'Aderezo especial');
+  const panHotDog = allInsumos.find(i => i.nombre === 'Pan para hot dog');
+  const salchicha = allInsumos.find(i => i.nombre === 'Salchicha');
+  const masaPizza = allInsumos.find(i => i.nombre === 'Masa para pizza');
+  const salsaTomate = updatedRecipes.find(r => r.nombre === 'Salsa de tomate');
+  const mozzarella = allInsumos.find(i => i.nombre === 'Mozzarella');
+
+  if (updatedRecipes.length === 2) {
+    // Receta: Hamburguesa clásica
+    if (panHamburguesa && carneMolida && lechuga && tomate && quesoAmericano && aderezoEspecial) {
+      const hamburguesaItems = [
+        { insumoId: panHamburguesa.id, cantidad: 1, unidadMedida: 'pza', costoUnitario: panHamburguesa.costoUnitario, costoTotal: panHamburguesa.costoUnitario },
+        { insumoId: carneMolida.id, cantidad: 0.150, unidadMedida: 'kg', costoUnitario: carneMolida.costoUnitario, costoTotal: 0.150 * carneMolida.costoUnitario },
+        { insumoId: lechuga.id, cantidad: 0.020, unidadMedida: 'kg', costoUnitario: lechuga.costoUnitario, costoTotal: 0.020 * lechuga.costoUnitario },
+        { insumoId: tomate.id, cantidad: 0.030, unidadMedida: 'kg', costoUnitario: tomate.costoUnitario, costoTotal: 0.030 * tomate.costoUnitario },
+        { insumoId: quesoAmericano.id, cantidad: 1, unidadMedida: 'pza', costoUnitario: quesoAmericano.costoUnitario, costoTotal: quesoAmericano.costoUnitario },
+      ];
+      const hamburguesaCostoTotal = hamburguesaItems.reduce((sum, item) => sum + item.costoTotal, 0) + aderezoEspecial.costoTotal;
+      
+      await recipesRepository.save({
+        nombre: 'Hamburguesa clásica',
+        descripcion: 'Hamburguesa con carne, lechuga, tomate, queso y aderezo',
+        tipo: 'PRODUCTO_VENTA',
+        rendimiento: 1,
+        unidadRendimiento: 'porción',
+        items: hamburguesaItems,
+        costoTotal: hamburguesaCostoTotal,
+        precioVentaSugerido: hamburguesaCostoTotal / 0.7,
+        margenDeseado: 0.3,
+        isActive: true,
+      });
+    }
+
+    // Receta: Hot Dog
+    if (panHotDog && salchicha) {
+      const hotDogItems = [
+        { insumoId: panHotDog.id, cantidad: 1, unidadMedida: 'pza', costoUnitario: panHotDog.costoUnitario, costoTotal: panHotDog.costoUnitario },
+        { insumoId: salchicha.id, cantidad: 1, unidadMedida: 'pza', costoUnitario: salchicha.costoUnitario, costoTotal: salchicha.costoUnitario },
+      ];
+      const hotDogCostoTotal = hotDogItems.reduce((sum, item) => sum + item.costoTotal, 0);
+      
+      await recipesRepository.save({
+        nombre: 'Hot Dog',
+        descripcion: 'Hot dog clásico',
+        tipo: 'PRODUCTO_VENTA',
+        rendimiento: 1,
+        unidadRendimiento: 'porción',
+        items: hotDogItems,
+        costoTotal: hotDogCostoTotal,
+        precioVentaSugerido: hotDogCostoTotal / 0.7,
+        margenDeseado: 0.3,
+        isActive: true,
+      });
+    }
+
+    // Receta: Pizza personal
+    if (masaPizza && salsaTomate && mozzarella) {
+      const pizzaItems = [
+        { insumoId: masaPizza.id, cantidad: 1, unidadMedida: 'pza', costoUnitario: masaPizza.costoUnitario, costoTotal: masaPizza.costoUnitario },
+        { insumoId: mozzarella.id, cantidad: 0.080, unidadMedida: 'kg', costoUnitario: mozzarella.costoUnitario, costoTotal: 0.080 * mozzarella.costoUnitario },
+      ];
+      const pizzaCostoTotal = pizzaItems.reduce((sum, item) => sum + item.costoTotal, 0) + salsaTomate.costoTotal;
+      
+      await recipesRepository.save({
+        nombre: 'Pizza personal',
+        descripcion: 'Pizza personal con salsa de tomate y mozzarella',
+        tipo: 'PRODUCTO_VENTA',
+        rendimiento: 1,
+        unidadRendimiento: 'porción',
+        items: pizzaItems,
+        costoTotal: pizzaCostoTotal,
+        precioVentaSugerido: pizzaCostoTotal / 0.7,
+        margenDeseado: 0.3,
+        isActive: true,
+      });
+    }
+
+    console.log('✅ 3 recetas principales creadas');
+  }
+
+  // Crear categorías POS si no existen
+  const existingCategories = await posCategoriesRepository.find();
+  
+  if (existingCategories.length === 0) {
+    const categories = [
+      { name: 'Comida', color: '#EF4444', order: 1, isActive: true },
+      { name: 'Bebidas', color: '#3B82F6', order: 2, isActive: true },
+      { name: 'Postres', color: '#F59E0B', order: 3, isActive: true },
+    ];
+
+    for (const category of categories) {
+      await posCategoriesRepository.save(category);
+    }
+
+    console.log('✅ 3 categorías POS creadas');
+  }
+
+  // Crear productos POS vinculados a recetas/insumos
+  const updatedCategories = await posCategoriesRepository.find({ where: { isActive: true } });
+  const updatedRecipesFinal = await recipesRepository.find({ where: { isActive: true } });
+  const categoriaComida = updatedCategories.find(c => c.name === 'Comida');
+  const categoriaBebidas = updatedCategories.find(c => c.name === 'Bebidas');
+  const recetaHamburguesa = updatedRecipesFinal.find(r => r.nombre === 'Hamburguesa clásica');
+  const recetaHotDog = updatedRecipesFinal.find(r => r.nombre === 'Hot Dog');
+  const recetaPizza = updatedRecipesFinal.find(r => r.nombre === 'Pizza personal');
+  const insumoRefresco = allInsumos.find(i => i.nombre === 'Refresco lata');
+  const insumoAgua = allInsumos.find(i => i.nombre === 'Agua embotellada');
+  const insumoCerveza = allInsumos.find(i => i.nombre === 'Cerveza');
+  const insumoJugo = allInsumos.find(i => i.nombre === 'Jugo natural');
+
+  const existingProducts = await productsRepository.find();
+  
+  if (existingProducts.length === 0) {
+    const productsData = [
+      // Productos preparados (vinculados a recetas)
+      { name: 'Hamburguesa Clásica', categoryId: categoriaComida?.id, price: 120, type: 'PREPARADO', recipeId: recetaHamburguesa?.id, isActive: true },
+      { name: 'Hot Dog', categoryId: categoriaComida?.id, price: 65, type: 'PREPARADO', recipeId: recetaHotDog?.id, isActive: true },
+      { name: 'Pizza Personal', categoryId: categoriaComida?.id, price: 150, type: 'PREPARADO', recipeId: recetaPizza?.id, isActive: true },
+      
+      // Productos simples (vinculados a insumos)
+      { name: 'Refresco', categoryId: categoriaBebidas?.id, price: 25, type: 'SIMPLE', insumoId: insumoRefresco?.id, isActive: true },
+      { name: 'Agua', categoryId: categoriaBebidas?.id, price: 15, type: 'SIMPLE', insumoId: insumoAgua?.id, isActive: true },
+      { name: 'Cerveza', categoryId: categoriaBebidas?.id, price: 45, type: 'SIMPLE', insumoId: insumoCerveza?.id, isActive: true },
+      { name: 'Jugo Natural', categoryId: categoriaBebidas?.id, price: 35, type: 'SIMPLE', insumoId: insumoJugo?.id, isActive: true },
+    ];
+
+    for (const productData of productsData) {
+      await productsRepository.save(productData);
+    }
+
+    console.log('✅ 7 productos POS creados');
   }
 
   // Resumen final del seed

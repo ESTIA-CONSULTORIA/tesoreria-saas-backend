@@ -21,10 +21,12 @@ import { Area } from './entities/area.entity';
 import { Table } from './entities/table.entity';
 import { Sale } from './entities/sale.entity';
 import { Shift } from './entities/shift.entity';
+import { Recipe } from '../costs/entities/recipe.entity';
+import { Insumo } from '../costs/entities/insumo.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([PosConfig, Product, PosCategory, Area, Table, Sale, Shift]),
+    TypeOrmModule.forFeature([PosConfig, Product, PosCategory, Area, Table, Sale, Shift, Recipe, Insumo]),
   ],
   controllers: [
     PosController,

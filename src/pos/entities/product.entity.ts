@@ -20,6 +20,15 @@ export class Product {
   @Column({ nullable: true })
   imageUrl: string;
 
+  @Column({ default: 'SIMPLE' })
+  type: string; // SIMPLE (retail) or PREPARADO (recipe)
+
+  @Column({ nullable: true })
+  recipeId: string; // For PREPARADO type
+
+  @Column({ nullable: true })
+  insumoId: string; // For SIMPLE type
+
   @Column({ default: true })
   isActive: boolean;
 

@@ -2,12 +2,21 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Sale, SaleItem } from './entities/sale.entity';
+import { Product } from './entities/product.entity';
+import { Recipe } from '../costs/entities/recipe.entity';
+import { Insumo } from '../costs/entities/insumo.entity';
 
 @Injectable()
 export class SalesService {
   constructor(
     @InjectRepository(Sale)
     private salesRepo: Repository<Sale>,
+    @InjectRepository(Product)
+    private productRepo: Repository<Product>,
+    @InjectRepository(Recipe)
+    private recipeRepo: Repository<Recipe>,
+    @InjectRepository(Insumo)
+    private insumoRepo: Repository<Insumo>,
   ) {}
 
   async generateFolio(): Promise<string> {
@@ -54,11 +63,58 @@ export class SalesService {
       sale.tenantId = data.tenantId;
       sale.notas = data.notas || '';
       sale.referencia = data.referencia || '';
-      return this.salesRepo.save(sale);
+      
+      const savedSale = await this.salesRepo.save(sale);
+      
+      // Deduct inventory for each product sold
+      await this.deductInventory(data.items, folio);
+      
+      return savedSale;
     } catch (error) {
       console.error('SalesService.create error:', error);
       throw new Error(`Error al crear venta: ${error.message}`);
     }
+  }
+
+  private async deductInventory(items: SaleItem[], folio: string) {
+    for (const item of items) {
+      const product = await this.productRepo.findOne({ where: { id: item.productoId } });
+      if (!product) continue;
+
+      if (product.type === 'PREPARADO' && product.recipeId) {
+        // Deduct recipe ingredients
+        await this.deductRecipeIngredients(product.recipeId, item.cantidad, folio);
+      } else if (product.type === 'SIMPLE' && product.insumoId) {
+        // Deduct single insumo
+        await this.deductInsumo(product.insumoId, item.cantidad, folio);
+      }
+    }
+  }
+
+  private async deductRecipeIngredients(recipeId: string, quantity: number, folio: string) {
+    const recipe = await this.recipeRepo.findOne({ where: { id: recipeId } });
+    if (!recipe || !recipe.items) return;
+
+    for (const item of recipe.items) {
+      await this.deductInsumo(item.insumoId, item.cantidad * quantity, folio);
+    }
+  }
+
+  private async deductInsumo(insumoId: string, quantity: number, folio: string) {
+    const insumo = await this.insumoRepo.findOne({ where: { id: insumoId } });
+    if (!insumo) return;
+
+    const newStock = Math.max(0, Number(insumo.stockActual) - quantity);
+    await this.insumoRepo.update(insumoId, { stockActual: newStock });
+
+    // Check if stock is at or below minimum
+    if (newStock <= Number(insumo.stockMinimo)) {
+      console.warn(`⚠️ Alerta: Insumo ${insumo.nombre} está en stock mínimo o bajo. Stock actual: ${newStock}, Mínimo: ${insumo.stockMinimo}`);
+      // TODO: Create alert in system
+    }
+
+    // TODO: Register inventory movement type SALIDA_VENTA
+    console.log(`📦 Movimiento inventario: SALIDA_VENTA - Insumo: ${insumo.nombre}, Cantidad: ${quantity}, Referencia: ${folio}, Stock resultante: ${newStock}`);
   }
 
   async findAll(filters?: {
