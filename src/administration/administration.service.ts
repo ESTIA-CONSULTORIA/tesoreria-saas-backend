@@ -76,6 +76,11 @@ export class AdministrationService {
     return this.tenantsRepo.findOne({ where: { id } });
   }
 
+  async updateTenantPlan(id: string, plan: string) {
+    await this.tenantsRepo.update(id, { plan });
+    return this.tenantsRepo.findOne({ where: { id } });
+  }
+
   async getActiveSessions() {
     // Simulación de sesiones activas - en un sistema real esto se conectaría a Redis o similar
     const logs = await this.auditLogRepo

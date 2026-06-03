@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Put } from '@nestjs/common';
 import { PlansService } from './plans.service';
 import { Feature } from '../auth/feature/decorator';
 import { Plan } from './entities/plan.entity';
@@ -14,7 +14,6 @@ export class PlansController {
   }
 
   @Get()
-  @Feature('POS')
   findAll() {
     return this.plansService.findAll();
   }
@@ -22,5 +21,10 @@ export class PlansController {
   @Get('code/:code')
   findByCode(@Param('code') code: string) {
     return this.plansService.findByCode(code);
+  }
+
+  @Put(':id')
+  update(@Param('id') id: string, @Body() body: Partial<Plan>) {
+    return this.plansService.update(id, body);
   }
 }

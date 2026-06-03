@@ -22,4 +22,8 @@ export class PlansService {
   findByCode(code: string) {
     return this.plansRepository.findOne({ where: { code } });
   }
+
+  update(id: string, data: Partial<Plan>) {
+    return this.plansRepository.update(id, data);
+  }
 }

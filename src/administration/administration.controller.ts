@@ -55,6 +55,14 @@ export class AdministrationController {
     return this.administrationService.updateTenant(id, data);
   }
 
+  @Put('tenants/:id/plan')
+  updateTenantPlan(
+    @Param('id') id: string,
+    @Body() data: { plan: string },
+  ) {
+    return this.administrationService.updateTenantPlan(id, data.plan);
+  }
+
   @Get('sessions')
   getActiveSessions() {
     return this.administrationService.getActiveSessions();
