@@ -49,6 +49,11 @@ export class CostsController {
     return this.costsService.getNextInsumoCode(familiaId);
   }
 
+  @Post('insumos/import')
+  importInsumos(@Body() data: { insumos: any[] }) {
+    return this.costsService.importInsumos(data.insumos);
+  }
+
   // Almacenes
   @Get('almacenes')
   findAllAlmacenes(
@@ -131,6 +136,11 @@ export class CostsController {
   @Delete('recipes/:id')
   deleteRecipe(@Param('id') id: string) {
     return this.costsService.deleteRecipe(id);
+  }
+
+  @Post('recipes/import')
+  importRecipes(@Body() data: { recetas: any[] }) {
+    return this.costsService.importRecipes(data.recetas);
   }
 
   // Inventario

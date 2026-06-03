@@ -92,6 +92,60 @@ export class CostsService {
     return { codigo };
   }
 
+  async importInsumos(insumos: any[]) {
+    const results = { success: 0, errors: [] as any[] };
+    const familias = await this.familiasRepo.find();
+
+    for (let i = 0; i < insumos.length; i++) {
+      const row = insumos[i];
+      const rowNumber = i + 2; // +2 because header is row 1
+
+      try {
+        // Validate familia exists
+        const familia = familias.find(f => f.prefijo === row.familia);
+        if (!familia) {
+          results.errors.push({ row: rowNumber, message: `Familia "${row.familia}" no existe` });
+          continue;
+        }
+
+        // Validate costoUnitario is a number
+        const costoUnitario = parseFloat(row.costoUnitario);
+        if (isNaN(costoUnitario)) {
+          results.errors.push({ row: rowNumber, message: `costoUnitario debe ser un número válido` });
+          continue;
+        }
+
+        // Generate code
+        const count = await this.insumosRepo.count({ where: { familiaId: familia.id } });
+        const nextNumber = count + 1;
+        const codigo = `${familia.prefijo}-${String(nextNumber).padStart(3, '0')}`;
+
+        // Create insumo
+        const insumo = this.insumosRepo.create({
+          codigo,
+          nombre: row.nombre,
+          descripcion: row.descripcion || '',
+          familiaId: familia.id,
+          presentacion: row.presentacion || '',
+          presentacionCompra: row.presentacionCompra || '',
+          unidadMedida: row.unidadMedida || 'pieza',
+          costoUnitario,
+          moneda: 'MXN',
+          stockMinimo: parseFloat(row.stockMinimo) || 0,
+          stockActual: 0,
+          isActive: true,
+        });
+
+        await this.insumosRepo.save(insumo);
+        results.success++;
+      } catch (error) {
+        results.errors.push({ row: rowNumber, message: error.message });
+      }
+    }
+
+    return results;
+  }
+
   // Almacenes
   findAllAlmacenes(tenantId?: string, sucursalId?: string) {
     const where: any = {};
@@ -179,6 +233,83 @@ export class CostsService {
 
   async deleteRecipe(id: string) {
     await this.recipesRepo.delete(id);
+  }
+
+  async importRecipes(recetas: any[]) {
+    const results = { success: 0, errors: [] as any[] };
+    const insumos = await this.insumosRepo.find({ where: { isActive: true } });
+
+    // Group by recipe name
+    const groupedRecipes: Record<string, any[]> = {};
+    for (const row of recetas) {
+      if (!groupedRecipes[row.nombreReceta]) {
+        groupedRecipes[row.nombreReceta] = [];
+      }
+      groupedRecipes[row.nombreReceta].push(row);
+    }
+
+    for (const [recipeName, rows] of Object.entries(groupedRecipes)) {
+      try {
+        const items: any[] = [];
+        let costoTotal = 0;
+
+        for (const row of rows) {
+          // Validate insumo exists
+          const insumo = insumos.find(i => i.nombre === row.nombreInsumo);
+          if (!insumo) {
+            results.errors.push({ row: recetas.indexOf(row) + 2, message: `Insumo "${row.nombreInsumo}" no existe` });
+            continue;
+          }
+
+          const cantidad = parseFloat(row.cantidad);
+          if (isNaN(cantidad)) {
+            results.errors.push({ row: recetas.indexOf(row) + 2, message: `cantidad debe ser un número válido` });
+            continue;
+          }
+
+          const itemCosto = cantidad * insumo.costoUnitario;
+          costoTotal += itemCosto;
+
+          items.push({
+            insumoId: insumo.id,
+            cantidad,
+            unidadMedida: row.unidadMedida || insumo.unidadMedida,
+            costoUnitario: insumo.costoUnitario,
+            costoTotal: itemCosto,
+          });
+        }
+
+        if (items.length === 0) {
+          continue;
+        }
+
+        const firstRow = rows[0];
+        const porciones = parseFloat(firstRow.porciones) || 1;
+        const costoPorPorcion = costoTotal / porciones;
+        const margenDeseado = 0.3; // 30% default margin
+        const precioVentaSugerido = costoPorPorcion / (1 - margenDeseado);
+
+        const recipe = this.recipesRepo.create({
+          nombre: recipeName,
+          descripcion: '',
+          tipo: 'PRODUCTO_VENTA',
+          rendimiento: porciones,
+          unidadRendimiento: 'porciones',
+          items,
+          costoTotal,
+          precioVentaSugerido,
+          margenDeseado,
+          isActive: true,
+        });
+
+        await this.recipesRepo.save(recipe);
+        results.success++;
+      } catch (error) {
+        results.errors.push({ row: recetas.indexOf(rows[0]) + 2, message: error.message });
+      }
+    }
+
+    return results;
   }
 
   // Inventario

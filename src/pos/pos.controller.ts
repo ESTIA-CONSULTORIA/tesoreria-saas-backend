@@ -26,4 +26,9 @@ export class PosController {
   async upsertConfig(@Param('branchId') branchId: string, @Body() data: any) {
     return this.posService.upsertByBranch(branchId, data);
   }
+
+  @Post('products/import')
+  async importProducts(@Body() data: { productos: any[] }) {
+    return this.posService.importProducts(data.productos);
+  }
 }
