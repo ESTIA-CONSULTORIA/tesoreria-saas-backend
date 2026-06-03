@@ -25,8 +25,8 @@ export class ShiftsController {
   }
 
   @Post(':id/precut')
-  precut(@Param('id') id: string) {
-    return this.shiftsService.precut(id);
+  precut(@Param('id') id: string, @Body() data: any) {
+    return this.shiftsService.precut(id, data);
   }
 
   @Put(':id/close')
@@ -51,5 +51,10 @@ export class ShiftsController {
   @Get(':id')
   getShift(@Param('id') id: string) {
     return this.shiftsService.findOne(id);
+  }
+
+  @Get(':id/summary')
+  getShiftSummary(@Param('id') id: string) {
+    return this.shiftsService.getSummary(id);
   }
 }

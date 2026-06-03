@@ -53,6 +53,12 @@ export class Shift {
   @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true })
   efectivoContado: number;
 
+  @Column({ type: 'boolean', default: false })
+  precorteGuardado: boolean;
+
+  @Column({ type: 'json', nullable: true })
+  precorteDeclaracion: any; // Store cashier's declaration from precorte
+
   @Column({ default: 'ABIERTO' })
   status: 'ABIERTO' | 'CERRADO';
 

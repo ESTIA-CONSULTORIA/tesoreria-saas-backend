@@ -95,7 +95,14 @@ export class ShiftsService {
     }
   }
 
-  async precut(id: string) {
+  async precut(id: string, data: {
+    efectivoContado: number;
+    efectivoDenominaciones?: Record<string, number>;
+    debitoDeclarado?: number;
+    creditoDeclarado?: number;
+    transferenciaDeclarada?: number;
+    valesDeclarados?: number;
+  }) {
     try {
       const shift = await this.shiftsRepo.findOne({ where: { id } });
       if (!shift) {
@@ -104,12 +111,31 @@ export class ShiftsService {
       if (shift.status !== 'ABIERTO') {
         throw new Error('El turno no está abierto');
       }
+      if (shift.precorteGuardado) {
+        throw new Error('El precorte ya fue guardado');
+      }
 
-      // Return shift data for precorte report
-      return shift;
+      // Save precorte declaration and mark as saved
+      const declaracion = {
+        efectivoContado: data.efectivoContado,
+        efectivoDenominaciones: data.efectivoDenominaciones || {},
+        debitoDeclarado: data.debitoDeclarado || 0,
+        creditoDeclarado: data.creditoDeclarado || 0,
+        transferenciaDeclarada: data.transferenciaDeclarada || 0,
+        valesDeclarados: data.valesDeclarados || 0,
+        fechaPrecorte: new Date().toISOString(),
+      };
+      
+      await this.shiftsRepo.update(id, {
+        efectivoContado: data.efectivoContado,
+        precorteGuardado: true,
+        precorteDeclaracion: declaracion as any,
+      });
+
+      return this.shiftsRepo.findOne({ where: { id } });
     } catch (error) {
       console.error('ShiftsService.precut error:', error);
-      throw new Error(`Error al generar precorte: ${error.message}`);
+      throw new Error(`Error al guardar precorte: ${error.message}`);
     }
   }
 
@@ -132,6 +158,9 @@ export class ShiftsService {
       }
       if (shift.status !== 'ABIERTO') {
         throw new Error('El turno ya está cerrado');
+      }
+      if (!shift.precorteGuardado) {
+        throw new Error('Debe realizar el precorte antes del corte Z');
       }
 
       const now = new Date();
@@ -216,6 +245,24 @@ export class ShiftsService {
     } catch (error) {
       console.error('ShiftsService.findOne error:', error);
       throw new Error(`Error al obtener turno: ${error.message}`);
+    }
+  }
+
+  async getSummary(id: string) {
+    try {
+      const shift = await this.shiftsRepo.findOne({ where: { id } });
+      if (!shift) {
+        throw new Error('Turno no encontrado');
+      }
+
+      // Return complete shift summary including precorte declaration
+      return {
+        ...shift,
+        precorteDeclaracion: shift.precorteDeclaracion || null,
+      };
+    } catch (error) {
+      console.error('ShiftsService.getSummary error:', error);
+      throw new Error(`Error al obtener resumen del turno: ${error.message}`);
     }
   }
 }
