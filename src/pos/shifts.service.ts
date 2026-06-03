@@ -41,6 +41,78 @@ export class ShiftsService {
     }
   }
 
+  async withdrawal(id: string, data: {
+    monto: number;
+    motivo: string;
+    autorizadoPor: string;
+  }) {
+    try {
+      const shift = await this.shiftsRepo.findOne({ where: { id } });
+      if (!shift) {
+        throw new Error('Turno no encontrado');
+      }
+      if (shift.status !== 'ABIERTO') {
+        throw new Error('El turno no está abierto');
+      }
+
+      // Update shift totals
+      const newTotalRetiros = Number(shift.totalRetiros || 0) + data.monto;
+      await this.shiftsRepo.update(id, {
+        totalRetiros: newTotalRetiros,
+      });
+
+      return this.shiftsRepo.findOne({ where: { id } });
+    } catch (error) {
+      console.error('ShiftsService.withdrawal error:', error);
+      throw new Error(`Error al registrar retiro: ${error.message}`);
+    }
+  }
+
+  async deposit(id: string, data: {
+    monto: number;
+    origen: string;
+    autorizadoPor: string;
+  }) {
+    try {
+      const shift = await this.shiftsRepo.findOne({ where: { id } });
+      if (!shift) {
+        throw new Error('Turno no encontrado');
+      }
+      if (shift.status !== 'ABIERTO') {
+        throw new Error('El turno no está abierto');
+      }
+
+      // Update shift totals - deposits increase effective cash
+      const newTotalDepositos = Number(shift.totalDepositos || 0) + data.monto;
+      await this.shiftsRepo.update(id, {
+        totalDepositos: newTotalDepositos,
+      });
+
+      return this.shiftsRepo.findOne({ where: { id } });
+    } catch (error) {
+      console.error('ShiftsService.deposit error:', error);
+      throw new Error(`Error al registrar depósito: ${error.message}`);
+    }
+  }
+
+  async precut(id: string) {
+    try {
+      const shift = await this.shiftsRepo.findOne({ where: { id } });
+      if (!shift) {
+        throw new Error('Turno no encontrado');
+      }
+      if (shift.status !== 'ABIERTO') {
+        throw new Error('El turno no está abierto');
+      }
+
+      // Return shift data for precorte report
+      return shift;
+    } catch (error) {
+      console.error('ShiftsService.precut error:', error);
+      throw new Error(`Error al generar precorte: ${error.message}`);
+    }
+  }
+
   async closeShift(id: string, data: {
     totalVentas: number;
     totalEfectivo: number;
@@ -48,6 +120,9 @@ export class ShiftsService {
     totalTransferencia: number;
     totalCortesia: number;
     totalDevoluciones: number;
+    totalRetiros: number;
+    totalDepositos: number;
+    efectivoContado: number;
     notas?: string;
   }) {
     try {
@@ -68,6 +143,9 @@ export class ShiftsService {
         totalTransferencia: data.totalTransferencia,
         totalCortesia: data.totalCortesia,
         totalDevoluciones: data.totalDevoluciones,
+        totalRetiros: data.totalRetiros,
+        totalDepositos: data.totalDepositos,
+        efectivoContado: data.efectivoContado,
         status: 'CERRADO',
         notas: data.notas || shift.notas,
       });

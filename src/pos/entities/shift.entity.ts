@@ -44,6 +44,15 @@ export class Shift {
   @Column({ type: 'decimal', precision: 10, scale: 2, default: 0 })
   totalDevoluciones: number;
 
+  @Column({ type: 'decimal', precision: 10, scale: 2, default: 0 })
+  totalRetiros: number;
+
+  @Column({ type: 'decimal', precision: 10, scale: 2, default: 0 })
+  totalDepositos: number;
+
+  @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true })
+  efectivoContado: number;
+
   @Column({ default: 'ABIERTO' })
   status: 'ABIERTO' | 'CERRADO';
 

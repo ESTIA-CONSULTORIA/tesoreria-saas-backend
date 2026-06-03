@@ -14,6 +14,21 @@ export class ShiftsController {
     });
   }
 
+  @Post(':id/withdrawal')
+  withdrawal(@Param('id') id: string, @Body() data: any) {
+    return this.shiftsService.withdrawal(id, data);
+  }
+
+  @Post(':id/deposit')
+  deposit(@Param('id') id: string, @Body() data: any) {
+    return this.shiftsService.deposit(id, data);
+  }
+
+  @Post(':id/precut')
+  precut(@Param('id') id: string) {
+    return this.shiftsService.precut(id);
+  }
+
   @Put(':id/close')
   closeShift(@Param('id') id: string, @Body() data: any) {
     return this.shiftsService.closeShift(id, data);
