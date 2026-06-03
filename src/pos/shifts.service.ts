@@ -2,12 +2,15 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Shift } from './entities/shift.entity';
+import { Sale } from './entities/sale.entity';
 
 @Injectable()
 export class ShiftsService {
   constructor(
     @InjectRepository(Shift)
     private shiftsRepo: Repository<Shift>,
+    @InjectRepository(Sale)
+    private salesRepo: Repository<Sale>,
   ) {}
 
   async openShift(data: {
@@ -255,10 +258,81 @@ export class ShiftsService {
         throw new Error('Turno no encontrado');
       }
 
-      // Return complete shift summary including precorte declaration
+      // Get all sales for this shift
+      const sales = await this.salesRepo.find({ where: { turnoId: id } });
+
+      // Calculate totals by payment form
+      let totalVentasEfectivo = 0;
+      let totalVentasDebito = 0;
+      let totalVentasCredito = 0;
+      let totalVentasSPEI = 0;
+      let totalVentasCortesia = 0;
+
+      sales.forEach(sale => {
+        if (Array.isArray(sale.formasPago)) {
+          sale.formasPago.forEach((fp: any) => {
+            const monto = Number(fp.monto) || 0;
+            switch (fp.forma) {
+              case 'EFECTIVO':
+                totalVentasEfectivo += monto;
+                break;
+              case 'DEBITO':
+                totalVentasDebito += monto;
+                break;
+              case 'CREDITO':
+                totalVentasCredito += monto;
+                break;
+              case 'TRANSFERENCIA':
+                totalVentasSPEI += monto;
+                break;
+              case 'CORTESIA':
+                totalVentasCortesia += monto;
+                break;
+            }
+          });
+        } else {
+          // Fallback for old single payment form
+          const forma = sale.formaPago;
+          const monto = Number(sale.total) || 0;
+          switch (forma) {
+            case 'EFECTIVO':
+              totalVentasEfectivo += monto;
+              break;
+            case 'DEBITO':
+              totalVentasDebito += monto;
+              break;
+            case 'CREDITO':
+              totalVentasCredito += monto;
+              break;
+            case 'TRANSFERENCIA':
+              totalVentasSPEI += monto;
+              break;
+            case 'CORTESIA':
+              totalVentasCortesia += monto;
+              break;
+          }
+        }
+      });
+
+      const totalRetiros = Number(shift.totalRetiros) || 0;
+      const totalDepositos = Number(shift.totalDepositos) || 0;
+      const fondoInicial = Number(shift.fondoInicial) || 0;
+      const efectivoEsperado = fondoInicial + totalVentasEfectivo + totalDepositos - totalRetiros;
+
+      // Return complete shift summary with calculated totals
       return {
         ...shift,
         precorteDeclaracion: shift.precorteDeclaracion || null,
+        calculatedTotals: {
+          totalVentasEfectivo,
+          totalVentasDebito,
+          totalVentasCredito,
+          totalVentasSPEI,
+          totalVentasCortesia,
+          totalRetiros,
+          totalDepositos,
+          efectivoEsperado,
+        },
       };
     } catch (error) {
       console.error('ShiftsService.getSummary error:', error);
