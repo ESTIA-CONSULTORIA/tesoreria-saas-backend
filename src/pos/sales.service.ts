@@ -35,8 +35,8 @@ export class SalesService {
     descuento: number;
     impuestos: number;
     total: number;
-    metodoPago?: string;
-    metodosPago?: any[];
+    formaPago?: string;
+    formasPago?: any[];
     cajero: string;
     turnoId: string;
     sucursalId: string;
@@ -59,7 +59,8 @@ export class SalesService {
       sale.descuento = data.descuento;
       sale.impuestos = data.impuestos;
       sale.total = data.total;
-      sale.metodoPago = (data.metodoPago || data.metodosPago?.[0]?.metodo) as any;
+      sale.formaPago = (data.formaPago || data.formasPago?.[0]?.forma) as any;
+      sale.formasPago = data.formasPago || [];
       sale.status = 'ABIERTA';
       sale.cajero = data.cajero;
       sale.turnoId = data.turnoId;
@@ -172,7 +173,7 @@ export class SalesService {
   }
 
   async pay(id: string, data: {
-    metodoPago: string;
+    formaPago: string;
     montoRecibido: number;
     cambio: number;
   }) {
@@ -186,7 +187,7 @@ export class SalesService {
       }
 
       await this.salesRepo.update(id, {
-        metodoPago: data.metodoPago as any,
+        formaPago: data.formaPago as any,
         montoRecibido: data.montoRecibido,
         cambio: data.cambio,
         status: 'PAGADA',
@@ -269,7 +270,7 @@ export class SalesService {
         descuento: 0,
         impuestos: 0,
         total: -data.montoDevolucion,
-        metodoPago: 'CORTESIA',
+        formaPago: 'CORTESIA',
         status: 'PAGADA',
         cajero: sale.cajero,
         turnoId: sale.turnoId,

@@ -39,7 +39,19 @@ export class Sale {
   total: number;
 
   @Column({ default: 'EFECTIVO' })
-  metodoPago: 'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA' | 'CORTESIA';
+  formaPago: 'EFECTIVO' | 'TARJETA' | 'DEBITO' | 'CREDITO' | 'TRANSFERENCIA' | 'CORTESIA';
+
+  @Column({ type: 'json', nullable: true })
+  formasPago: Array<{
+    forma: 'EFECTIVO' | 'TARJETA' | 'DEBITO' | 'CREDITO' | 'TRANSFERENCIA' | 'CORTESIA';
+    monto: number;
+    ultimos4Digitos?: string;
+    folioVoucher?: string;
+    claveRastreo?: string;
+    bancoOrigen?: string;
+    motivo?: string;
+    autorizadoPor?: string;
+  }>;
 
   @Column({ default: 'ABIERTA' })
   status: 'ABIERTA' | 'PAGADA' | 'CANCELADA';
