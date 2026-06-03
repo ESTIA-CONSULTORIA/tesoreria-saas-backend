@@ -2,7 +2,7 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AdministrationService } from './administration.service';
 import { AdministrationController } from './administration.controller';
-import { AuditLog } from './entities/audit-log.entity';
+import { AuditLog } from '../audit/audit.entity';
 import { Tenant } from '../tenants/entities/tenant.entity';
 import { TenantSetting } from '../tenant-settings/entities/tenant-setting.entity';
 

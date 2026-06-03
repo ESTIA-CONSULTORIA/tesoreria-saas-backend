@@ -1,6 +1,5 @@
 import { Controller, Get, Post, Put, Body, Param, Query, UseGuards } from '@nestjs/common';
 import { AdministrationService } from './administration.service';
-import { AuditAction, AuditModule } from './entities/audit-log.entity';
 
 @Controller('administration')
 export class AdministrationController {
@@ -9,32 +8,31 @@ export class AdministrationController {
   @Get('audit-logs')
   getAuditLogs(
     @Query('userId') userId?: string,
-    @Query('module') module?: AuditModule,
-    @Query('action') action?: AuditAction,
+    @Query('entity') entity?: string,
+    @Query('action') action?: string,
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
   ) {
     return this.administrationService.getAuditLogs({
       userId,
-      module,
+      entity,
       action,
-      startDate,
-      endDate,
+      startDate: startDate ? new Date(startDate) : undefined,
+      endDate: endDate ? new Date(endDate) : undefined,
     });
   }
 
   @Post('audit-logs')
   createAuditLog(@Body() data: {
     userId: string;
-    userName?: string;
-    userEmail?: string;
-    action: AuditAction;
-    module: AuditModule;
-    entityId?: string;
-    oldValue?: any;
-    newValue?: any;
-    ipAddress?: string;
-    userAgent?: string;
+    userEmail: string;
+    roleCode?: string;
+    tenantId: string;
+    action: string;
+    entity: string;
+    details?: any;
+    ipAddress: string;
+    userAgent: string;
   }) {
     return this.administrationService.createAuditLog(data);
   }

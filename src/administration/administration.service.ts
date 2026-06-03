@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { AuditLog, AuditAction, AuditModule } from './entities/audit-log.entity';
+import { AuditLog } from '../audit/audit.entity';
 import { Tenant } from '../tenants/entities/tenant.entity';
 import { TenantSetting } from '../tenant-settings/entities/tenant-setting.entity';
 
@@ -18,15 +18,14 @@ export class AdministrationService {
 
   async createAuditLog(data: {
     userId: string;
-    userName?: string;
-    userEmail?: string;
-    action: AuditAction;
-    module: AuditModule;
-    entityId?: string;
-    oldValue?: any;
-    newValue?: any;
-    ipAddress?: string;
-    userAgent?: string;
+    userEmail: string;
+    roleCode?: string;
+    tenantId: string;
+    action: string;
+    entity: string;
+    details?: any;
+    ipAddress: string;
+    userAgent: string;
   }) {
     const auditLog = this.auditLogRepo.create(data);
     return this.auditLogRepo.save(auditLog);
@@ -34,27 +33,31 @@ export class AdministrationService {
 
   async getAuditLogs(filters?: {
     userId?: string;
-    module?: AuditModule;
-    action?: AuditAction;
-    startDate?: string;
-    endDate?: string;
+    tenantId?: string;
+    action?: string;
+    entity?: string;
+    startDate?: Date;
+    endDate?: Date;
   }) {
     const query = this.auditLogRepo.createQueryBuilder('auditLog');
 
     if (filters?.userId) {
       query.andWhere('auditLog.userId = :userId', { userId: filters.userId });
     }
-    if (filters?.module) {
-      query.andWhere('auditLog.module = :module', { module: filters.module });
+    if (filters?.tenantId) {
+      query.andWhere('auditLog.tenantId = :tenantId', { tenantId: filters.tenantId });
     }
     if (filters?.action) {
       query.andWhere('auditLog.action = :action', { action: filters.action });
+    }
+    if (filters?.entity) {
+      query.andWhere('auditLog.entity = :entity', { entity: filters.entity });
     }
     if (filters?.startDate) {
       query.andWhere('auditLog.createdAt >= :startDate', { startDate: filters.startDate });
     }
     if (filters?.endDate) {
-      query.andWhere('auditLog.createdAt <= :endDate', { endDate: `${filters.endDate} 23:59:59` });
+      query.andWhere('auditLog.createdAt <= :endDate', { endDate: filters.endDate });
     }
 
     return query.orderBy('auditLog.createdAt', 'DESC').getMany();
@@ -77,18 +80,21 @@ export class AdministrationService {
     // Simulación de sesiones activas - en un sistema real esto se conectaría a Redis o similar
     const logs = await this.auditLogRepo
       .createQueryBuilder('auditLog')
-      .where('auditLog.action = :action', { action: AuditAction.LOGIN })
+      .where('auditLog.action = :action', { action: 'ACCESS' })
       .orderBy('auditLog.createdAt', 'DESC')
       .limit(20)
       .getMany();
 
     return logs.map((log) => ({
       userId: log.userId,
-      userName: log.userName,
+      userName: log.userEmail,
       userEmail: log.userEmail,
+      userRole: log.roleCode,
+      tenantId: log.tenantId,
       ipAddress: log.ipAddress,
       userAgent: log.userAgent,
-      loginTime: log.createdAt,
+      lastActivity: log.createdAt,
+      createdAt: log.createdAt,
     }));
   }
 
