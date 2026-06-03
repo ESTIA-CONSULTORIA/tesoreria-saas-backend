@@ -35,7 +35,8 @@ export class SalesService {
     descuento: number;
     impuestos: number;
     total: number;
-    metodoPago: string;
+    metodoPago?: string;
+    metodosPago?: any[];
     cajero: string;
     turnoId: string;
     sucursalId: string;
@@ -44,6 +45,9 @@ export class SalesService {
     referencia?: string;
   }) {
     try {
+      console.log('SalesService.create - turnoId recibido:', data.turnoId);
+      console.log('SalesService.create - data completo:', data);
+      
       const folio = await this.generateFolio();
       const now = new Date();
       const sale = this.salesRepo.create();
@@ -55,7 +59,7 @@ export class SalesService {
       sale.descuento = data.descuento;
       sale.impuestos = data.impuestos;
       sale.total = data.total;
-      sale.metodoPago = data.metodoPago as any;
+      sale.metodoPago = (data.metodoPago || data.metodosPago?.[0]?.metodo) as any;
       sale.status = 'ABIERTA';
       sale.cajero = data.cajero;
       sale.turnoId = data.turnoId;
