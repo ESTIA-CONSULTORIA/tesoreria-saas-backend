@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Bank } from '../banks/entities/bank.entity';
 import { Movement } from '../movements/entities/movement.entity';
+import { PaymentSchedule } from './entities/payment-schedule.entity';
 
 @Injectable()
 export class TreasuryService {
@@ -11,6 +12,8 @@ export class TreasuryService {
     private banksRepo: Repository<Bank>,
     @InjectRepository(Movement)
     private movementsRepo: Repository<Movement>,
+    @InjectRepository(PaymentSchedule)
+    private paymentScheduleRepo: Repository<PaymentSchedule>,
   ) {}
 
   async getExecutiveSummary(tenantId?: string) {
@@ -358,6 +361,204 @@ export class TreasuryService {
     } catch (error) {
       console.error('TreasuryService.getAlerts error:', error);
       throw new Error(`Error al obtener alertas: ${error.message}`);
+    }
+  }
+
+  // Payment Schedule CRUD
+  async getScheduledPayments(tenantId?: string) {
+    try {
+      const query = this.paymentScheduleRepo.createQueryBuilder('payment');
+      if (tenantId) query.andWhere('payment.tenantId = :tenantId', { tenantId });
+      return query.orderBy('payment.fechaProgramada', 'ASC').getMany();
+    } catch (error) {
+      console.error('TreasuryService.getScheduledPayments error:', error);
+      throw new Error(`Error al obtener pagos programados: ${error.message}`);
+    }
+  }
+
+  async createScheduledPayment(data: {
+    concepto: string;
+    monto: number;
+    cuentaOrigenId: string;
+    fechaProgramada: Date;
+    tipo: 'INGRESO' | 'EGRESO';
+    referencia?: string;
+    notas?: string;
+    tenantId?: string;
+  }) {
+    try {
+      const payment = this.paymentScheduleRepo.create(data);
+      return this.paymentScheduleRepo.save(payment);
+    } catch (error) {
+      console.error('TreasuryService.createScheduledPayment error:', error);
+      throw new Error(`Error al crear pago programado: ${error.message}`);
+    }
+  }
+
+  async updateScheduledPayment(id: string, data: Partial<PaymentSchedule>) {
+    try {
+      await this.paymentScheduleRepo.update(id, data);
+      return this.paymentScheduleRepo.findOne({ where: { id } });
+    } catch (error) {
+      console.error('TreasuryService.updateScheduledPayment error:', error);
+      throw new Error(`Error al actualizar pago programado: ${error.message}`);
+    }
+  }
+
+  async deleteScheduledPayment(id: string) {
+    try {
+      await this.paymentScheduleRepo.delete(id);
+      return { id };
+    } catch (error) {
+      console.error('TreasuryService.deleteScheduledPayment error:', error);
+      throw new Error(`Error al eliminar pago programado: ${error.message}`);
+    }
+  }
+
+  // Transfer between accounts
+  async createTransfer(data: {
+    cuentaOrigenId: string;
+    cuentaDestinoId: string;
+    monto: number;
+    concepto: string;
+    fecha?: Date;
+    referencia?: string;
+    tenantId?: string;
+  }) {
+    try {
+      const originAccount = await this.banksRepo.findOne({ where: { id: data.cuentaOrigenId } });
+      const destAccount = await this.banksRepo.findOne({ where: { id: data.cuentaDestinoId } });
+
+      if (!originAccount || !destAccount) {
+        throw new Error('Cuentas no encontradas');
+      }
+
+      if (Number(originAccount.balance) < data.monto) {
+        throw new Error('Saldo insuficiente en cuenta origen');
+      }
+
+      // Create expense movement for origin account
+      const expenseMovement = this.movementsRepo.create({
+        accountId: data.cuentaOrigenId,
+        type: 'EXPENSE',
+        amount: data.monto,
+        concept: `Transferencia a ${destAccount.name} - ${data.concepto}`,
+        reference: data.referencia,
+      });
+      await this.movementsRepo.save(expenseMovement);
+
+      // Create income movement for destination account
+      const incomeMovement = this.movementsRepo.create({
+        accountId: data.cuentaDestinoId,
+        type: 'INCOME',
+        amount: data.monto,
+        concept: `Transferencia desde ${originAccount.name} - ${data.concepto}`,
+        reference: data.referencia,
+      });
+      await this.movementsRepo.save(incomeMovement);
+
+      // Update account balances
+      originAccount.balance = Number(originAccount.balance) - data.monto;
+      destAccount.balance = Number(destAccount.balance) + data.monto;
+      await this.banksRepo.save([originAccount, destAccount]);
+
+      return {
+        expenseMovement,
+        incomeMovement,
+        originBalance: originAccount.balance,
+        destBalance: destAccount.balance,
+      };
+    } catch (error) {
+      console.error('TreasuryService.createTransfer error:', error);
+      throw new Error(`Error al crear transferencia: ${error.message}`);
+    }
+  }
+
+  // Accounts Payable (CxP)
+  async getAccountsPayable(tenantId?: string) {
+    try {
+      const now = new Date();
+      const query = this.movementsRepo
+        .createQueryBuilder('movement')
+        .where('movement.type = :type', { type: 'EXPENSE' })
+        .andWhere('movement.createdAt >= :now', { now })
+        .orderBy('movement.createdAt', 'ASC');
+      
+      if (tenantId) query.andWhere('movement.tenantId = :tenantId', { tenantId });
+      
+      const movements = await query.getMany();
+      
+      return movements.map((m) => ({
+        id: m.id,
+        concepto: m.concept,
+        monto: Number(m.amount),
+        fechaVencimiento: m.createdAt,
+        cuentaId: m.accountId,
+        referencia: m.reference,
+        diasHastaVencimiento: Math.ceil((m.createdAt.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)),
+      }));
+    } catch (error) {
+      console.error('TreasuryService.getAccountsPayable error:', error);
+      throw new Error(`Error al obtener cuentas por pagar: ${error.message}`);
+    }
+  }
+
+  // Accounts Receivable (CxC)
+  async getAccountsReceivable(tenantId?: string) {
+    try {
+      const now = new Date();
+      const query = this.movementsRepo
+        .createQueryBuilder('movement')
+        .where('movement.type = :type', { type: 'INCOME' })
+        .andWhere('movement.createdAt >= :now', { now })
+        .orderBy('movement.createdAt', 'ASC');
+      
+      if (tenantId) query.andWhere('movement.tenantId = :tenantId', { tenantId });
+      
+      const movements = await query.getMany();
+      
+      return movements.map((m) => ({
+        id: m.id,
+        concepto: m.concept,
+        monto: Number(m.amount),
+        fechaEsperada: m.createdAt,
+        cuentaId: m.accountId,
+        referencia: m.reference,
+        diasHastaCobro: Math.ceil((m.createdAt.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)),
+      }));
+    } catch (error) {
+      console.error('TreasuryService.getAccountsReceivable error:', error);
+      throw new Error(`Error al obtener cuentas por cobrar: ${error.message}`);
+    }
+  }
+
+  // Alert Configuration
+  async getAlertConfig(tenantId?: string) {
+    try {
+      // For now, return default config. In a real system, this would be stored in a table
+      return {
+        saldoMinimo: 0,
+        diasAnticipacionAlerta: 7,
+        alertasActivas: true,
+      };
+    } catch (error) {
+      console.error('TreasuryService.getAlertConfig error:', error);
+      throw new Error(`Error al obtener configuración de alertas: ${error.message}`);
+    }
+  }
+
+  async updateAlertConfig(data: {
+    saldoMinimo?: number;
+    diasAnticipacionAlerta?: number;
+    alertasActivas?: boolean;
+    tenantId?: string;
+  }) {
+    try {
+      // For now, just return the data. In a real system, this would be stored in a table
+      return { ...data, updatedAt: new Date() };
+    } catch (error) {
+      console.error('TreasuryService.updateAlertConfig error:', error);
+      throw new Error(`Error al actualizar configuración de alertas: ${error.message}`);
     }
   }
 }
