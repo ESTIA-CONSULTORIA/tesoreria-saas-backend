@@ -13,9 +13,11 @@ export class TreasuryService {
     private movementsRepo: Repository<Movement>,
   ) {}
 
-  async getExecutiveSummary() {
+  async getExecutiveSummary(tenantId?: string) {
     try {
-      const accounts = await this.banksRepo.find({ where: { isActive: true } });
+      const accountsQuery = this.banksRepo.createQueryBuilder('bank');
+      if (tenantId) accountsQuery.andWhere('bank.tenantId = :tenantId', { tenantId });
+      const accounts = await accountsQuery.where('bank.isActive = :isActive', { isActive: true }).getMany();
       const totalBalance = accounts.reduce((acc, accItem) => acc + Number(accItem.balance), 0);
 
       // Flujo del mes actual
@@ -23,11 +25,12 @@ export class TreasuryService {
       const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
       const lastDayOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
 
-      const monthlyMovements = await this.movementsRepo
+      const monthlyMovementsQuery = this.movementsRepo
         .createQueryBuilder('movement')
         .where('movement.createdAt >= :startDate', { startDate: firstDayOfMonth })
-        .andWhere('movement.createdAt <= :endDate', { endDate: lastDayOfMonth })
-        .getMany();
+        .andWhere('movement.createdAt <= :endDate', { endDate: lastDayOfMonth });
+      if (tenantId) monthlyMovementsQuery.andWhere('movement.tenantId = :tenantId', { tenantId });
+      const monthlyMovements = await monthlyMovementsQuery.getMany();
 
       const monthlyIncome = monthlyMovements
         .filter((m) => m.type === 'INCOME')
@@ -41,11 +44,12 @@ export class TreasuryService {
       const firstDayOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
       const lastDayOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0);
 
-      const lastMonthMovements = await this.movementsRepo
+      const lastMonthMovementsQuery = this.movementsRepo
         .createQueryBuilder('movement')
         .where('movement.createdAt >= :startDate', { startDate: firstDayOfLastMonth })
-        .andWhere('movement.createdAt <= :endDate', { endDate: lastDayOfLastMonth })
-        .getMany();
+        .andWhere('movement.createdAt <= :endDate', { endDate: lastDayOfLastMonth });
+      if (tenantId) lastMonthMovementsQuery.andWhere('movement.tenantId = :tenantId', { tenantId });
+      const lastMonthMovements = await lastMonthMovementsQuery.getMany();
 
       const lastMonthIncome = lastMonthMovements
         .filter((m) => m.type === 'INCOME')
@@ -103,34 +107,54 @@ export class TreasuryService {
     }
   }
 
-  async getCashFlowForecast(days: number = 30) {
+  async getCashFlowForecast(days: number = 30, tenantId?: string) {
     try {
       const now = new Date();
+      
+      // Saldo actual total
+      const accountsQuery = this.banksRepo.createQueryBuilder('bank');
+      if (tenantId) accountsQuery.andWhere('bank.tenantId = :tenantId', { tenantId });
+      const accounts = await accountsQuery.where('bank.isActive = :isActive', { isActive: true }).getMany();
+      const currentBalance = accounts.reduce((acc, accItem) => acc + Number(accItem.balance), 0);
+
+      // Calcular promedios de los últimos 3 meses
+      const threeMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 3, 1);
+      const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+
+      const historicalMovementsQuery = this.movementsRepo
+        .createQueryBuilder('movement')
+        .where('movement.createdAt >= :startDate', { startDate: threeMonthsAgo })
+        .andWhere('movement.createdAt < :endDate', { endDate: currentMonthStart });
+      if (tenantId) historicalMovementsQuery.andWhere('movement.tenantId = :tenantId', { tenantId });
+      const historicalMovements = await historicalMovementsQuery.getMany();
+
+      const historicalIncome = historicalMovements
+        .filter((m) => m.type === 'INCOME')
+        .reduce((acc, m) => acc + Number(m.amount), 0);
+      const historicalExpense = historicalMovements
+        .filter((m) => m.type === 'EXPENSE')
+        .reduce((acc, m) => acc + Number(m.amount), 0);
+
+      // Promedio diario de los últimos 3 meses (aprox 90 días)
+      const daysInPeriod = 90;
+      const avgDailyIncome = historicalIncome / daysInPeriod;
+      const avgDailyExpense = historicalExpense / daysInPeriod;
+
+      // CxP pendientes con fecha de vencimiento (usando dueDate si existe, o createdAt)
       const futureDate = new Date();
       futureDate.setDate(now.getDate() + days);
 
-      // Ingresos esperados (movimientos futuros de tipo INCOME)
-      const expectedIncome = await this.movementsRepo
-        .createQueryBuilder('movement')
-        .where('movement.type = :type', { type: 'INCOME' })
-        .andWhere('movement.createdAt >= :startDate', { startDate: now })
-        .andWhere('movement.createdAt <= :endDate', { endDate: futureDate })
-        .getMany();
-
-      // Egresos esperados (movimientos futuros de tipo EXPENSE)
-      const expectedExpense = await this.movementsRepo
+      const upcomingPaymentsQuery = this.movementsRepo
         .createQueryBuilder('movement')
         .where('movement.type = :type', { type: 'EXPENSE' })
-        .andWhere('movement.createdAt >= :startDate', { startDate: now })
-        .andWhere('movement.createdAt <= :endDate', { endDate: futureDate })
-        .getMany();
-
-      // Saldo actual total
-      const accounts = await this.banksRepo.find({ where: { isActive: true } });
-      const currentBalance = accounts.reduce((acc, accItem) => acc + Number(accItem.balance), 0);
+        .andWhere('movement.createdAt >= :now', { now })
+        .andWhere('movement.createdAt <= :futureDate', { futureDate });
+      if (tenantId) upcomingPaymentsQuery.andWhere('movement.tenantId = :tenantId', { tenantId });
+      const upcomingPayments = await upcomingPaymentsQuery.getMany();
 
       // Calcular saldo proyectado por fecha
-      const dailyForecast: Array<{ date: string; income: number; expense: number; balance: number }> = [];
+      const dailyForecast: Array<{ date: string; income: number; expense: number; balance: number; expectedMovements: number }> = [];
       let runningBalance = currentBalance;
 
       for (let i = 0; i <= days; i++) {
@@ -138,32 +162,34 @@ export class TreasuryService {
         date.setDate(now.getDate() + i);
         const dateStr = date.toISOString().split('T')[0];
 
-        const dayIncome = expectedIncome
+        // Ingresos proyectados: promedio histórico + movimientos esperados ese día
+        const dayIncome = avgDailyIncome;
+
+        // Egresos proyectados: promedio histórico + pagos pendientes ese día
+        const dayExpense = avgDailyExpense + upcomingPayments
           .filter((m) => m.createdAt.toISOString().split('T')[0] === dateStr)
           .reduce((acc, m) => acc + Number(m.amount), 0);
 
-        const dayExpense = expectedExpense
-          .filter((m) => m.createdAt.toISOString().split('T')[0] === dateStr)
-          .reduce((acc, m) => acc + Number(m.amount), 0);
+        const expectedMovements = upcomingPayments
+          .filter((m) => m.createdAt.toISOString().split('T')[0] === dateStr).length;
 
         runningBalance += dayIncome - dayExpense;
 
         dailyForecast.push({
           date: dateStr,
-          income: dayIncome,
-          expense: dayExpense,
-          balance: runningBalance,
+          income: Math.round(dayIncome * 100) / 100,
+          expense: Math.round(dayExpense * 100) / 100,
+          balance: Math.round(runningBalance * 100) / 100,
+          expectedMovements,
         });
       }
 
       return {
         period: days,
-        totalExpectedIncome: expectedIncome.reduce((acc, m) => acc + Number(m.amount), 0),
-        totalExpectedExpense: expectedExpense.reduce((acc, m) => acc + Number(m.amount), 0),
-        netCashFlow: expectedIncome.reduce((acc, m) => acc + Number(m.amount), 0) - 
-                     expectedExpense.reduce((acc, m) => acc + Number(m.amount), 0),
         currentBalance,
-        projectedBalance: runningBalance,
+        avgDailyIncome: Math.round(avgDailyIncome * 100) / 100,
+        avgDailyExpense: Math.round(avgDailyExpense * 100) / 100,
+        projectedBalance: Math.round(runningBalance * 100) / 100,
         dailyForecast,
       };
     } catch (error) {
@@ -172,9 +198,11 @@ export class TreasuryService {
     }
   }
 
-  async getBankPosition() {
+  async getBankPosition(tenantId?: string) {
     try {
-      const accounts = await this.banksRepo.find({ where: { isActive: true } });
+      const accountsQuery = this.banksRepo.createQueryBuilder('bank');
+      if (tenantId) accountsQuery.andWhere('bank.tenantId = :tenantId', { tenantId });
+      const accounts = await accountsQuery.where('bank.isActive = :isActive', { isActive: true }).getMany();
 
       const today = new Date();
       const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
@@ -183,12 +211,13 @@ export class TreasuryService {
       const accountsWithDetails = await Promise.all(
         accounts.map(async (account) => {
           // Movimientos del día
-          const todayMovements = await this.movementsRepo
+          const todayMovementsQuery = this.movementsRepo
             .createQueryBuilder('movement')
             .where('movement.accountId = :accountId', { accountId: account.id })
             .andWhere('movement.createdAt >= :startDate', { startDate: startOfDay })
-            .andWhere('movement.createdAt < :endDate', { endDate: endOfDay })
-            .getMany();
+            .andWhere('movement.createdAt < :endDate', { endDate: endOfDay });
+          if (tenantId) todayMovementsQuery.andWhere('movement.tenantId = :tenantId', { tenantId });
+          const todayMovements = await todayMovementsQuery.getMany();
 
           const todayIncome = todayMovements
             .filter((m) => m.type === 'INCOME')
@@ -225,9 +254,11 @@ export class TreasuryService {
     }
   }
 
-  async getAlerts() {
+  async getAlerts(tenantId?: string) {
     try {
-      const accounts = await this.banksRepo.find({ where: { isActive: true } });
+      const accountsQuery = this.banksRepo.createQueryBuilder('bank');
+      if (tenantId) accountsQuery.andWhere('bank.tenantId = :tenantId', { tenantId });
+      const accounts = await accountsQuery.where('bank.isActive = :isActive', { isActive: true }).getMany();
 
       // Cuentas con saldo bajo mínimo (usando 0 como mínimo)
       const lowBalanceAccounts = accounts
@@ -243,12 +274,13 @@ export class TreasuryService {
 
       // Facturas vencidas sin pagar (simulado - usaría fechas de vencimiento reales)
       const now = new Date();
-      const overdueInvoices = await this.movementsRepo
+      const overdueInvoicesQuery = this.movementsRepo
         .createQueryBuilder('movement')
         .where('movement.type = :type', { type: 'EXPENSE' })
         .andWhere('movement.createdAt < :date', { date: now })
-        .limit(10)
-        .getMany();
+        .limit(10);
+      if (tenantId) overdueInvoicesQuery.andWhere('movement.tenantId = :tenantId', { tenantId });
+      const overdueInvoices = await overdueInvoicesQuery.getMany();
 
       const overdueAlerts = overdueInvoices.map((m) => ({
         type: 'OVERDUE',
@@ -269,12 +301,13 @@ export class TreasuryService {
       const thirtyDays = new Date();
       thirtyDays.setDate(now.getDate() + 30);
 
-      const upcomingPayments = await this.movementsRepo
+      const upcomingPaymentsQuery = this.movementsRepo
         .createQueryBuilder('movement')
         .where('movement.type = :type', { type: 'EXPENSE' })
         .andWhere('movement.createdAt >= :now', { now })
-        .andWhere('movement.createdAt <= :thirtyDays', { thirtyDays })
-        .getMany();
+        .andWhere('movement.createdAt <= :thirtyDays', { thirtyDays });
+      if (tenantId) upcomingPaymentsQuery.andWhere('movement.tenantId = :tenantId', { tenantId });
+      const upcomingPayments = await upcomingPaymentsQuery.getMany();
 
       const upcomingAlerts = upcomingPayments.map((m) => {
         const daysUntil = Math.ceil((m.createdAt.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
@@ -294,12 +327,13 @@ export class TreasuryService {
       });
 
       // Transferencias pendientes de autorización (simulado)
-      const pendingTransfers = await this.movementsRepo
+      const pendingTransfersQuery = this.movementsRepo
         .createQueryBuilder('movement')
         .where('movement.type = :type', { type: 'EXPENSE' })
         .orderBy('movement.createdAt', 'DESC')
-        .limit(5)
-        .getMany();
+        .limit(5);
+      if (tenantId) pendingTransfersQuery.andWhere('movement.tenantId = :tenantId', { tenantId });
+      const pendingTransfers = await pendingTransfersQuery.getMany();
 
       const pendingAlerts = pendingTransfers.map((m) => ({
         type: 'PENDING',
