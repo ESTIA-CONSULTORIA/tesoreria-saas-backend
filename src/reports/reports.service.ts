@@ -16,23 +16,63 @@ export class ReportsService {
     private reportsRepo: Repository<Report>,
   ) {}
 
-  async cashFlow(startDate?: string, endDate?: string) {
+  async cashFlow(startDate?: string, endDate?: string, tenantId?: string) {
     const query = this.movementsRepo.createQueryBuilder('movement');
 
+    if (tenantId) query.andWhere('movement.tenantId = :tenantId', { tenantId });
     if (startDate) query.andWhere('movement.createdAt >= :startDate', { startDate });
     if (endDate) query.andWhere('movement.createdAt <= :endDate', { endDate: `${endDate} 23:59:59` });
 
     const movements = await query.getMany();
-    const income = movements.filter((m) => m.type === 'INCOME').reduce((acc, m) => acc + Number(m.amount), 0);
-    const expense = movements.filter((m) => m.type === 'EXPENSE').reduce((acc, m) => acc + Number(m.amount), 0);
-    const net = income - expense;
+    
+    // Agrupar por semana
+    const weeklyData: Record<string, { income: number; expense: number; net: number }> = {};
+    
+    movements.forEach((m) => {
+      const date = new Date(m.createdAt);
+      const weekStart = new Date(date);
+      weekStart.setDate(date.getDate() - date.getDay());
+      const weekKey = weekStart.toISOString().split('T')[0];
+      
+      if (!weeklyData[weekKey]) {
+        weeklyData[weekKey] = { income: 0, expense: 0, net: 0 };
+      }
+      
+      if (m.type === 'INCOME') {
+        weeklyData[weekKey].income += Number(m.amount);
+      } else if (m.type === 'EXPENSE') {
+        weeklyData[weekKey].expense += Number(m.amount);
+      }
+    });
+    
+    // Calcular neto y ordenar por semana
+    const result = Object.entries(weeklyData)
+      .map(([week, data]) => ({
+        week,
+        income: data.income,
+        expense: data.expense,
+        net: data.income - data.expense,
+      }))
+      .sort((a, b) => a.week.localeCompare(b.week));
 
-    await this.reportsRepo.save(this.reportsRepo.create({ type: 'cash-flow', payload: { startDate, endDate, income, expense, net } }));
-    return { income, expense, net };
+    const totalIncome = result.reduce((acc, r) => acc + r.income, 0);
+    const totalExpense = result.reduce((acc, r) => acc + r.expense, 0);
+    const totalNet = totalIncome - totalExpense;
+
+    await this.reportsRepo.save(this.reportsRepo.create({ 
+      type: 'cash-flow', 
+      payload: { startDate, endDate, tenantId, weekly: result, totalIncome, totalExpense, totalNet } 
+    }));
+    
+    return { weekly: result, totalIncome, totalExpense, totalNet };
   }
 
-  async balanceByAccount() {
-    const accounts = await this.banksRepo.find({ order: { name: 'ASC' } });
+  async balanceByAccount(tenantId?: string) {
+    const query = this.banksRepo.createQueryBuilder('bank');
+    if (tenantId) query.andWhere('bank.tenantId = :tenantId', { tenantId });
+    
+    const accounts = await query.orderBy('bank.name', 'ASC').getMany();
+    
     const data = accounts.map((acc) => ({
       accountId: acc.id,
       accountName: acc.name,
@@ -40,12 +80,14 @@ export class ReportsService {
       balance: Number(acc.balance),
       currency: acc.currency,
     }));
+    
     await this.reportsRepo.save(this.reportsRepo.create({ type: 'balance-by-account', payload: data }));
     return data;
   }
 
-  async categorySummary(startDate?: string, endDate?: string) {
+  async categorySummary(startDate?: string, endDate?: string, tenantId?: string) {
     const query = this.movementsRepo.createQueryBuilder('movement');
+    if (tenantId) query.andWhere('movement.tenantId = :tenantId', { tenantId });
     if (startDate) query.andWhere('movement.createdAt >= :startDate', { startDate });
     if (endDate) query.andWhere('movement.createdAt <= :endDate', { endDate: `${endDate} 23:59:59` });
 
@@ -68,8 +110,9 @@ export class ReportsService {
     return data;
   }
 
-  async incomeStatement(startDate?: string, endDate?: string) {
+  async incomeStatement(startDate?: string, endDate?: string, tenantId?: string) {
     const query = this.movementsRepo.createQueryBuilder('movement');
+    if (tenantId) query.andWhere('movement.tenantId = :tenantId', { tenantId });
     if (startDate) query.andWhere('movement.createdAt >= :startDate', { startDate });
     if (endDate) query.andWhere('movement.createdAt <= :endDate', { endDate: `${endDate} 23:59:59` });
 
@@ -105,28 +148,46 @@ export class ReportsService {
       .reduce((acc, m) => acc + Number(m.amount), 0);
 
     const utilidadBruta = ventas - cortesiasDescuentos - costoVenta;
-    const utilidadNetaAntesImpuestos = utilidadBruta - gastosFijos - gastosVariables;
+    const gastosOperativos = gastosFijos + gastosVariables;
+    const utilidadOperativa = utilidadBruta - gastosOperativos;
+    const utilidadNetaAntesImpuestos = utilidadOperativa;
     const utilidadReal = utilidadNetaAntesImpuestos - impuestos - inversiones;
+    
+    // EBITDA estimado (Utilidad Operativa + Depreciación + Amortización)
+    // Como no tenemos datos de depreciación/amortización, usamos Utilidad Operativa como estimación
+    const ebitda = utilidadOperativa;
 
     const data = {
-      ventas,
-      cortesiasDescuentos,
-      costoVenta,
+      ingresos: {
+        ventas,
+        cortesiasDescuentos,
+        totalIngresos: ventas - cortesiasDescuentos,
+      },
+      costos: {
+        costoVenta,
+      },
       utilidadBruta,
-      gastosFijos,
-      gastosVariables,
-      utilidadNetaAntesImpuestos,
-      impuestos,
-      inversiones,
-      utilidadReal,
+      gastosOperativos: {
+        gastosFijos,
+        gastosVariables,
+        totalGastosOperativos: gastosOperativos,
+      },
+      utilidadOperativa,
+      ebitda,
+      otros: {
+        impuestos,
+        inversiones,
+      },
+      utilidadNeta: utilidadReal,
     };
 
     await this.reportsRepo.save(this.reportsRepo.create({ type: 'income-statement', payload: data }));
     return data;
   }
 
-  async breakEvenPoint(startDate?: string, endDate?: string) {
+  async breakEvenPoint(startDate?: string, endDate?: string, tenantId?: string) {
     const query = this.movementsRepo.createQueryBuilder('movement');
+    if (tenantId) query.andWhere('movement.tenantId = :tenantId', { tenantId });
     if (startDate) query.andWhere('movement.createdAt >= :startDate', { startDate });
     if (endDate) query.andWhere('movement.createdAt <= :endDate', { endDate: `${endDate} 23:59:59` });
 
