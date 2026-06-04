@@ -529,6 +529,10 @@ export class TreasuryService {
       console.log('getAccountsPayable - purchases encontradas:', purchases.length);
       console.log('getAccountsPayable - purchases:', purchases.map(p => ({ id: p.id, numero: p.numero, tenantId: p.tenantId, status: p.status })));
       
+      if (purchases.length > 0) {
+        console.log('Primera factura:', JSON.stringify(purchases[0], null, 2));
+      }
+      
       const now = new Date();
       
       return purchases.map((p) => {
