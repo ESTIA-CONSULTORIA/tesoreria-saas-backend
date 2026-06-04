@@ -14,6 +14,9 @@ export async function seedDatabase(dataSource: DataSource) {
   const recipesRepository = dataSource.getRepository('Recipe');
   const posCategoriesRepository = dataSource.getRepository('PosCategory');
   const productsRepository = dataSource.getRepository('Product');
+  const purchaseOrdersRepository = dataSource.getRepository('PurchaseOrder');
+  const purchaseInvoicesRepository = dataSource.getRepository('PurchaseInvoice');
+  const inventoryRecordsRepository = dataSource.getRepository('InventoryRecord');
 
   // Verificar si el usuario admin ya existe
   const existingAdmin = await usersRepository.findOne({ where: { email: 'admin@estia.com' } });
@@ -78,19 +81,18 @@ export async function seedDatabase(dataSource: DataSource) {
   // Crear usuario de prueba con rol ADMIN (administrador del cliente)
   const existingAdminUser = await usersRepository.findOne({ where: { email: 'admin@empresademo.com' } });
   
+  // Buscar o crear rol ADMIN (necesario para PARTE 1)
+  let adminRole = await rolesRepository.findOne({ where: { code: 'ADMIN' } });
+  if (!adminRole) {
+    adminRole = await rolesRepository.save({
+      code: 'ADMIN',
+      name: 'Administrador',
+      description: 'Administrador del cliente (tenant)',
+      isActive: true,
+    });
+  }
+  
   if (!existingAdminUser) {
-    // Buscar o crear rol ADMIN
-    let adminRole = await rolesRepository.findOne({ where: { code: 'ADMIN' } });
-    
-    if (!adminRole) {
-      adminRole = await rolesRepository.save({
-        code: 'ADMIN',
-        name: 'Administrador',
-        description: 'Administrador del cliente (tenant)',
-        isActive: true,
-      });
-    }
-
     // Crear usuario admin del cliente
     const hashedPassword = await bcrypt.hash('admin123', 10);
     await usersRepository.save({
@@ -104,6 +106,80 @@ export async function seedDatabase(dataSource: DataSource) {
     });
 
     console.log('✅ Usuario admin@empresademo.com (ADMIN) creado exitosamente');
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // PARTE 1: TENANT DEMO Y USUARIOS
+  // ═══════════════════════════════════════════════════════════════
+  
+  // Crear tenant "Grupo Empresarial Demo" si no existe
+  let demoTenant = await tenantsRepository.findOne({ where: { tradeName: 'Grupo Empresarial Demo' } });
+  
+  if (!demoTenant) {
+    demoTenant = await tenantsRepository.save({
+      legalName: 'Grupo Empresarial Demo S.A. de C.V.',
+      tradeName: 'Grupo Empresarial Demo',
+      taxId: 'GED987654XYZ',
+      plan: 'BUSINESS',
+      isActive: true,
+    });
+    console.log('✅ Tenant "Grupo Empresarial Demo" creado');
+  }
+
+  // Crear roles adicionales si no existen
+  let gerenteRole = await rolesRepository.findOne({ where: { code: 'GERENTE' } });
+  if (!gerenteRole) {
+    gerenteRole = await rolesRepository.save({
+      code: 'GERENTE',
+      name: 'Gerente',
+      description: 'Gerente de sucursal',
+      isActive: true,
+    });
+  }
+
+  let cajeroRole = await rolesRepository.findOne({ where: { code: 'CAJERO' } });
+  if (!cajeroRole) {
+    cajeroRole = await rolesRepository.save({
+      code: 'CAJERO',
+      name: 'Cajero',
+      description: 'Cajero de POS',
+      isActive: true,
+    });
+  }
+
+  let contadorRole = await rolesRepository.findOne({ where: { code: 'CONTADOR' } });
+  if (!contadorRole) {
+    contadorRole = await rolesRepository.save({
+      code: 'CONTADOR',
+      name: 'Contador',
+      description: 'Contador/Finanzas',
+      isActive: true,
+    });
+  }
+
+  // Crear usuarios demo para el tenant "Grupo Empresarial Demo"
+  const demoUsers = [
+    { email: 'admin@demo.com', password: 'Admin123', name: 'Administrador Demo', role: adminRole, roleCode: 'ADMIN' },
+    { email: 'gerente@demo.com', password: 'Admin123', name: 'Gerente Demo', role: gerenteRole, roleCode: 'GERENTE' },
+    { email: 'cajero@demo.com', password: 'Admin123', name: 'Cajero Demo', role: cajeroRole, roleCode: 'CAJERO' },
+    { email: 'contador@demo.com', password: 'Admin123', name: 'Contador Demo', role: contadorRole, roleCode: 'CONTADOR' },
+  ];
+
+  for (const userData of demoUsers) {
+    const existingUser = await usersRepository.findOne({ where: { email: userData.email } });
+    if (!existingUser) {
+      const hashedPassword = await bcrypt.hash(userData.password, 10);
+      await usersRepository.save({
+        email: userData.email,
+        password: hashedPassword,
+        name: userData.name,
+        roleId: userData.role.id,
+        roleCode: userData.roleCode,
+        tenantId: demoTenant.id,
+        isActive: true,
+      });
+      console.log(`✅ Usuario ${userData.email} (${userData.roleCode}) creado`);
+    }
   }
 
   // Crear empresas de prueba
@@ -495,6 +571,48 @@ export async function seedDatabase(dataSource: DataSource) {
     console.log('✅ 18 insumos de restaurante demo creados');
   }
 
+  // ═══════════════════════════════════════════════════════════════
+  // PARTE 2: AGREGAR INSUMOS ADICIONALES (completar 20 insumos)
+  // ═══════════════════════════════════════════════════════════════
+  const currentInsumos = await insumosRepository.find({ where: { isActive: true } });
+  const familias = await familiasRepository.find();
+  const familiaPROT = familias.find(f => f.prefijo === 'PROT');
+  const familiaSECO = familias.find(f => f.prefijo === 'SECO');
+  const familiaFYV = familias.find(f => f.prefijo === 'FYV');
+  const familiaLACT = familias.find(f => f.prefijo === 'LACT');
+  const familiaBEB = familias.find(f => f.prefijo === 'BEB');
+
+  // Insumos adicionales para completar 20
+  const insumosAdicionales = [
+    { nombre: 'Pechuga de pollo', familia: 'PROT', familiaId: familiaPROT?.id, presentacion: 'kg', unidadMedida: 'kg', costoUnitario: 95, stockMinimo: 5, stockActual: 15 },
+    { nombre: 'Camarón mediano', familia: 'PROT', familiaId: familiaPROT?.id, presentacion: 'kg', unidadMedida: 'kg', costoUnitario: 280, stockMinimo: 2, stockActual: 5 },
+  ];
+
+  for (const insumoData of insumosAdicionales) {
+    const existingInsumo = await insumosRepository.findOne({ where: { nombre: insumoData.nombre } });
+    if (!existingInsumo) {
+      const count = await insumosRepository.count({ where: { familiaId: insumoData.familiaId } });
+      const nextNumber = count + 1;
+      const codigo = `${insumoData.familia}-${String(nextNumber).padStart(3, '0')}`;
+      
+      await insumosRepository.save({
+        codigo,
+        nombre: insumoData.nombre,
+        descripcion: '',
+        familia: insumoData.familia,
+        familiaId: insumoData.familiaId,
+        presentacion: insumoData.presentacion,
+        unidadMedida: insumoData.unidadMedida,
+        costoUnitario: insumoData.costoUnitario,
+        moneda: 'MXN',
+        stockMinimo: insumoData.stockMinimo,
+        stockActual: insumoData.stockActual,
+        isActive: true,
+      });
+      console.log(`✅ Insumo adicional "${insumoData.nombre}" creado`);
+    }
+  }
+
   // Crear sub-recetas si no existen
   const existingRecipes = await recipesRepository.find();
   const allInsumos = await insumosRepository.find({ where: { isActive: true } });
@@ -697,6 +815,376 @@ export async function seedDatabase(dataSource: DataSource) {
     console.log('✅ 7 productos POS creados');
   }
 
+  // ═══════════════════════════════════════════════════════════════
+  // PARTE 3: AGREGAR RECETAS Y PRODUCTOS POS ADICIONALES
+  // ═══════════════════════════════════════════════════════════════
+  const recipesForPart3 = await recipesRepository.find({ where: { isActive: true } });
+  const insumosForPart3 = await insumosRepository.find({ where: { isActive: true } });
+  const categoriesForPart3 = await posCategoriesRepository.find({ where: { isActive: true } });
+
+  // Buscar insumos para nuevas recetas
+  const pechuga = insumosForPart3.find(i => i.nombre === 'Pechuga de pollo');
+  const aceite = insumosForPart3.find(i => i.nombre === 'Aceite vegetal');
+  const limon = insumosForPart3.find(i => i.nombre === 'Limón');
+  const cebolla = insumosForPart3.find(i => i.nombre === 'Cebolla');
+  const camaron = insumosForPart3.find(i => i.nombre === 'Camarón mediano');
+  const arroz = insumosForPart3.find(i => i.nombre === 'Arroz');
+  const frijol = insumosForPart3.find(i => i.nombre === 'Frijol negro');
+  const lechugaPart3 = insumosForPart3.find(i => i.nombre === 'Lechuga');
+  const jitomate = insumosForPart3.find(i => i.nombre === 'Jitomate');
+  const quesoOaxaca = insumosForPart3.find(i => i.nombre === 'Queso Oaxaca');
+  const crema = insumosForPart3.find(i => i.nombre === 'Crema');
+
+  // Receta: Pollo a la plancha
+  const existingPollo = await recipesRepository.findOne({ where: { nombre: 'Pollo a la plancha' } });
+  if (!existingPollo && pechuga && aceite && limon && cebolla) {
+    const polloItems = [
+      { insumoId: pechuga.id, cantidad: 0.200, unidadMedida: 'kg', costoUnitario: pechuga.costoUnitario, costoTotal: 0.200 * pechuga.costoUnitario },
+      { insumoId: aceite.id, cantidad: 0.015, unidadMedida: 'L', costoUnitario: aceite.costoUnitario, costoTotal: 0.015 * aceite.costoUnitario },
+      { insumoId: limon.id, cantidad: 0.030, unidadMedida: 'kg', costoUnitario: limon.costoUnitario, costoTotal: 0.030 * limon.costoUnitario },
+      { insumoId: cebolla.id, cantidad: 0.030, unidadMedida: 'kg', costoUnitario: cebolla.costoUnitario, costoTotal: 0.030 * cebolla.costoUnitario },
+    ];
+    const polloCostoTotal = polloItems.reduce((sum, item) => sum + item.costoTotal, 0);
+    
+    await recipesRepository.save({
+      nombre: 'Pollo a la plancha',
+      descripcion: 'Pechuga de pollo a la plancha con verduras',
+      tipo: 'PRODUCTO_VENTA',
+      rendimiento: 1,
+      unidadRendimiento: 'porción',
+      items: polloItems,
+      costoTotal: polloCostoTotal,
+      precioVentaSugerido: polloCostoTotal / 0.7,
+      margenDeseado: 0.3,
+      isActive: true,
+    });
+    console.log('✅ Receta "Pollo a la plancha" creada');
+  }
+
+  // Receta: Camarones al ajillo
+  const existingCamarones = await recipesRepository.findOne({ where: { nombre: 'Camarones al ajillo' } });
+  if (!existingCamarones && camaron && aceite && limon) {
+    const camaronesItems = [
+      { insumoId: camaron.id, cantidad: 0.200, unidadMedida: 'kg', costoUnitario: camaron.costoUnitario, costoTotal: 0.200 * camaron.costoUnitario },
+      { insumoId: aceite.id, cantidad: 0.020, unidadMedida: 'L', costoUnitario: aceite.costoUnitario, costoTotal: 0.020 * aceite.costoUnitario },
+      { insumoId: limon.id, cantidad: 0.020, unidadMedida: 'kg', costoUnitario: limon.costoUnitario, costoTotal: 0.020 * limon.costoUnitario },
+    ];
+    const camaronesCostoTotal = camaronesItems.reduce((sum, item) => sum + item.costoTotal, 0);
+    
+    await recipesRepository.save({
+      nombre: 'Camarones al ajillo',
+      descripcion: 'Camarones salteados con ajo y limón',
+      tipo: 'PRODUCTO_VENTA',
+      rendimiento: 1,
+      unidadRendimiento: 'porción',
+      items: camaronesItems,
+      costoTotal: camaronesCostoTotal,
+      precioVentaSugerido: camaronesCostoTotal / 0.7,
+      margenDeseado: 0.3,
+      isActive: true,
+    });
+    console.log('✅ Receta "Camarones al ajillo" creada');
+  }
+
+  // Receta: Arroz con Frijoles
+  const existingArrozFrijoles = await recipesRepository.findOne({ where: { nombre: 'Arroz con Frijoles' } });
+  if (!existingArrozFrijoles && arroz && frijol) {
+    const arrozItems = [
+      { insumoId: arroz.id, cantidad: 0.150, unidadMedida: 'kg', costoUnitario: arroz.costoUnitario, costoTotal: 0.150 * arroz.costoUnitario },
+      { insumoId: frijol.id, cantidad: 0.100, unidadMedida: 'kg', costoUnitario: frijol.costoUnitario, costoTotal: 0.100 * frijol.costoUnitario },
+    ];
+    const arrozCostoTotal = arrozItems.reduce((sum, item) => sum + item.costoTotal, 0);
+    
+    await recipesRepository.save({
+      nombre: 'Arroz con Frijoles',
+      descripcion: 'Arroz acompañado de frijoles negros',
+      tipo: 'PRODUCTO_VENTA',
+      rendimiento: 1,
+      unidadRendimiento: 'porción',
+      items: arrozItems,
+      costoTotal: arrozCostoTotal,
+      precioVentaSugerido: arrozCostoTotal / 0.7,
+      margenDeseado: 0.3,
+      isActive: true,
+    });
+    console.log('✅ Receta "Arroz con Frijoles" creada');
+  }
+
+  // Receta: Tacos de Pollo
+  const existingTacosPollo = await recipesRepository.findOne({ where: { nombre: 'Tacos de Pollo' } });
+  if (!existingTacosPollo && pechuga && lechugaPart3 && jitomate && cebolla && limon) {
+    const tacosItems = [
+      { insumoId: pechuga.id, cantidad: 0.150, unidadMedida: 'kg', costoUnitario: pechuga.costoUnitario, costoTotal: 0.150 * pechuga.costoUnitario },
+      { insumoId: lechugaPart3.id, cantidad: 0.020, unidadMedida: 'kg', costoUnitario: lechugaPart3.costoUnitario, costoTotal: 0.020 * lechugaPart3.costoUnitario },
+      { insumoId: jitomate.id, cantidad: 0.030, unidadMedida: 'kg', costoUnitario: jitomate.costoUnitario, costoTotal: 0.030 * jitomate.costoUnitario },
+      { insumoId: cebolla.id, cantidad: 0.020, unidadMedida: 'kg', costoUnitario: cebolla.costoUnitario, costoTotal: 0.020 * cebolla.costoUnitario },
+      { insumoId: limon.id, cantidad: 0.010, unidadMedida: 'kg', costoUnitario: limon.costoUnitario, costoTotal: 0.010 * limon.costoUnitario },
+    ];
+    const tacosCostoTotal = tacosItems.reduce((sum, item) => sum + item.costoTotal, 0);
+    
+    await recipesRepository.save({
+      nombre: 'Tacos de Pollo',
+      descripcion: '3 tacos de pollo con verduras',
+      tipo: 'PRODUCTO_VENTA',
+      rendimiento: 1,
+      unidadRendimiento: 'orden',
+      items: tacosItems,
+      costoTotal: tacosCostoTotal,
+      precioVentaSugerido: tacosCostoTotal / 0.7,
+      margenDeseado: 0.3,
+      isActive: true,
+    });
+    console.log('✅ Receta "Tacos de Pollo" creada');
+  }
+
+  // Productos POS adicionales
+  const categoriaPlatillos = categoriesForPart3.find(c => c.name === 'Comida');
+  const categoriaExtras = categoriesForPart3.find(c => c.name === 'Postres');
+  const categoriaBebidasPart3 = categoriesForPart3.find(c => c.name === 'Bebidas');
+
+  const finalRecipes = await recipesRepository.find({ where: { isActive: true } });
+  const recetaPollo = finalRecipes.find(r => r.nombre === 'Pollo a la plancha');
+  const recetaCamarones = finalRecipes.find(r => r.nombre === 'Camarones al ajillo');
+  const recetaArrozFrijoles = finalRecipes.find(r => r.nombre === 'Arroz con Frijoles');
+  const recetaTacosPollo = finalRecipes.find(r => r.nombre === 'Tacos de Pollo');
+
+  const productosAdicionales = [
+    { name: 'Pollo a la Plancha', categoryId: categoriaPlatillos?.id, price: 145, type: 'PREPARADO', recipeId: recetaPollo?.id, isActive: true },
+    { name: 'Camarones al Ajillo', categoryId: categoriaPlatillos?.id, price: 195, type: 'PREPARADO', recipeId: recetaCamarones?.id, isActive: true },
+    { name: 'Arroz con Frijoles', categoryId: categoriaPlatillos?.id, price: 45, type: 'PREPARADO', recipeId: recetaArrozFrijoles?.id, isActive: true },
+    { name: 'Tacos de Pollo', categoryId: categoriaPlatillos?.id, price: 85, type: 'PREPARADO', recipeId: recetaTacosPollo?.id, isActive: true },
+    { name: 'Orden de Limón', categoryId: categoriaExtras?.id, price: 10, type: 'SIMPLE', insumoId: limon?.id, isActive: true },
+    { name: 'Porción Extra', categoryId: categoriaExtras?.id, price: 25, type: 'SIMPLE', isActive: true },
+  ];
+
+  for (const productData of productosAdicionales) {
+    const existingProduct = await productsRepository.findOne({ where: { name: productData.name } });
+    if (!existingProduct) {
+      await productsRepository.save(productData);
+      console.log(`✅ Producto POS "${productData.name}" creado`);
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // PARTE 4: AGREGAR MOVIMIENTOS HISTÓRICOS (40 ingresos, 20 egresos, 5 transferencias)
+  // ═══════════════════════════════════════════════════════════════
+  const allBanks = await banksRepository.find();
+  const existingMovementsCount = await movementsRepository.count();
+
+  if (existingMovementsCount < 65) {
+    const bankBBVA = allBanks.find(b => b.name === 'Cuenta Principal BBVA');
+    const bankBanorte = allBanks.find(b => b.name && b.name.includes('Banorte'));
+    const bankCaja = allBanks.find(b => b.name === 'Caja Chica');
+
+    // 40 ingresos por ventas
+    const incomeConcepts = [
+      'Venta de alimentos', 'Venta de bebidas', 'Venta de platillos', 'Venta de postres',
+      'Venta de combos', 'Venta de desayunos', 'Venta de almuerzos', 'Venta de cenas',
+      'Venta de snacks', 'Venta de cafés'
+    ];
+
+    for (let i = 0; i < 40; i++) {
+      const amount = Math.floor(Math.random() * 24500) + 500; // $500 - $25,000
+      const date = new Date();
+      date.setDate(date.getDate() - Math.floor(Math.random() * 90)); // Últimos 3 meses
+
+      await movementsRepository.save({
+        accountId: bankBBVA?.id,
+        type: 'INCOME',
+        category: 'SALE',
+        concept: incomeConcepts[Math.floor(Math.random() * incomeConcepts.length)],
+        reference: `FAC-${String(i + 100).padStart(4, '0')}`,
+        amount: amount,
+        date: date,
+      });
+    }
+
+    // 20 egresos por gastos operativos
+    const expenseConcepts = [
+      'Pago de nómina', 'Renta de local', 'Servicios de luz', 'Servicios de agua',
+      'Servicios de gas', 'Servicios de internet', 'Compra de insumos', 'Mantenimiento',
+      'Limpieza', 'Seguros', 'Publicidad', 'Transporte', 'Equipo de cocina',
+      'Vajilla', 'Uniformes', 'Licencias', 'Impuestos', 'Asesoría', 'Reparaciones', 'Otros'
+    ];
+
+    for (let i = 0; i < 20; i++) {
+      const amount = Math.floor(Math.random() * 24500) + 500;
+      const date = new Date();
+      date.setDate(date.getDate() - Math.floor(Math.random() * 90));
+
+      await movementsRepository.save({
+        accountId: bankBanorte?.id || bankBBVA?.id,
+        type: 'EXPENSE',
+        category: 'OPERATIONAL',
+        concept: expenseConcepts[i],
+        reference: `GAS-${String(i + 100).padStart(4, '0')}`,
+        amount: amount,
+        date: date,
+      });
+    }
+
+    // 5 transferencias entre cuentas
+    for (let i = 0; i < 5; i++) {
+      const amount = Math.floor(Math.random() * 10000) + 1000;
+      const date = new Date();
+      date.setDate(date.getDate() - Math.floor(Math.random() * 60));
+
+      await movementsRepository.save({
+        accountId: bankBBVA?.id,
+        type: 'EXPENSE',
+        category: 'TRANSFER',
+        concept: 'Transferencia entre cuentas',
+        reference: `TRF-${String(i + 100).padStart(4, '0')}`,
+        amount: amount,
+        date: date,
+      });
+
+      await movementsRepository.save({
+        accountId: bankCaja?.id,
+        type: 'INCOME',
+        category: 'TRANSFER',
+        concept: 'Transferencia entre cuentas',
+        reference: `TRF-${String(i + 100).padStart(4, '0')}`,
+        amount: amount,
+        date: date,
+      });
+    }
+
+    console.log('✅ 65 movimientos históricos creados (40 ingresos, 20 egresos, 5 transferencias)');
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // PARTE 5: AGREGAR ÓRDENES DE COMPRA, FACTURAS E INVENTARIO
+  // ═══════════════════════════════════════════════════════════════
+  const allSuppliers = await suppliersRepository.find();
+  const allBranches = await branchesRepository.find();
+  const existingPurchaseOrders = await purchaseOrdersRepository.count();
+  const existingInvoices = await purchaseInvoicesRepository.count();
+  const existingInventoryRecords = await inventoryRecordsRepository.count();
+
+  const branchCentro = allBranches.find(b => b.name === 'Sucursal Centro');
+  const branchNorte = allBranches.find(b => b.name === 'Sucursal Norte');
+
+  // Órdenes de compra
+  if (existingPurchaseOrders < 3) {
+    const supplierDistribuidora = allSuppliers.find(s => s.nombre === 'Distribuidora Nacional');
+    const supplierFrutas = allSuppliers.find(s => s.nombre === 'Frutas y Verduras del Valle');
+
+    // 2 OC recibidas
+    for (let i = 0; i < 2; i++) {
+      const date = new Date();
+      date.setDate(date.getDate() - (30 + i * 15));
+
+      await purchaseOrdersRepository.save({
+        supplierId: supplierDistribuidora?.id,
+        branchId: branchCentro?.id,
+        orderNumber: `OC-${String(100 + i).padStart(6, '0')}`,
+        status: 'RECIBIDA',
+        orderDate: date,
+        expectedDate: new Date(date.getTime() + 3 * 24 * 60 * 60 * 1000),
+        receivedDate: new Date(date.getTime() + 3 * 24 * 60 * 60 * 1000),
+        subtotal: Math.floor(Math.random() * 15000) + 5000,
+        tax: 0,
+        total: 0,
+        notes: 'Orden de compra de insumos',
+      });
+    }
+
+    // 1 OC pendiente
+    const pendingDate = new Date();
+    await purchaseOrdersRepository.save({
+      supplierId: supplierFrutas?.id,
+      branchId: branchCentro?.id,
+      orderNumber: 'OC-000103',
+      status: 'PENDIENTE',
+      orderDate: pendingDate,
+      expectedDate: new Date(pendingDate.getTime() + 2 * 24 * 60 * 60 * 1000),
+      subtotal: 8500,
+      tax: 0,
+      total: 0,
+      notes: 'Orden pendiente de entrega',
+    });
+
+    console.log('✅ 3 órdenes de compra creadas');
+  }
+
+  // Facturas de compra
+  if (existingInvoices < 5) {
+    const allPurchaseOrders = await purchaseOrdersRepository.find();
+
+    // 3 facturas pagadas
+    for (let i = 0; i < 3; i++) {
+      const date = new Date();
+      date.setDate(date.getDate() - (45 + i * 15));
+
+      await purchaseInvoicesRepository.save({
+        purchaseOrderId: allPurchaseOrders[i]?.id,
+        supplierId: allPurchaseOrders[i]?.supplierId,
+        invoiceNumber: `FAC-${String(500 + i).padStart(6, '0')}`,
+        invoiceDate: date,
+        dueDate: new Date(date.getTime() + 15 * 24 * 60 * 60 * 1000),
+        subtotal: Math.floor(Math.random() * 10000) + 3000,
+        tax: 0,
+        total: 0,
+        status: 'PAGADA',
+        paymentDate: new Date(date.getTime() + 10 * 24 * 60 * 60 * 1000),
+        paymentMethod: 'TRANSFERENCIA',
+      });
+    }
+
+    // 2 facturas pendientes (CxP activa)
+    for (let i = 0; i < 2; i++) {
+      const date = new Date();
+      date.setDate(date.getDate() - (10 + i * 5));
+
+      await purchaseInvoicesRepository.save({
+        purchaseOrderId: allPurchaseOrders[Math.min(i + 3, allPurchaseOrders.length - 1)]?.id,
+        supplierId: allPurchaseOrders[Math.min(i + 3, allPurchaseOrders.length - 1)]?.supplierId,
+        invoiceNumber: `FAC-${String(503 + i).padStart(6, '0')}`,
+        invoiceDate: date,
+        dueDate: new Date(date.getTime() + 15 * 24 * 60 * 60 * 1000),
+        subtotal: Math.floor(Math.random() * 8000) + 2000,
+        tax: 0,
+        total: 0,
+        status: 'PENDIENTE',
+        paymentMethod: null,
+      });
+    }
+
+    console.log('✅ 5 facturas de compra creadas');
+  }
+
+  // Registros de inventario
+  if (existingInventoryRecords < 11) {
+    // Registros de inventario de los últimos 2 meses
+    for (let i = 0; i < 10; i++) {
+      const date = new Date();
+      date.setDate(date.getDate() - (i * 6));
+
+      await inventoryRecordsRepository.save({
+        branchId: branchCentro?.id,
+        recordDate: date,
+        recordType: 'AJUSTE',
+        notes: 'Ajuste de inventario periódico',
+        recordedBy: 'admin@demo.com',
+      });
+    }
+
+    // 1 conteo físico realizado hace 15 días
+    const physicalCountDate = new Date();
+    physicalCountDate.setDate(physicalCountDate.getDate() - 15);
+
+    await inventoryRecordsRepository.save({
+      branchId: branchCentro?.id,
+      recordDate: physicalCountDate,
+      recordType: 'CONTEO_FISICO',
+      notes: 'Conteo físico mensual',
+      recordedBy: 'contador@demo.com',
+    });
+
+    console.log('✅ 11 registros de inventario creados');
+  }
+
   // Resumen final del seed
   const totalCompanies = await companiesRepository.count({ where: { tenantId: testTenant.id } });
   const totalBranches = await branchesRepository.count();
@@ -704,16 +1192,30 @@ export async function seedDatabase(dataSource: DataSource) {
   const totalMovements = await movementsRepository.count();
   const totalSuppliers = await suppliersRepository.count({ where: { tenantId: testTenant.id } });
   const totalFamilias = await familiasRepository.count();
+  const totalInsumos = await insumosRepository.count();
+  const totalRecipes = await recipesRepository.count();
+  const totalProducts = await productsRepository.count();
+  const totalPurchaseOrders = await purchaseOrdersRepository.count();
+  const totalInvoices = await purchaseInvoicesRepository.count();
+  const totalInventoryRecords = await inventoryRecordsRepository.count();
 
   console.log('═══════════════════════════════════════');
   console.log('✅ SEED COMPLETADO');
   console.log('═══════════════════════════════════════');
   console.log(`📊 Resumen de datos creados:`);
+  console.log(`   - Tenant Demo: Grupo Empresarial Demo (BUSINESS)`);
+  console.log(`   - Usuarios Demo: 4 (admin, gerente, cajero, contador)`);
   console.log(`   - Empresas: ${totalCompanies}`);
   console.log(`   - Sucursales: ${totalBranches}`);
   console.log(`   - Cuentas bancarias: ${totalBanks}`);
   console.log(`   - Movimientos: ${totalMovements}`);
   console.log(`   - Proveedores: ${totalSuppliers}`);
   console.log(`   - Familias de insumos: ${totalFamilias}`);
+  console.log(`   - Insumos: ${totalInsumos}`);
+  console.log(`   - Recetas: ${totalRecipes}`);
+  console.log(`   - Productos POS: ${totalProducts}`);
+  console.log(`   - Órdenes de compra: ${totalPurchaseOrders}`);
+  console.log(`   - Facturas de compra: ${totalInvoices}`);
+  console.log(`   - Registros de inventario: ${totalInventoryRecords}`);
   console.log('═══════════════════════════════════════');
 }
