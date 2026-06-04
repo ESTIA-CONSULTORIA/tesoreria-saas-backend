@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { Bank } from '../banks/entities/bank.entity';
 import { Movement } from '../movements/entities/movement.entity';
 import { PaymentSchedule } from './entities/payment-schedule.entity';
+import { Purchase } from '../purchases/entities/purchase.entity';
 
 @Injectable()
 export class TreasuryService {
@@ -14,6 +15,8 @@ export class TreasuryService {
     private movementsRepo: Repository<Movement>,
     @InjectRepository(PaymentSchedule)
     private paymentScheduleRepo: Repository<PaymentSchedule>,
+    @InjectRepository(Purchase)
+    private purchasesRepo: Repository<Purchase>,
   ) {}
 
   async getExecutiveSummary(tenantId?: string) {
@@ -477,26 +480,37 @@ export class TreasuryService {
   // Accounts Payable (CxP)
   async getAccountsPayable(tenantId?: string) {
     try {
+      console.log('getAccountsPayable - tenantId:', tenantId);
+      
+      const query = this.purchasesRepo
+        .createQueryBuilder('purchase')
+        .where('purchase.status IN (:...statuses)', { statuses: ['PENDIENTE', 'PARCIAL'] })
+        .orderBy('purchase.fechaVencimiento', 'ASC');
+      
+      if (tenantId) query.andWhere('purchase.tenantId = :tenantId', { tenantId });
+      
+      const purchases = await query.getMany();
+      console.log('getAccountsPayable - purchases found:', purchases.length);
+      
       const now = new Date();
-      const query = this.movementsRepo
-        .createQueryBuilder('movement')
-        .where('movement.type = :type', { type: 'EXPENSE' })
-        .andWhere('movement.createdAt >= :now', { now })
-        .orderBy('movement.createdAt', 'ASC');
       
-      if (tenantId) query.andWhere('movement.tenantId = :tenantId', { tenantId });
-      
-      const movements = await query.getMany();
-      
-      return movements.map((m) => ({
-        id: m.id,
-        concepto: m.concept,
-        monto: Number(m.amount),
-        fechaVencimiento: m.createdAt,
-        cuentaId: m.accountId,
-        referencia: m.reference,
-        diasHastaVencimiento: Math.ceil((m.createdAt.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)),
-      }));
+      return purchases.map((p) => {
+        const fechaVencimiento = p.fechaVencimiento ? new Date(p.fechaVencimiento) : now;
+        const diasHastaVencimiento = Math.ceil((fechaVencimiento.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+        
+        return {
+          id: p.id,
+          numero: p.numero,
+          supplierId: p.supplierId,
+          monto: Number(p.total),
+          montoPagado: Number(p.montoPagado),
+          saldoPendiente: Number(p.total) - Number(p.montoPagado),
+          fechaVencimiento: p.fechaVencimiento,
+          diasHastaVencimiento,
+          status: p.status,
+          metodoPago: p.metodoPago,
+        };
+      });
     } catch (error) {
       console.error('TreasuryService.getAccountsPayable error:', error);
       throw new Error(`Error al obtener cuentas por pagar: ${error.message}`);
