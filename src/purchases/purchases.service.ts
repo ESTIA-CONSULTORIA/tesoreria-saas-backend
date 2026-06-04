@@ -177,17 +177,23 @@ export class PurchasesService {
     userId: string;
   }) {
     const purchase = await this.purchasesRepo.findOne({ where: { id } });
-    if (!purchase) return null;
+    if (!purchase) {
+      throw new Error('Factura no encontrada');
+    }
 
-    // Crear movimiento de egreso en la cuenta bancaria
-    await this.movementsService.create(
-      data.accountId,
-      'EXPENSE',
-      'PAYMENT',
-      `Pago factura ${purchase.numero} - ${data.notas || ''}`,
-      data.amount,
-      data.referencia,
-    );
+    try {
+      // Crear movimiento de egreso en la cuenta bancaria
+      await this.movementsService.create(
+        data.accountId,
+        'EXPENSE',
+        'PAYMENT',
+        `Pago factura ${purchase.numero} - ${data.notas || ''}`,
+        data.amount,
+        data.referencia,
+      );
+    } catch (error: any) {
+      throw new Error(`Error al crear movimiento: ${error.message}`);
+    }
 
     const newMontoPagado = Number(purchase.montoPagado) + data.amount;
     const saldoPendiente = Number(purchase.total) - newMontoPagado;
