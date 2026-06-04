@@ -1,4 +1,4 @@
-import { DataSource } from 'typeorm';
+import { DataSource, IsNull } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 
 export async function seedDatabase(dataSource: DataSource) {
@@ -1107,6 +1107,25 @@ export async function seedDatabase(dataSource: DataSource) {
       });
     }
     console.log(`✅ ${invoicesWithoutTenant.length} facturas actualizadas con tenantId, supplierId y campos faltantes`);
+  }
+
+  // MIGRACIÓN: Actualizar órdenes de compra existentes con tenantId y campos faltantes
+  const ordersWithoutTenant = await purchaseOrdersRepository.find({ where: { tenantId: IsNull() } });
+  if (ordersWithoutTenant.length > 0) {
+    const firstSupplier = allSuppliers[0];
+    for (let i = 0; i < ordersWithoutTenant.length; i++) {
+      const order = ordersWithoutTenant[i];
+      const now = new Date();
+      
+      await purchaseOrdersRepository.update(order.id, {
+        tenantId: demoTenant.id,
+        supplierId: order.supplierId || firstSupplier?.id,
+        orderNumber: order.orderNumber || `OC-${String(i + 1).padStart(6, '0')}`,
+        orderDate: order.orderDate || now.toISOString().split('T')[0],
+        total: order.total > 0 ? order.total : (order.subtotal || 0),
+      });
+    }
+    console.log(`✅ ${ordersWithoutTenant.length} órdenes de compra actualizadas con tenantId y campos faltantes`);
   }
 
   const branchCentro = allBranches.find(b => b.name === 'Sucursal Centro');
