@@ -15,8 +15,8 @@ export async function seedDatabase(dataSource: DataSource) {
   const posCategoriesRepository = dataSource.getRepository('PosCategory');
   const productsRepository = dataSource.getRepository('Product');
   const purchaseOrdersRepository = dataSource.getRepository('PurchaseOrder');
-  const purchaseInvoicesRepository = dataSource.getRepository('PurchaseInvoice');
-  const inventoryRecordsRepository = dataSource.getRepository('InventoryRecord');
+  const purchaseInvoicesRepository = dataSource.getRepository('Purchase');
+  const inventoryRecordsRepository = dataSource.getRepository('Inventory');
 
   // Verificar si el usuario admin ya existe
   const existingAdmin = await usersRepository.findOne({ where: { email: 'admin@estia.com' } });
@@ -1108,7 +1108,7 @@ export async function seedDatabase(dataSource: DataSource) {
     console.log('✅ 3 órdenes de compra creadas');
   }
 
-  // Facturas de compra
+  // Facturas de compra (usando entidad Purchase)
   if (existingInvoices < 5) {
     const allPurchaseOrders = await purchaseOrdersRepository.find();
 
@@ -1116,19 +1116,23 @@ export async function seedDatabase(dataSource: DataSource) {
     for (let i = 0; i < 3; i++) {
       const date = new Date();
       date.setDate(date.getDate() - (45 + i * 15));
+      const subtotal = Math.floor(Math.random() * 10000) + 3000;
 
       await purchaseInvoicesRepository.save({
-        purchaseOrderId: allPurchaseOrders[i]?.id,
+        numero: `FAC-${String(500 + i).padStart(6, '0')}`,
+        fecha: date.toISOString().split('T')[0],
         supplierId: allPurchaseOrders[i]?.supplierId,
-        invoiceNumber: `FAC-${String(500 + i).padStart(6, '0')}`,
-        invoiceDate: date,
-        dueDate: new Date(date.getTime() + 15 * 24 * 60 * 60 * 1000),
-        subtotal: Math.floor(Math.random() * 10000) + 3000,
-        tax: 0,
-        total: 0,
+        ocId: allPurchaseOrders[i]?.id,
+        items: [],
+        subtotal: subtotal,
+        impuestos: 0,
+        total: subtotal,
+        montoPagado: subtotal,
         status: 'PAGADA',
-        paymentDate: new Date(date.getTime() + 10 * 24 * 60 * 60 * 1000),
-        paymentMethod: 'TRANSFERENCIA',
+        fechaVencimiento: new Date(date.getTime() + 15 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        metodoPago: 'TRANSFERENCIA',
+        diasCredito: 15,
+        tenantId: demoTenant.id,
       });
     }
 
@@ -1136,53 +1140,61 @@ export async function seedDatabase(dataSource: DataSource) {
     for (let i = 0; i < 2; i++) {
       const date = new Date();
       date.setDate(date.getDate() - (10 + i * 5));
+      const subtotal = Math.floor(Math.random() * 8000) + 2000;
 
       await purchaseInvoicesRepository.save({
-        purchaseOrderId: allPurchaseOrders[Math.min(i + 3, allPurchaseOrders.length - 1)]?.id,
+        numero: `FAC-${String(503 + i).padStart(6, '0')}`,
+        fecha: date.toISOString().split('T')[0],
         supplierId: allPurchaseOrders[Math.min(i + 3, allPurchaseOrders.length - 1)]?.supplierId,
-        invoiceNumber: `FAC-${String(503 + i).padStart(6, '0')}`,
-        invoiceDate: date,
-        dueDate: new Date(date.getTime() + 15 * 24 * 60 * 60 * 1000),
-        subtotal: Math.floor(Math.random() * 8000) + 2000,
-        tax: 0,
-        total: 0,
+        ocId: allPurchaseOrders[Math.min(i + 3, allPurchaseOrders.length - 1)]?.id,
+        items: [],
+        subtotal: subtotal,
+        impuestos: 0,
+        total: subtotal,
+        montoPagado: 0,
         status: 'PENDIENTE',
-        paymentMethod: null,
+        fechaVencimiento: new Date(date.getTime() + 15 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        metodoPago: null,
+        diasCredito: 15,
+        tenantId: demoTenant.id,
       });
     }
 
     console.log('✅ 5 facturas de compra creadas');
   }
 
-  // Registros de inventario
-  if (existingInventoryRecords < 11) {
-    // Registros de inventario de los últimos 2 meses
-    for (let i = 0; i < 10; i++) {
+  // Registros de inventario (usando entidad Inventory)
+  if (existingInventoryRecords < 5) {
+    const allInsumos = await insumosRepository.find({ where: { isActive: true } });
+    
+    // Crear registros de inventario para los últimos 3 meses
+    for (let i = 0; i < 3; i++) {
       const date = new Date();
-      date.setDate(date.getDate() - (i * 6));
+      date.setMonth(date.getMonth() - i);
+      const periodo = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
 
-      await inventoryRecordsRepository.save({
-        branchId: branchCentro?.id,
-        recordDate: date,
-        recordType: 'AJUSTE',
-        notes: 'Ajuste de inventario periódico',
-        recordedBy: 'admin@demo.com',
-      });
+      // Crear registros para algunos insumos
+      for (let j = 0; j < Math.min(5, allInsumos.length); j++) {
+        const insumo = allInsumos[j];
+        const inventarioInicial = Math.floor(Math.random() * 50) + 10;
+        const entradas = Math.floor(Math.random() * 30) + 5;
+        const salidas = Math.floor(Math.random() * 25) + 5;
+        const inventarioFinal = inventarioInicial + entradas - salidas;
+
+        await inventoryRecordsRepository.save({
+          insumoId: insumo.id,
+          periodo: periodo,
+          inventarioInicial: inventarioInicial,
+          entradas: entradas,
+          salidas: salidas,
+          inventarioFinal: inventarioFinal,
+          costoPromedio: insumo.costoUnitario,
+          tenantId: demoTenant.id,
+        });
+      }
     }
 
-    // 1 conteo físico realizado hace 15 días
-    const physicalCountDate = new Date();
-    physicalCountDate.setDate(physicalCountDate.getDate() - 15);
-
-    await inventoryRecordsRepository.save({
-      branchId: branchCentro?.id,
-      recordDate: physicalCountDate,
-      recordType: 'CONTEO_FISICO',
-      notes: 'Conteo físico mensual',
-      recordedBy: 'contador@demo.com',
-    });
-
-    console.log('✅ 11 registros de inventario creados');
+    console.log('✅ Registros de inventario creados');
   }
 
   // Resumen final del seed
