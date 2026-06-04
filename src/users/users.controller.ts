@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Put } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Put, Query } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { Public } from '../auth/public.decorator';
 
@@ -28,8 +28,8 @@ export class UsersController {
 
   @Get()
   @Public()
-  findAll() {
-    return this.usersService.findAll();
+  findAll(@Query('tenantId') tenantId?: string) {
+    return this.usersService.findAll(tenantId);
   }
 
   @Get('email/:email')
@@ -39,8 +39,8 @@ export class UsersController {
   }
 
   @Get('role/:roleCode')
-  findByRole(@Param('roleCode') roleCode: string) {
-    return this.usersService.findByRole(roleCode);
+  findByRole(@Param('roleCode') roleCode: string, @Query('tenantId') tenantId?: string) {
+    return this.usersService.findByRole(roleCode, tenantId);
   }
 
   @Put(':id')

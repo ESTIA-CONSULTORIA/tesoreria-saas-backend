@@ -6,6 +6,9 @@ export class Transfer {
   id: string;
 
   @Column({ nullable: true })
+  tenantId: string;
+
+  @Column({ nullable: true })
   fromAccountId: string;
 
   @Column({ nullable: true })

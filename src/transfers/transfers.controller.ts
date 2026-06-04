@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, Put, Param } from '@nestjs/common';
+import { Body, Controller, Get, Post, Put, Param, Req } from '@nestjs/common';
 import { TransfersService } from './transfers.service';
 import { Feature } from '../auth/feature/decorator';
 
@@ -21,7 +21,9 @@ export class TransfersController {
       referencia?: string;
       motivo?: string;
     },
+    @Req() req,
   ) {
+    const tenantId = req.user?.tenantId || req.tenantId;
     return this.transfersService.create(
       body.fromAccountId,
       body.toAccountId,
@@ -32,12 +34,14 @@ export class TransfersController {
       body.empresaDestinoId,
       body.referencia,
       body.motivo,
+      tenantId,
     );
   }
 
   @Get()
-  findAll() {
-    return this.transfersService.findAll();
+  findAll(@Req() req) {
+    const tenantId = req.user?.tenantId || req.tenantId;
+    return this.transfersService.findAll(tenantId);
   }
 
   @Put(':id/authorize')

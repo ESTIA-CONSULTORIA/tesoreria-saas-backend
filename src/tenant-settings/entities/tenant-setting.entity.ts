@@ -18,6 +18,9 @@ export class TenantSetting {
   @Column({ nullable: true })
   faviconUrl: string;
 
+  @Column({ nullable: true })
+  backgroundImage: string;
+
   @Column({ default: '#2563eb' })
   primaryColor: string;
 
@@ -56,6 +59,9 @@ export class TenantSetting {
 
   @Column({ default: 'rounded' })
   buttonBorderRadius: 'square' | 'rounded' | 'pill';
+
+  @Column({ nullable: true, type: 'text' })
+  customCSS: string;
 
   // Configuración global (JSON)
   @Column({ type: 'json', nullable: true })

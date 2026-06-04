@@ -20,6 +20,7 @@ export class TenantSettingsService {
       name?: string;
       logoUrl?: string;
       faviconUrl?: string;
+      backgroundImage?: string;
       primaryColor?: string;
       secondaryColor?: string;
       accentColor?: string;
@@ -32,6 +33,7 @@ export class TenantSettingsService {
       primaryButtonColor?: string;
       secondaryButtonColor?: string;
       buttonBorderRadius?: 'square' | 'rounded' | 'pill';
+      customCSS?: string;
     },
   ) {
     const existing = await this.findByTenant(tenantId);
@@ -41,6 +43,7 @@ export class TenantSettingsService {
         name: body.name,
         logoUrl: body.logoUrl,
         faviconUrl: body.faviconUrl,
+        backgroundImage: body.backgroundImage,
         primaryColor: body.primaryColor || '#2563eb',
         secondaryColor: body.secondaryColor || '#64748b',
         accentColor: body.accentColor || '#0ea5e9',
@@ -53,6 +56,7 @@ export class TenantSettingsService {
         primaryButtonColor: body.primaryButtonColor || '#2563eb',
         secondaryButtonColor: body.secondaryButtonColor || '#64748b',
         buttonBorderRadius: body.buttonBorderRadius || 'rounded',
+        customCSS: body.customCSS,
       });
       return this.repo.save(created);
     }

@@ -32,15 +32,20 @@ export class UsersService {
     return this.usersRepository.findOne({ where: { email } });
   }
 
-  findAll() {
+  findAll(tenantId?: string) {
+    const where: any = {};
+    if (tenantId) where.tenantId = tenantId;
     return this.usersRepository.find({
+      where,
       order: { email: 'ASC' },
     });
   }
 
-  findByRole(roleCode: string) {
+  findByRole(roleCode: string, tenantId?: string) {
+    const where: any = { roleCode };
+    if (tenantId) where.tenantId = tenantId;
     return this.usersRepository.find({
-      where: { roleCode },
+      where,
       order: { email: 'ASC' },
     });
   }

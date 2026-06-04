@@ -49,7 +49,7 @@ export class AuthService {
       email: user.email,
       roleCode: user.roleCode,
       tenantId: user.tenantId,
-    });
+    }, { expiresIn: '24h' });
 
     // Calcular módulos activos según rol y tenant
     let modulosActivos: string[] = [];

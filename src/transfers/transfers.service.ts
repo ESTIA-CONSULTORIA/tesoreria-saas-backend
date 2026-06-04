@@ -23,6 +23,7 @@ export class TransfersService {
     empresaDestinoId?: string,
     referencia?: string,
     motivo?: string,
+    tenantId?: string,
   ) {
     const numericAmount = Number(amount);
 
@@ -41,6 +42,7 @@ export class TransfersService {
     if (tipo === 'INTERCOMPAÑIA') {
       // Intercompañía: Create transfer with PENDIENTE status, no movements yet
       const transfer = this.transferRepo.create({
+        tenantId,
         fromAccountId,
         toAccountId,
         amount: numericAmount,
@@ -196,8 +198,11 @@ export class TransfersService {
     return this.transferRepo.findOne({ where: { id } });
   }
 
-  findAll() {
+  findAll(tenantId?: string) {
+    const where: any = {};
+    if (tenantId) where.tenantId = tenantId;
     return this.transferRepo.find({
+      where,
       order: { createdAt: 'DESC' },
     });
   }

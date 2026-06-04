@@ -821,18 +821,30 @@ export async function seedDatabase(dataSource: DataSource) {
 
   const existingProducts = await productsRepository.find();
   
+  // Migración: Actualizar tenantId de productos existentes sin tenantId
+  for (const product of existingProducts) {
+    if (!product.tenantId) {
+      await productsRepository.update(
+        { id: product.id },
+        { tenantId: demoTenant.id }
+      );
+      console.log(`✅ Producto "${product.name}" actualizado con tenantId`);
+    }
+  }
+  
+  // Solo crear nuevos productos si no existen
   if (existingProducts.length === 0) {
     const productsData = [
       // Productos preparados (vinculados a recetas)
-      { name: 'Hamburguesa Clásica', categoryId: categoriaComida?.id, price: 120, type: 'PREPARADO', recipeId: recetaHamburguesa?.id, isActive: true },
-      { name: 'Hot Dog', categoryId: categoriaComida?.id, price: 65, type: 'PREPARADO', recipeId: recetaHotDog?.id, isActive: true },
-      { name: 'Pizza Personal', categoryId: categoriaComida?.id, price: 150, type: 'PREPARADO', recipeId: recetaPizza?.id, isActive: true },
+      { name: 'Hamburguesa Clásica', categoryId: categoriaComida?.id, price: 120, type: 'PREPARADO', recipeId: recetaHamburguesa?.id, isActive: true, tenantId: demoTenant.id },
+      { name: 'Hot Dog', categoryId: categoriaComida?.id, price: 65, type: 'PREPARADO', recipeId: recetaHotDog?.id, isActive: true, tenantId: demoTenant.id },
+      { name: 'Pizza Personal', categoryId: categoriaComida?.id, price: 150, type: 'PREPARADO', recipeId: recetaPizza?.id, isActive: true, tenantId: demoTenant.id },
       
       // Productos simples (vinculados a insumos)
-      { name: 'Refresco', categoryId: categoriaBebidas?.id, price: 25, type: 'SIMPLE', insumoId: insumoRefresco?.id, isActive: true },
-      { name: 'Agua', categoryId: categoriaBebidas?.id, price: 15, type: 'SIMPLE', insumoId: insumoAgua?.id, isActive: true },
-      { name: 'Cerveza', categoryId: categoriaBebidas?.id, price: 45, type: 'SIMPLE', insumoId: insumoCerveza?.id, isActive: true },
-      { name: 'Jugo Natural', categoryId: categoriaBebidas?.id, price: 35, type: 'SIMPLE', insumoId: insumoJugo?.id, isActive: true },
+      { name: 'Refresco', categoryId: categoriaBebidas?.id, price: 25, type: 'SIMPLE', insumoId: insumoRefresco?.id, isActive: true, tenantId: demoTenant.id },
+      { name: 'Agua', categoryId: categoriaBebidas?.id, price: 15, type: 'SIMPLE', insumoId: insumoAgua?.id, isActive: true, tenantId: demoTenant.id },
+      { name: 'Cerveza', categoryId: categoriaBebidas?.id, price: 45, type: 'SIMPLE', insumoId: insumoCerveza?.id, isActive: true, tenantId: demoTenant.id },
+      { name: 'Jugo Natural', categoryId: categoriaBebidas?.id, price: 35, type: 'SIMPLE', insumoId: insumoJugo?.id, isActive: true, tenantId: demoTenant.id },
     ];
 
     for (const productData of productsData) {
@@ -976,12 +988,12 @@ export async function seedDatabase(dataSource: DataSource) {
   const recetaTacosPollo = finalRecipes.find(r => r.nombre === 'Tacos de Pollo');
 
   const productosAdicionales = [
-    { name: 'Pollo a la Plancha', categoryId: categoriaPlatillos?.id, price: 145, type: 'PREPARADO', recipeId: recetaPollo?.id, isActive: true },
-    { name: 'Camarones al Ajillo', categoryId: categoriaPlatillos?.id, price: 195, type: 'PREPARADO', recipeId: recetaCamarones?.id, isActive: true },
-    { name: 'Arroz con Frijoles', categoryId: categoriaPlatillos?.id, price: 45, type: 'PREPARADO', recipeId: recetaArrozFrijoles?.id, isActive: true },
-    { name: 'Tacos de Pollo', categoryId: categoriaPlatillos?.id, price: 85, type: 'PREPARADO', recipeId: recetaTacosPollo?.id, isActive: true },
-    { name: 'Orden de Limón', categoryId: categoriaExtras?.id, price: 10, type: 'SIMPLE', insumoId: limon?.id, isActive: true },
-    { name: 'Porción Extra', categoryId: categoriaExtras?.id, price: 25, type: 'SIMPLE', isActive: true },
+    { name: 'Pollo a la Plancha', categoryId: categoriaPlatillos?.id, price: 145, type: 'PREPARADO', recipeId: recetaPollo?.id, isActive: true, tenantId: demoTenant.id },
+    { name: 'Camarones al Ajillo', categoryId: categoriaPlatillos?.id, price: 195, type: 'PREPARADO', recipeId: recetaCamarones?.id, isActive: true, tenantId: demoTenant.id },
+    { name: 'Arroz con Frijoles', categoryId: categoriaPlatillos?.id, price: 45, type: 'PREPARADO', recipeId: recetaArrozFrijoles?.id, isActive: true, tenantId: demoTenant.id },
+    { name: 'Tacos de Pollo', categoryId: categoriaPlatillos?.id, price: 85, type: 'PREPARADO', recipeId: recetaTacosPollo?.id, isActive: true, tenantId: demoTenant.id },
+    { name: 'Orden de Limón', categoryId: categoriaExtras?.id, price: 10, type: 'SIMPLE', insumoId: limon?.id, isActive: true, tenantId: demoTenant.id },
+    { name: 'Porción Extra', categoryId: categoriaExtras?.id, price: 25, type: 'SIMPLE', isActive: true, tenantId: demoTenant.id },
   ];
 
   for (const productData of productosAdicionales) {
