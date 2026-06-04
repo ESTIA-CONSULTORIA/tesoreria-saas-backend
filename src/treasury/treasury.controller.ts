@@ -63,6 +63,8 @@ export class TreasuryController {
   @Get('accounts-payable')
   getAccountsPayable(@Request() req) {
     const tenantId = req.user?.tenantId || req.tenantId;
+    console.log('tenantId del JWT:', tenantId);
+    console.log('req.user:', req.user);
     return this.treasuryService.getAccountsPayable(tenantId);
   }
 
