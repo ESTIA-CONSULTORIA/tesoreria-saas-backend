@@ -9,6 +9,9 @@ export class Product {
   branchId: string;
 
   @Column({ nullable: true })
+  tenantId: string;
+
+  @Column({ nullable: true })
   categoryId: string;
 
   @Column({ default: '' })

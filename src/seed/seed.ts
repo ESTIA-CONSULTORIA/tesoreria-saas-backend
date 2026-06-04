@@ -1129,14 +1129,17 @@ export async function seedDatabase(dataSource: DataSource) {
   }
 
   // MIGRACIÓN: Actualizar productos POS existentes con tenantId
-  const productsWithoutTenant = await productsRepository.find({ where: [{ tenantId: IsNull() }, { tenantId: '' }] });
-  if (productsWithoutTenant.length > 0) {
-    for (const product of productsWithoutTenant) {
-      await productsRepository.update(product.id, {
-        tenantId: demoTenant.id,
-      });
+  const allProducts = await productsRepository.find();
+  if (allProducts.length > 0) {
+    for (const product of allProducts) {
+      if (!product.tenantId) {
+        await productsRepository.update(product.id, {
+          tenantId: demoTenant.id,
+        });
+      }
     }
-    console.log(`✅ ${productsWithoutTenant.length} productos POS actualizados con tenantId`);
+    const updatedCount = allProducts.filter(p => !p.tenantId).length;
+    console.log(`✅ ${updatedCount} productos POS actualizados con tenantId`);
   }
 
   const branchCentro = allBranches.find(b => b.name === 'Sucursal Centro');
