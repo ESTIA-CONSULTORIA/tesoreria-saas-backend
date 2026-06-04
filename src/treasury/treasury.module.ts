@@ -5,9 +5,10 @@ import { TreasuryController } from './treasury.controller';
 import { Bank } from '../banks/entities/bank.entity';
 import { Movement } from '../movements/entities/movement.entity';
 import { PaymentSchedule } from './entities/payment-schedule.entity';
+import { Purchase } from '../purchases/entities/purchase.entity';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Bank, Movement, PaymentSchedule])],
+  imports: [TypeOrmModule.forFeature([Bank, Movement, PaymentSchedule, Purchase])],
   controllers: [TreasuryController],
   providers: [TreasuryService],
   exports: [TreasuryService],
