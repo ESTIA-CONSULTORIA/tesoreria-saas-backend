@@ -1128,6 +1128,17 @@ export async function seedDatabase(dataSource: DataSource) {
     console.log(`✅ ${ordersWithoutTenant.length} órdenes de compra actualizadas con tenantId y campos faltantes`);
   }
 
+  // MIGRACIÓN: Actualizar productos POS existentes con tenantId
+  const productsWithoutTenant = await productsRepository.find({ where: [{ tenantId: IsNull() }, { tenantId: '' }] });
+  if (productsWithoutTenant.length > 0) {
+    for (const product of productsWithoutTenant) {
+      await productsRepository.update(product.id, {
+        tenantId: demoTenant.id,
+      });
+    }
+    console.log(`✅ ${productsWithoutTenant.length} productos POS actualizados con tenantId`);
+  }
+
   const branchCentro = allBranches.find(b => b.name === 'Sucursal Centro');
   const branchNorte = allBranches.find(b => b.name === 'Sucursal Norte');
 

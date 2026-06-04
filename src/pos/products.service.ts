@@ -16,9 +16,13 @@ export class ProductsService {
     private recipesRepo: Repository<Recipe>,
   ) {}
 
-  async findAll(branchId?: string) {
+  async findAll(branchId?: string, tenantId?: string) {
+    const where: any = {};
+    if (branchId) where.branchId = branchId;
+    if (tenantId) where.tenantId = tenantId;
+    
     const products = await this.productsRepo.find({
-      where: branchId ? { branchId } : undefined,
+      where,
       order: { name: 'ASC' },
     });
 
