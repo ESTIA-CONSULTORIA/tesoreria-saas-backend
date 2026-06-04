@@ -1089,6 +1089,19 @@ export async function seedDatabase(dataSource: DataSource) {
   const existingInvoices = await purchaseInvoicesRepository.count();
   const existingInventoryRecords = await inventoryRecordsRepository.count();
 
+  // MIGRACIÓN: Actualizar facturas existentes con tenantId y supplierId
+  const invoicesWithoutTenant = await purchaseInvoicesRepository.find({ where: { tenantId: null } });
+  if (invoicesWithoutTenant.length > 0) {
+    const firstSupplier = allSuppliers[0];
+    for (const invoice of invoicesWithoutTenant) {
+      await purchaseInvoicesRepository.update(invoice.id, {
+        tenantId: demoTenant.id,
+        supplierId: invoice.supplierId || firstSupplier?.id,
+      });
+    }
+    console.log(`✅ ${invoicesWithoutTenant.length} facturas actualizadas con tenantId y supplierId`);
+  }
+
   const branchCentro = allBranches.find(b => b.name === 'Sucursal Centro');
   const branchNorte = allBranches.find(b => b.name === 'Sucursal Norte');
 
