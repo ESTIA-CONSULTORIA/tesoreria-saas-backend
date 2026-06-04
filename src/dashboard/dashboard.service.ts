@@ -107,11 +107,11 @@ export class DashboardService {
       const previousExpense = Number(previousExpenseRaw?.total || 0);
 
       // Calcular variaciones
-      const incomeVariation = previousIncome > 0 ? ((currentIncome - previousIncome) / previousIncome) * 100 : 0;
-      const expenseVariation = previousExpense > 0 ? ((currentExpense - previousExpense) / previousExpense) * 100 : 0;
-      const balanceVariation = previousIncome > 0 && previousExpense > 0 
-        ? ((currentIncome - currentExpense) - (previousIncome - previousExpense)) / Math.abs(previousIncome - previousExpense) * 100 
-        : 0;
+      const incomeVariation = previousIncome === 0 ? 0 : ((currentIncome - previousIncome) / previousIncome) * 100;
+      const expenseVariation = previousExpense === 0 ? 0 : ((currentExpense - previousExpense) / previousExpense) * 100;
+      const previousBalance = previousIncome - previousExpense;
+      const currentBalance = currentIncome - currentExpense;
+      const balanceVariation = previousBalance === 0 ? 0 : ((currentBalance - previousBalance) / Math.abs(previousBalance)) * 100;
 
       // CxC y CxP (simulado - usaría tablas reales de facturas)
       const accountsReceivable = currentIncome * 0.15; // 15% pendiente

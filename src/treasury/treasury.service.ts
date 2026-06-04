@@ -133,7 +133,7 @@ export class TreasuryService {
         },
         comparison: {
           netChange: monthlyNet - lastMonthNet,
-          netChangePercent: lastMonthNet !== 0 ? ((monthlyNet - lastMonthNet) / Math.abs(lastMonthNet)) * 100 : 0,
+          netChangePercent: lastMonthNet === 0 ? 0 : ((monthlyNet - lastMonthNet) / Math.abs(lastMonthNet)) * 100,
         },
         topAccounts,
         lowBalanceAlerts,

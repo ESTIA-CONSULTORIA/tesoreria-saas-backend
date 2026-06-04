@@ -37,6 +37,7 @@ export const MODULES_BY_PLAN: Record<Plan, string[]> = {
     'reportes',
     'tesoreria',
     'conciliacion',
+    'pos',
     'configuracion-pos',
     'integraciones',
     'proveedores',
