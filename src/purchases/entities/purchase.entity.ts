@@ -1,4 +1,5 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, ManyToOne, JoinColumn } from 'typeorm';
+import { Supplier } from '../../suppliers/entities/supplier.entity';
 
 @Entity()
 export class Purchase {
@@ -13,6 +14,10 @@ export class Purchase {
 
   @Column({ nullable: true })
   supplierId: string;
+
+  @ManyToOne(() => Supplier)
+  @JoinColumn({ name: 'supplierId' })
+  supplier: Supplier;
 
   @Column({ nullable: true })
   ocId: string; // nullable, puede ser compra directa sin OC

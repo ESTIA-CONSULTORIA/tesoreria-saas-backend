@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, In } from 'typeorm';
 import { Bank } from '../banks/entities/bank.entity';
 import { Movement } from '../movements/entities/movement.entity';
 import { PaymentSchedule } from './entities/payment-schedule.entity';
@@ -482,14 +482,15 @@ export class TreasuryService {
     try {
       console.log('getAccountsPayable - tenantId:', tenantId);
       
-      const query = this.purchasesRepo
-        .createQueryBuilder('purchase')
-        .where('purchase.status IN (:...statuses)', { statuses: ['PENDIENTE', 'PARCIAL'] })
-        .orderBy('purchase.fechaVencimiento', 'ASC');
+      const where: any = { status: In(['PENDIENTE', 'PARCIAL']) };
+      if (tenantId) where.tenantId = tenantId;
       
-      if (tenantId) query.andWhere('purchase.tenantId = :tenantId', { tenantId });
+      const purchases = await this.purchasesRepo.find({
+        where,
+        relations: ['supplier'],
+        order: { fechaVencimiento: 'ASC' },
+      });
       
-      const purchases = await query.getMany();
       console.log('getAccountsPayable - purchases found:', purchases.length);
       
       const now = new Date();
@@ -502,6 +503,7 @@ export class TreasuryService {
           id: p.id,
           numero: p.numero,
           supplierId: p.supplierId,
+          supplierName: p.supplier?.nombre || 'N/A',
           monto: Number(p.total),
           montoPagado: Number(p.montoPagado),
           saldoPendiente: Number(p.total) - Number(p.montoPagado),
