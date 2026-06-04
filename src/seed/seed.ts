@@ -17,6 +17,7 @@ export async function seedDatabase(dataSource: DataSource) {
   const purchaseOrdersRepository = dataSource.getRepository('PurchaseOrder');
   const purchaseInvoicesRepository = dataSource.getRepository('Purchase');
   const inventoryRecordsRepository = dataSource.getRepository('Inventory');
+  const subscriptionRepository = dataSource.getRepository('Subscription');
 
   // Verificar si el usuario admin ya existe
   const existingAdmin = await usersRepository.findOne({ where: { email: 'admin@estia.com' } });
@@ -78,6 +79,19 @@ export async function seedDatabase(dataSource: DataSource) {
     console.log('✅ Tenant de prueba creado');
   }
 
+  // Crear suscripción para tenant de prueba
+  const existingTestSubscription = await subscriptionRepository.findOne({ where: { tenantId: testTenant.id } });
+  if (!existingTestSubscription) {
+    await subscriptionRepository.save({
+      tenantId: testTenant.id,
+      planCode: 'PRO',
+      startDate: new Date().toISOString().split('T')[0],
+      endDate: '2027-12-31',
+      status: 'ACTIVE',
+    });
+    console.log('✅ Suscripción creada para tenant de prueba');
+  }
+
   // Crear usuario de prueba con rol ADMIN (administrador del cliente)
   const existingAdminUser = await usersRepository.findOne({ where: { email: 'admin@empresademo.com' } });
   
@@ -124,6 +138,19 @@ export async function seedDatabase(dataSource: DataSource) {
       isActive: true,
     });
     console.log('✅ Tenant "Grupo Empresarial Demo" creado');
+  }
+
+  // Crear suscripción para tenant demo
+  const existingDemoSubscription = await subscriptionRepository.findOne({ where: { tenantId: demoTenant.id } });
+  if (!existingDemoSubscription) {
+    await subscriptionRepository.save({
+      tenantId: demoTenant.id,
+      planCode: 'BUSINESS',
+      startDate: new Date().toISOString().split('T')[0],
+      endDate: '2027-12-31',
+      status: 'ACTIVE',
+    });
+    console.log('✅ Suscripción creada para tenant demo');
   }
 
   // Crear roles adicionales si no existen
