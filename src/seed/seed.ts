@@ -1120,8 +1120,8 @@ export async function seedDatabase(dataSource: DataSource) {
       await purchaseOrdersRepository.update(order.id, {
         tenantId: demoTenant.id,
         supplierId: order.supplierId || firstSupplier?.id,
-        orderNumber: order.orderNumber || `OC-${String(i + 1).padStart(6, '0')}`,
-        orderDate: order.orderDate || now.toISOString().split('T')[0],
+        numero: order.numero || `OC-${String(i + 1).padStart(6, '0')}`,
+        fecha: order.fecha || now.toISOString().split('T')[0],
         total: order.total > 0 ? order.total : (order.subtotal || 0),
       });
     }
@@ -1144,15 +1144,14 @@ export async function seedDatabase(dataSource: DataSource) {
       await purchaseOrdersRepository.save({
         supplierId: supplierDistribuidora?.id,
         branchId: branchCentro?.id,
-        orderNumber: `OC-${String(100 + i).padStart(6, '0')}`,
+        numero: `OC-${String(100 + i).padStart(6, '0')}`,
         status: 'RECIBIDA',
-        orderDate: date,
-        expectedDate: new Date(date.getTime() + 3 * 24 * 60 * 60 * 1000),
-        receivedDate: new Date(date.getTime() + 3 * 24 * 60 * 60 * 1000),
+        fecha: date.toISOString().split('T')[0],
+        fechaEntregaEsperada: new Date(date.getTime() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
         subtotal: Math.floor(Math.random() * 15000) + 5000,
-        tax: 0,
+        impuestos: 0,
         total: 0,
-        notes: 'Orden de compra de insumos',
+        notas: 'Orden de compra de insumos',
       });
     }
 
@@ -1161,14 +1160,14 @@ export async function seedDatabase(dataSource: DataSource) {
     await purchaseOrdersRepository.save({
       supplierId: supplierFrutas?.id,
       branchId: branchCentro?.id,
-      orderNumber: 'OC-000103',
+      numero: 'OC-000103',
       status: 'PENDIENTE',
-      orderDate: pendingDate,
-      expectedDate: new Date(pendingDate.getTime() + 2 * 24 * 60 * 60 * 1000),
+      fecha: pendingDate.toISOString().split('T')[0],
+      fechaEntregaEsperada: new Date(pendingDate.getTime() + 2 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
       subtotal: 8500,
-      tax: 0,
+      impuestos: 0,
       total: 0,
-      notes: 'Orden pendiente de entrega',
+      notas: 'Orden pendiente de entrega',
     });
 
     console.log('✅ 3 órdenes de compra creadas');
