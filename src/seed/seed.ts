@@ -1089,17 +1089,24 @@ export async function seedDatabase(dataSource: DataSource) {
   const existingInvoices = await purchaseInvoicesRepository.count();
   const existingInventoryRecords = await inventoryRecordsRepository.count();
 
-  // MIGRACIÓN: Actualizar facturas existentes con tenantId y supplierId
+  // MIGRACIÓN: Actualizar facturas existentes con tenantId, supplierId y campos faltantes
   const invoicesWithoutTenant = await purchaseInvoicesRepository.find({ where: { tenantId: null } });
   if (invoicesWithoutTenant.length > 0) {
     const firstSupplier = allSuppliers[0];
     for (const invoice of invoicesWithoutTenant) {
+      const now = new Date();
+      const fechaVencimiento = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+      
       await purchaseInvoicesRepository.update(invoice.id, {
         tenantId: demoTenant.id,
         supplierId: invoice.supplierId || firstSupplier?.id,
+        numero: invoice.numero || `FAC-${String(500 + Math.floor(Math.random() * 1000)).padStart(6, '0')}`,
+        total: invoice.total > 0 ? invoice.total : (invoice.subtotal || 0),
+        fechaVencimiento: invoice.fechaVencimiento || fechaVencimiento.toISOString().split('T')[0],
+        diasCredito: invoice.diasCredito || 30,
       });
     }
-    console.log(`✅ ${invoicesWithoutTenant.length} facturas actualizadas con tenantId y supplierId`);
+    console.log(`✅ ${invoicesWithoutTenant.length} facturas actualizadas con tenantId, supplierId y campos faltantes`);
   }
 
   const branchCentro = allBranches.find(b => b.name === 'Sucursal Centro');
