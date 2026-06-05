@@ -1410,6 +1410,35 @@ export async function seedDatabase(dataSource: DataSource) {
     console.log('✅ Mesas de barra verificadas/creadas');
   }
 
+  // Migración: Asignar categoryId a productos existentes sin categoría
+  const categories = await posCategoriesRepository.find();
+  const comida = categories.find(c => c.name === 'Comida');
+  const bebidas = categories.find(c => c.name === 'Bebidas');
+  const postres = categories.find(c => c.name === 'Postres');
+
+  if (comida && bebidas && postres) {
+    const productsWithoutCategory = await productsRepository.find({ where: { categoryId: IsNull() } });
+    
+    for (const product of productsWithoutCategory) {
+      const productName = product.name.toLowerCase();
+      let categoryId: string | null = null;
+      
+      // Asignar categoría según nombre del producto
+      if (['hamburguesa', 'hot dog', 'pizza', 'pollo', 'camarones', 'arroz', 'tacos'].some(name => productName.includes(name))) {
+        categoryId = comida.id;
+      } else if (['refresco', 'agua', 'cerveza', 'jugo'].some(name => productName.includes(name))) {
+        categoryId = bebidas.id;
+      } else if (['orden de limón', 'porción extra'].some(name => productName.includes(name))) {
+        categoryId = postres.id;
+      }
+      
+      if (categoryId) {
+        await productsRepository.update(product.id, { categoryId });
+      }
+    }
+    console.log(`✅ ${productsWithoutCategory.length} productos migrados con categoryId asignado`);
+  }
+
   // Resumen final del seed
   const totalCompanies = await companiesRepository.count({ where: { tenantId: testTenant.id } });
   const totalBranches = await branchesRepository.count();
