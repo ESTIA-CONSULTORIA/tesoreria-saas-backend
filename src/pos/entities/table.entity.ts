@@ -12,7 +12,7 @@ export class Table {
   @Column({ nullable: true })
   areaId: string;
 
-  @ManyToOne(() => Area, area => area.tables)
+  @ManyToOne(() => Area, area => area.tables, { nullable: true })
   @JoinColumn({ name: 'areaId' })
   area: Area;
 
