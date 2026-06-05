@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Put, Body, Param, Query, Request } from '@nestjs/common';
+import { Controller, Get, Post, Put, Body, Headers, Param, Query, Request } from '@nestjs/common';
 import { ShiftsService } from './shifts.service';
 
 @Controller('pos/shifts')
@@ -35,17 +35,19 @@ export class ShiftsController {
   }
 
   @Get('open')
-  getOpenShift(@Query('cajero') cajero: string, @Query('sucursalId') sucursalId: string, @Request() req) {
+  getOpenShift(@Query('cajero') cajero: string, @Query('sucursalId') sucursalId: string, @Request() req, @Headers('x-branch-id') headerBranchId?: string) {
     const tenantId = req.user?.tenantId || req.tenantId;
-    return this.shiftsService.findOpenShift(cajero, sucursalId, tenantId);
+    const branchId = headerBranchId || sucursalId;
+    return this.shiftsService.findOpenShift(cajero, branchId, tenantId);
   }
 
   @Get()
-  getShifts(@Query() filters: any, @Request() req) {
+  getShifts(@Query() filters: any, @Request() req, @Headers('x-branch-id') branchId?: string) {
     const tenantId = req.user?.tenantId || req.tenantId;
     return this.shiftsService.findAll({
       ...filters,
       tenantId,
+      branchId,
     });
   }
 

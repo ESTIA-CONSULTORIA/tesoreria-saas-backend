@@ -1,7 +1,7 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Movement } from './entities/movement.entity';
-import { Repository } from 'typeorm';
+import { Repository, In } from 'typeorm';
 import { Bank } from '../banks/entities/bank.entity';
 
 @Injectable()
@@ -121,6 +121,23 @@ export class MovementsService {
   findByAccount(accountId: string) {
     return this.movementsRepository.find({
       where: { accountId },
+      order: { createdAt: 'DESC' },
+    });
+  }
+
+  async findByBranch(branchId: string) {
+    const banks = await this.banksRepository.find({
+      where: { branchId },
+    });
+
+    const accountIds = banks.map((bank) => bank.id);
+
+    if (accountIds.length === 0) {
+      return [];
+    }
+
+    return this.movementsRepository.find({
+      where: { accountId: In(accountIds) } as any,
       order: { createdAt: 'DESC' },
     });
   }

@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Put, Delete, Body, Param, Req } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Body, Headers, Param, Req } from '@nestjs/common';
 import { ProductsService } from './products.service';
 import { Modulo } from '../auth/modulo.decorator';
 
@@ -8,8 +8,9 @@ export class ProductsController {
   constructor(private productsService: ProductsService) {}
 
   @Get()
-  findAll(@Req() req: any, @Param('branchId') branchId?: string) {
+  findAll(@Req() req: any, @Headers('x-branch-id') headerBranchId?: string, @Param('branchId') paramBranchId?: string) {
     const tenantId = req.user?.tenantId;
+    const branchId = headerBranchId || paramBranchId;
     return this.productsService.findAll(branchId, tenantId);
   }
 

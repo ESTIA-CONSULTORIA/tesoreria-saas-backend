@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Put, Delete, Body, Param, Query, Request } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Body, Headers, Param, Query, Request } from '@nestjs/common';
 import { TreasuryService } from './treasury.service';
 
 @Controller('treasury')
@@ -6,34 +6,34 @@ export class TreasuryController {
   constructor(private treasuryService: TreasuryService) {}
 
   @Get('executive-summary')
-  getExecutiveSummary(@Request() req) {
+  getExecutiveSummary(@Request() req, @Headers('x-branch-id') branchId?: string) {
     const tenantId = req.user?.tenantId || req.tenantId;
-    return this.treasuryService.getExecutiveSummary(tenantId);
+    return this.treasuryService.getExecutiveSummary(tenantId, branchId);
   }
 
   @Get('cash-flow-forecast')
-  getCashFlowForecast(@Query('days') days?: string, @Request() req?: any) {
+  getCashFlowForecast(@Query('days') days?: string, @Request() req?: any, @Headers('x-branch-id') branchId?: string) {
     const tenantId = req?.user?.tenantId || req?.tenantId;
-    return this.treasuryService.getCashFlowForecast(days ? parseInt(days) : 30, tenantId);
+    return this.treasuryService.getCashFlowForecast(days ? parseInt(days) : 30, tenantId, branchId);
   }
 
   @Get('bank-position')
-  getBankPosition(@Request() req) {
+  getBankPosition(@Request() req, @Headers('x-branch-id') branchId?: string) {
     const tenantId = req.user?.tenantId || req.tenantId;
-    return this.treasuryService.getBankPosition(tenantId);
+    return this.treasuryService.getBankPosition(tenantId, branchId);
   }
 
   @Get('alerts')
-  getAlerts(@Request() req) {
+  getAlerts(@Request() req, @Headers('x-branch-id') branchId?: string) {
     const tenantId = req.user?.tenantId || req.tenantId;
-    return this.treasuryService.getAlerts(tenantId);
+    return this.treasuryService.getAlerts(tenantId, branchId);
   }
 
   // Scheduled Payments CRUD
   @Get('scheduled-payments')
-  getScheduledPayments(@Request() req) {
+  getScheduledPayments(@Request() req, @Headers('x-branch-id') branchId?: string) {
     const tenantId = req.user?.tenantId || req.tenantId;
-    return this.treasuryService.getScheduledPayments(tenantId);
+    return this.treasuryService.getScheduledPayments(tenantId, branchId);
   }
 
   @Post('scheduled-payments')
@@ -61,18 +61,18 @@ export class TreasuryController {
 
   // Accounts Payable (CxP)
   @Get('accounts-payable')
-  getAccountsPayable(@Request() req) {
+  getAccountsPayable(@Request() req, @Headers('x-branch-id') branchId?: string) {
     const tenantId = req.user?.tenantId || req.tenantId;
     console.log('tenantId del JWT:', tenantId);
     console.log('req.user:', req.user);
-    return this.treasuryService.getAccountsPayable(tenantId);
+    return this.treasuryService.getAccountsPayable(tenantId, branchId);
   }
 
   // Accounts Receivable (CxC)
   @Get('accounts-receivable')
-  getAccountsReceivable(@Request() req) {
+  getAccountsReceivable(@Request() req, @Headers('x-branch-id') branchId?: string) {
     const tenantId = req.user?.tenantId || req.tenantId;
-    return this.treasuryService.getAccountsReceivable(tenantId);
+    return this.treasuryService.getAccountsReceivable(tenantId, branchId);
   }
 
   // Alert Configuration

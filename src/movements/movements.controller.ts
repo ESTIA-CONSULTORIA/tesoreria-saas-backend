@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, Headers, Param, Post, Query } from '@nestjs/common';
 import { MovementsService } from './movements.service';
 
 @Controller('movements')
@@ -29,6 +29,7 @@ export class MovementsController {
 
   @Get()
   findAll(
+    @Headers('x-branch-id') branchId?: string,
     @Query('accountId') accountId?: string,
     @Query('type') type?: string,
     @Query('category') category?: string,
@@ -37,6 +38,10 @@ export class MovementsController {
     @Query('page') page?: string,
     @Query('limit') limit?: string,
   ) {
+    if (branchId) {
+      return this.movementsService.findByBranch(branchId);
+    }
+
     if (accountId || type || category || startDate || endDate || page || limit) {
       return this.movementsService.findWithFilters(
         accountId,

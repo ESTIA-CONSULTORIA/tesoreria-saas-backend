@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Headers, Param, Patch, Post } from '@nestjs/common';
 import { BanksService } from './banks.service';
 
 @Controller('banks')
@@ -30,7 +30,10 @@ export class BanksController {
   }
 
   @Get()
-  findAll() {
+  findAll(@Headers('x-branch-id') branchId?: string) {
+    if (branchId) {
+      return this.banksService.findByBranch(branchId);
+    }
     return this.banksService.findAll();
   }
 
