@@ -1340,6 +1340,28 @@ export async function seedDatabase(dataSource: DataSource) {
     }
   }
 
+  // Migración: Asignar áreas a mesas existentes con areaId NULL
+  const existingTables = await tablesRepository.find({ where: { areaId: IsNull() } });
+  if (existingTables.length > 0) {
+    const areas = await areasRepository.find();
+    const terraza = areas.find(a => a.name === 'Terraza');
+    const salon = areas.find(a => a.name === 'Salón principal');
+    const barra = areas.find(a => a.name === 'Barra');
+
+    if (terraza && salon && barra) {
+      for (const table of existingTables) {
+        if ([1, 2, 3].includes(table.number)) {
+          await tablesRepository.update(table.id, { areaId: terraza.id });
+        } else if ([4, 5, 6, 7].includes(table.number)) {
+          await tablesRepository.update(table.id, { areaId: salon.id });
+        } else {
+          await tablesRepository.update(table.id, { areaId: barra.id });
+        }
+      }
+      console.log(`✅ ${existingTables.length} mesas migradas con areaId asignado`);
+    }
+  }
+
   // Resumen final del seed
   const totalCompanies = await companiesRepository.count({ where: { tenantId: testTenant.id } });
   const totalBranches = await branchesRepository.count();
