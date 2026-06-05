@@ -189,14 +189,23 @@ export class ShiftsService {
     }
   }
 
-  async findOpenShift(cajero: string, sucursalId: string) {
+  async findOpenShift(cajero: string, sucursalId: string, tenantId?: string) {
     try {
+      const where: any = { status: 'ABIERTO' };
+      
+      // Ignorar filtros hardcodeados
+      if (cajero && cajero !== 'current-user-id') {
+        where.cajero = cajero;
+      }
+      if (sucursalId && sucursalId !== 'default-branch-id') {
+        where.sucursalId = sucursalId;
+      }
+      if (tenantId) {
+        where.tenantId = tenantId;
+      }
+      
       return this.shiftsRepo.findOne({
-        where: {
-          cajero,
-          sucursalId,
-          status: 'ABIERTO',
-        },
+        where,
         order: { createdAt: 'DESC' },
       });
     } catch (error) {

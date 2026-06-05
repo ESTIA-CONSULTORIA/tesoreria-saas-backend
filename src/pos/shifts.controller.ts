@@ -35,8 +35,9 @@ export class ShiftsController {
   }
 
   @Get('open')
-  getOpenShift(@Query('cajero') cajero: string, @Query('sucursalId') sucursalId: string) {
-    return this.shiftsService.findOpenShift(cajero, sucursalId);
+  getOpenShift(@Query('cajero') cajero: string, @Query('sucursalId') sucursalId: string, @Request() req) {
+    const tenantId = req.user?.tenantId || req.tenantId;
+    return this.shiftsService.findOpenShift(cajero, sucursalId, tenantId);
   }
 
   @Get()
