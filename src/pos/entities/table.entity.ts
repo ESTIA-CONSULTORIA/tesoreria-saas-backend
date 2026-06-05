@@ -1,4 +1,5 @@
-import { Entity, PrimaryGeneratedColumn, Column } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn } from 'typeorm';
+import { Area } from './area.entity';
 
 @Entity()
 export class Table {
@@ -10,6 +11,10 @@ export class Table {
 
   @Column({ nullable: true })
   areaId: string;
+
+  @ManyToOne(() => Area, area => area.tables)
+  @JoinColumn({ name: 'areaId' })
+  area: Area;
 
   @Column()
   number: number;

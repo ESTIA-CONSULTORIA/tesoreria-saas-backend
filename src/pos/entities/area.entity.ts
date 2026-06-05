@@ -1,4 +1,5 @@
-import { Entity, PrimaryGeneratedColumn, Column } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, OneToMany } from 'typeorm';
+import { Table } from './table.entity';
 
 @Entity()
 export class Area {
@@ -16,6 +17,9 @@ export class Area {
 
   @Column({ default: true })
   isActive: boolean;
+
+  @OneToMany(() => Table, table => table.area)
+  tables: Table[];
 
   @Column({ type: 'timestamp', default: () => 'CURRENT_TIMESTAMP' })
   createdAt: Date;

@@ -13,6 +13,7 @@ export class AreasService {
   findAll(branchId?: string) {
     return this.areasRepo.find({
       where: branchId ? { branchId } : undefined,
+      relations: ['tables'],
       order: { name: 'ASC' },
     });
   }
