@@ -198,7 +198,7 @@ export async function seedDatabase(dataSource: DataSource) {
     const existingUser = await usersRepository.findOne({ where: { email: userData.email } });
     if (!existingUser) {
       const hashedPassword = await bcrypt.hash(userData.password, 10);
-      await usersRepository.save({
+      const savedUser = await usersRepository.save({
         email: userData.email,
         password: hashedPassword,
         name: userData.name,
@@ -207,7 +207,13 @@ export async function seedDatabase(dataSource: DataSource) {
         tenantId: demoTenant.id,
         isActive: true,
       });
-      console.log(`✅ Usuario ${userData.email} (${userData.roleCode}) creado`);
+      if (userData.email === 'cajero@demo.com') {
+        console.log('✅ Usuario cajero@demo.com creado');
+        console.log('cajero password (hashed):', savedUser.password);
+        console.log('cajero password (original):', userData.password);
+      } else {
+        console.log(`✅ Usuario ${userData.email} (${userData.roleCode}) creado`);
+      }
     }
   }
 
@@ -1437,6 +1443,20 @@ export async function seedDatabase(dataSource: DataSource) {
       }
     }
     console.log(`✅ ${productsWithoutCategory.length} productos migrados con categoryId asignado`);
+  }
+
+  // Migración: Actualizar password del cajero a NIP '1234'
+  const cajeroUser = await usersRepository.findOne({ where: { email: 'cajero@demo.com' } });
+  if (cajeroUser) {
+    const hashedNip = await bcrypt.hash('1234', 10);
+    await usersRepository.update(
+      { email: 'cajero@demo.com' },
+      { password: hashedNip }
+    );
+    console.log('✅ Password cajero actualizado a NIP 1234');
+    console.log('   Hash generado:', hashedNip);
+  } else {
+    console.log('⚠️ Cajero no encontrado, no se actualizó password');
   }
 
   // Resumen final del seed

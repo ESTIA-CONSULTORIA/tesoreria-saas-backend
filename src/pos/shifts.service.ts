@@ -191,23 +191,25 @@ export class ShiftsService {
 
   async findOpenShift(cajero: string, sucursalId: string, tenantId?: string) {
     try {
-      const where: any = { status: 'ABIERTO' };
+      console.log('findOpenShift params:', { cajero, sucursalId, tenantId });
       
-      // Ignorar filtros hardcodeados
-      if (cajero && cajero !== 'current-user-id') {
-        where.cajero = cajero;
-      }
-      if (sucursalId && sucursalId !== 'default-branch-id') {
-        where.sucursalId = sucursalId;
-      }
+      // Primero intentar con tenantId
       if (tenantId) {
-        where.tenantId = tenantId;
+        const shift = await this.shiftsRepo.findOne({
+          where: { status: 'ABIERTO', tenantId },
+          order: { createdAt: 'DESC' },
+        });
+        console.log('findOpenShift with tenantId result:', shift?.id);
+        if (shift) return shift;
       }
       
-      return this.shiftsRepo.findOne({
-        where,
+      // Fallback: buscar cualquier turno abierto
+      const shift = await this.shiftsRepo.findOne({
+        where: { status: 'ABIERTO' },
         order: { createdAt: 'DESC' },
       });
+      console.log('findOpenShift fallback result:', shift?.id);
+      return shift;
     } catch (error) {
       console.error('ShiftsService.findOpenShift error:', error);
       throw new Error(`Error al buscar turno abierto: ${error.message}`);

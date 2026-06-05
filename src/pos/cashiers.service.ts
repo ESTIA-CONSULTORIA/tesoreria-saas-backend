@@ -12,13 +12,25 @@ export class CashiersService {
   ) {}
 
   async loginWithNip(nip: string, tenantId: string) {
-    // Buscar usuario con roleCode CAJERO y tenantId
-    const user = await this.usersRepo.findOne({
-      where: {
-        roleCode: 'CAJERO',
-        tenantId,
-      },
-    });
+    console.log('loginWithNip - nip:', nip);
+    console.log('loginWithNip - tenantId:', tenantId);
+
+    // Buscar usuario con roleCode CAJERO
+    // Si tenantId es null o vacío, buscar solo por roleCode
+    const where: any = { roleCode: 'CAJERO' };
+    if (tenantId) {
+      where.tenantId = tenantId;
+    }
+
+    console.log('loginWithNip - where:', where);
+    const user = await this.usersRepo.findOne({ where });
+
+    console.log('loginWithNip - user found:', !!user);
+    if (user) {
+      console.log('loginWithNip - user.email:', user.email);
+      console.log('loginWithNip - user.roleCode:', user.roleCode);
+      console.log('loginWithNip - user.tenantId:', user.tenantId);
+    }
 
     if (!user) {
       throw new HttpException('NIP incorrecto', HttpStatus.UNAUTHORIZED);
@@ -26,6 +38,8 @@ export class CashiersService {
 
     // Verificar NIP contra password hasheado
     const isNipValid = await bcrypt.compare(nip, user.password);
+    console.log('loginWithNip - isNipValid:', isNipValid);
+
     if (!isNipValid) {
       throw new HttpException('NIP incorrecto', HttpStatus.UNAUTHORIZED);
     }
