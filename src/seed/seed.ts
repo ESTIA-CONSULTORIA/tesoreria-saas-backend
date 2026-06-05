@@ -18,6 +18,8 @@ export async function seedDatabase(dataSource: DataSource) {
   const purchaseInvoicesRepository = dataSource.getRepository('Purchase');
   const inventoryRecordsRepository = dataSource.getRepository('Inventory');
   const subscriptionRepository = dataSource.getRepository('Subscription');
+  const areasRepository = dataSource.getRepository('Area');
+  const tablesRepository = dataSource.getRepository('Table');
 
   // Verificar si el usuario admin ya existe
   const existingAdmin = await usersRepository.findOne({ where: { email: 'admin@estia.com' } });
@@ -265,6 +267,45 @@ export async function seedDatabase(dataSource: DataSource) {
     });
 
     console.log('✅ 3 sucursales creadas');
+
+    // Crear áreas y mesas para POS
+    const areaTerraza = await areasRepository.save({
+      branchId: branch1.id,
+      name: 'Terraza',
+      capacity: 12,
+      isActive: true,
+    });
+
+    const areaSalon = await areasRepository.save({
+      branchId: branch1.id,
+      name: 'Salón principal',
+      capacity: 20,
+      isActive: true,
+    });
+
+    const areaBarra = await areasRepository.save({
+      branchId: branch1.id,
+      name: 'Barra',
+      capacity: 8,
+      isActive: true,
+    });
+
+    // Mesas Terraza
+    await tablesRepository.save({ branchId: branch1.id, areaId: areaTerraza.id, number: 1, capacity: 4, status: 'AVAILABLE', isActive: true });
+    await tablesRepository.save({ branchId: branch1.id, areaId: areaTerraza.id, number: 2, capacity: 4, status: 'AVAILABLE', isActive: true });
+    await tablesRepository.save({ branchId: branch1.id, areaId: areaTerraza.id, number: 3, capacity: 4, status: 'AVAILABLE', isActive: true });
+
+    // Mesas Salón
+    await tablesRepository.save({ branchId: branch1.id, areaId: areaSalon.id, number: 4, capacity: 6, status: 'AVAILABLE', isActive: true });
+    await tablesRepository.save({ branchId: branch1.id, areaId: areaSalon.id, number: 5, capacity: 6, status: 'AVAILABLE', isActive: true });
+    await tablesRepository.save({ branchId: branch1.id, areaId: areaSalon.id, number: 6, capacity: 4, status: 'AVAILABLE', isActive: true });
+    await tablesRepository.save({ branchId: branch1.id, areaId: areaSalon.id, number: 7, capacity: 4, status: 'AVAILABLE', isActive: true });
+
+    // Mesas Barra
+    await tablesRepository.save({ branchId: branch1.id, areaId: areaBarra.id, number: 1, capacity: 2, status: 'AVAILABLE', isActive: true });
+    await tablesRepository.save({ branchId: branch1.id, areaId: areaBarra.id, number: 2, capacity: 2, status: 'AVAILABLE', isActive: true });
+
+    console.log('✅ 3 áreas y 10 mesas creadas para POS');
 
     // Crear cuentas bancarias
     const bank1 = await banksRepository.save({
