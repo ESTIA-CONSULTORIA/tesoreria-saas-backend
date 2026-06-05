@@ -40,4 +40,13 @@ export class BranchesService {
       where: { companyId },
     });
   }
+
+  async update(id: string, data: { companyId?: string; code?: string; name?: string; address?: string; city?: string; state?: string; isActive?: boolean }) {
+    await this.branchesRepository.update(id, data);
+    return this.branchesRepository.findOne({ where: { id } });
+  }
+
+  async remove(id: string) {
+    await this.branchesRepository.delete(id);
+  }
 }

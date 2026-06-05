@@ -38,4 +38,13 @@ export class CompaniesService {
       where: { tenantId },
     });
   }
+
+  async update(id: string, data: { legalName?: string; tradeName?: string; taxId?: string; baseCurrency?: string; isActive?: boolean }) {
+    await this.companiesRepository.update(id, data);
+    return this.companiesRepository.findOne({ where: { id } });
+  }
+
+  async remove(id: string) {
+    await this.companiesRepository.delete(id);
+  }
 }
