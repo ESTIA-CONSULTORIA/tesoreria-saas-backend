@@ -10,11 +10,19 @@ export class CategoriesService {
     private categoriesRepo: Repository<PosCategory>,
   ) {}
 
-  findAll(branchId?: string) {
-    return this.categoriesRepo.find({
-      where: branchId ? { branchId } : undefined,
-      order: { order: 'ASC', name: 'ASC' },
-    });
+  async findAll(branchId?: string) {
+    const query = this.categoriesRepo.createQueryBuilder('category');
+    
+    if (branchId) {
+      query.andWhere('category.branchId = :branchId', { branchId });
+    }
+    
+    // Subquery para contar productos por categoría
+    query.loadRelationCountAndMap('category.productCount', 'category.products', 'product');
+    
+    query.orderBy('category.order', 'ASC').addOrderBy('category.name', 'ASC');
+    
+    return query.getMany();
   }
 
   findOne(id: string) {

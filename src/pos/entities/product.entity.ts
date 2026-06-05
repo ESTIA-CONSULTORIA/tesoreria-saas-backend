@@ -1,4 +1,5 @@
-import { Entity, PrimaryGeneratedColumn, Column } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn } from 'typeorm';
+import { PosCategory } from './category.entity';
 
 @Entity()
 export class Product {
@@ -13,6 +14,10 @@ export class Product {
 
   @Column({ nullable: true })
   categoryId: string;
+
+  @ManyToOne(() => PosCategory, category => category.products, { nullable: true })
+  @JoinColumn({ name: 'categoryId' })
+  category: PosCategory;
 
   @Column({ default: '' })
   name: string;
