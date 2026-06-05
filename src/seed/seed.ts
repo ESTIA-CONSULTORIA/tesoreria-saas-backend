@@ -1340,6 +1340,21 @@ export async function seedDatabase(dataSource: DataSource) {
     }
   }
 
+  // Migración: Limpiar duplicados de mesas
+  const allTables = await tablesRepository.find();
+  const tableMap = new Map<string, any>(); // key: "number-areaId", value: table
+  
+  for (const table of allTables) {
+    const key = `${table.number}-${table.areaId}`;
+    if (tableMap.has(key)) {
+      // Eliminar duplicado (el más reciente)
+      await tablesRepository.delete(table.id);
+    } else {
+      tableMap.set(key, table);
+    }
+  }
+  console.log(`✅ Duplicados de mesas eliminados`);
+
   // Migración: Asignar áreas a mesas existentes con areaId NULL
   const existingTables = await tablesRepository.find({ where: { areaId: IsNull() } });
   if (existingTables.length > 0) {
@@ -1360,6 +1375,39 @@ export async function seedDatabase(dataSource: DataSource) {
       }
       console.log(`✅ ${existingTables.length} mesas migradas con areaId asignado`);
     }
+  }
+
+  // Migración: Crear mesas de barra faltantes si no existen
+  const areas = await areasRepository.find();
+  const barra = areas.find(a => a.name === 'Barra');
+  const demoBranch = await branchesRepository.findOne({ where: {} });
+  
+  if (barra && demoBranch) {
+    const barraTables = await tablesRepository.find({ where: { areaId: barra.id } });
+    const existingNumbers = barraTables.map(t => t.number);
+    
+    // Crear mesas 8 y 9 si no existen
+    if (!existingNumbers.includes(8)) {
+      await tablesRepository.save({
+        branchId: demoBranch.id,
+        areaId: barra.id,
+        number: 8,
+        capacity: 2,
+        status: 'AVAILABLE',
+        isActive: true,
+      });
+    }
+    if (!existingNumbers.includes(9)) {
+      await tablesRepository.save({
+        branchId: demoBranch.id,
+        areaId: barra.id,
+        number: 9,
+        capacity: 2,
+        status: 'AVAILABLE',
+        isActive: true,
+      });
+    }
+    console.log('✅ Mesas de barra verificadas/creadas');
   }
 
   // Resumen final del seed
