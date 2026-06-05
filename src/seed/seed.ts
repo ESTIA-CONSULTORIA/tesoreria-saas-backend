@@ -190,7 +190,7 @@ export async function seedDatabase(dataSource: DataSource) {
   const demoUsers = [
     { email: 'admin@demo.com', password: 'Admin123', name: 'Administrador Demo', role: adminRole, roleCode: 'ADMIN' },
     { email: 'gerente@demo.com', password: 'Admin123', name: 'Gerente Demo', role: gerenteRole, roleCode: 'GERENTE' },
-    { email: 'cajero@demo.com', password: 'Admin123', name: 'Cajero Demo', role: cajeroRole, roleCode: 'CAJERO' },
+    { email: 'cajero@demo.com', password: '1234', name: 'Cajero Demo', role: cajeroRole, roleCode: 'CAJERO' },
     { email: 'contador@demo.com', password: 'Admin123', name: 'Contador Demo', role: contadorRole, roleCode: 'CONTADOR' },
   ];
 

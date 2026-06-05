@@ -14,6 +14,8 @@ import { SalesController } from './sales.controller';
 import { SalesService } from './sales.service';
 import { ShiftsController } from './shifts.controller';
 import { ShiftsService } from './shifts.service';
+import { CashiersController } from './cashiers.controller';
+import { CashiersService } from './cashiers.service';
 import { PosConfig } from './entities/pos-config.entity';
 import { Product } from './entities/product.entity';
 import { PosCategory } from './entities/category.entity';
@@ -23,10 +25,11 @@ import { Sale } from './entities/sale.entity';
 import { Shift } from './entities/shift.entity';
 import { Recipe } from '../costs/entities/recipe.entity';
 import { Insumo } from '../costs/entities/insumo.entity';
+import { User } from '../users/entities/user.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([PosConfig, Product, PosCategory, Area, Table, Sale, Shift, Recipe, Insumo]),
+    TypeOrmModule.forFeature([PosConfig, Product, PosCategory, Area, Table, Sale, Shift, Recipe, Insumo, User]),
   ],
   controllers: [
     PosController,
@@ -36,6 +39,7 @@ import { Insumo } from '../costs/entities/insumo.entity';
     TablesController,
     SalesController,
     ShiftsController,
+    CashiersController,
   ],
   providers: [
     PosService,
@@ -45,6 +49,7 @@ import { Insumo } from '../costs/entities/insumo.entity';
     TablesService,
     SalesService,
     ShiftsService,
+    CashiersService,
   ],
   exports: [
     PosService,
