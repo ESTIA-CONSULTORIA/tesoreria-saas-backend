@@ -47,4 +47,8 @@ export class CompaniesService {
   async remove(id: string) {
     await this.companiesRepository.delete(id);
   }
+
+  async findOne(id: string) {
+    return this.companiesRepository.findOne({ where: { id } });
+  }
 }

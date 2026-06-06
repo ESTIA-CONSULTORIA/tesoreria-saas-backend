@@ -23,6 +23,10 @@ export class DashboardService {
   ) {}
 
   async getKpis(period: string = 'month', branchId?: string, tenantId?: string) {
+    console.log('=== DASHBOARD KPIS LLAMADO ===');
+    console.log('tenantId recibido:', tenantId);
+    console.log('branchId recibido:', branchId);
+
     try {
       const now = new Date();
       let startDate: Date;
