@@ -7,10 +7,9 @@ import { Company } from '../companies/entities/company.entity';
 import { Branch } from '../branches/entities/branch.entity';
 import { Bank } from '../banks/entities/bank.entity';
 import { Movement } from '../movements/entities/movement.entity';
-import { CompaniesModule } from '../companies/companies.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([DashboardMetric, Company, Branch, Bank, Movement]), CompaniesModule],
+  imports: [TypeOrmModule.forFeature([DashboardMetric, Company, Branch, Bank, Movement])],
   controllers: [DashboardController],
   providers: [DashboardService],
   exports: [DashboardService],
