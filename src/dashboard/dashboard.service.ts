@@ -186,7 +186,10 @@ export class DashboardService {
       if (!branchId && tenantId) {
         const companies = await this.companiesRepo.find({ where: { tenantId } });
         for (const company of companies) {
-          const companyBranches = await this.branchesRepo.find({ where: { companyId: company.id } });
+          const companyBranches = await this.branchesRepo
+            .createQueryBuilder('branch')
+            .where('branch.companyId = :companyId', { companyId: company.id.toString() })
+            .getMany();
           const companyBranchIds = companyBranches.map(b => b.id);
           
           if (companyBranchIds.length > 0) {
