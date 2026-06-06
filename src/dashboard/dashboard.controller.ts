@@ -1,4 +1,4 @@
-import { Controller, Get, Query, Headers, Request } from '@nestjs/common';
+import { Controller, Get, Query, Headers, Request, Param } from '@nestjs/common';
 import { DashboardService } from './dashboard.service';
 
 @Controller('dashboard')
@@ -13,5 +13,15 @@ export class DashboardController {
   ) {
     const tenantId = req?.user?.tenantId;
     return this.dashboardService.getKpis(period, branchId, tenantId);
+  }
+
+  @Get('company/:companyId/kpis')
+  getCompanyKpis(
+    @Param('companyId') companyId: string,
+    @Query('period') period?: string,
+    @Request() req?: any,
+  ) {
+    const tenantId = req?.user?.tenantId;
+    return this.dashboardService.getCompanyKpis(companyId, period, tenantId);
   }
 }

@@ -275,4 +275,88 @@ export class DashboardService {
       };
     }
   }
+
+  async getCompanyKpis(companyId: string, period: string = 'month', tenantId?: string) {
+    try {
+      const now = new Date();
+      let startDate: Date;
+
+      // Calcular fechas según el período
+      switch (period) {
+        case 'today':
+          startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+          break;
+        case 'week':
+          startDate = new Date(now);
+          startDate.setDate(now.getDate() - 7);
+          break;
+        case 'year':
+          startDate = new Date(now.getFullYear(), 0, 1);
+          break;
+        case 'month':
+        default:
+          startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+          break;
+      }
+
+      // Obtener sucursales de la empresa
+      const branches = await this.branchesRepo.find({ where: { companyId } });
+      const branchIds = branches.map(b => b.id);
+
+      const branchesBreakdown: Array<{
+        branchId: string;
+        branchName: string;
+        balance: number;
+        income: number;
+        expense: number;
+      }> = [];
+
+      for (const branch of branches) {
+        const branchBanks = await this.banksRepo.find({ where: { branchId: branch.id } });
+        const accountIds = branchBanks.map(b => b.id);
+
+        if (accountIds.length > 0) {
+          const balanceRaw = await this.banksRepo
+            .createQueryBuilder('bank')
+            .select('COALESCE(SUM(bank.balance), 0)', 'total')
+            .where('bank.id IN (:...accountIds)', { accountIds })
+            .getRawOne();
+
+          const incomeRaw = await this.movementsRepo
+            .createQueryBuilder('movement')
+            .select('COALESCE(SUM(movement.amount), 0)', 'total')
+            .where('movement.accountId IN (:...accountIds)', { accountIds })
+            .andWhere('movement.type = :type', { type: 'INCOME' })
+            .andWhere('movement.createdAt >= :startDate', { startDate })
+            .andWhere('movement.createdAt <= :endDate', { endDate: now })
+            .getRawOne();
+
+          const expenseRaw = await this.movementsRepo
+            .createQueryBuilder('movement')
+            .select('COALESCE(SUM(movement.amount), 0)', 'total')
+            .where('movement.accountId IN (:...accountIds)', { accountIds })
+            .andWhere('movement.type = :type', { type: 'EXPENSE' })
+            .andWhere('movement.createdAt >= :startDate', { startDate })
+            .andWhere('movement.createdAt <= :endDate', { endDate: now })
+            .getRawOne();
+
+          branchesBreakdown.push({
+            branchId: branch.id,
+            branchName: branch.name,
+            balance: Number(balanceRaw?.total || 0),
+            income: Number(incomeRaw?.total || 0),
+            expense: Number(expenseRaw?.total || 0),
+          });
+        }
+      }
+
+      return {
+        branchesBreakdown,
+      };
+    } catch (error) {
+      return {
+        branchesBreakdown: [],
+      };
+    }
+  }
 }
