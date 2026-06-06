@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, In } from 'typeorm';
 import { Company } from '../companies/entities/company.entity';
 import { Branch } from '../branches/entities/branch.entity';
 import { Bank } from '../banks/entities/bank.entity';
@@ -22,7 +22,7 @@ export class DashboardService {
     private metricsRepo: Repository<DashboardMetric>,
   ) {}
 
-  async getKpis(period: string = 'month') {
+  async getKpis(period: string = 'month', branchId?: string, tenantId?: string) {
     try {
       const now = new Date();
       let startDate: Date;
@@ -56,29 +56,65 @@ export class DashboardService {
           break;
       }
 
-      const totalCompanies = await this.companiesRepo.count();
-      const totalBranches = await this.branchesRepo.count();
+      // Si hay branchId, obtener cuentas de esa sucursal
+      let bankQuery = this.banksRepo.createQueryBuilder('bank');
+      if (branchId) {
+        bankQuery = bankQuery.where('bank.branchId = :branchId', { branchId });
+      } else if (tenantId) {
+        // Vista consolidada: obtener cuentas de todas las sucursales del tenant
+        const companies = await this.companiesRepo.find({ where: { tenantId } });
+        const companyIds = companies.map(c => c.id);
+        const branches = await this.branchesRepo.find({ where: { companyId: In(companyIds) } });
+        const branchIds = branches.map(b => b.id);
+        if (branchIds.length > 0) {
+          bankQuery = bankQuery.where('bank.branchId IN (:...branchIds)', { branchIds });
+        }
+      }
 
-      const balanceRaw = await this.banksRepo
-        .createQueryBuilder('bank')
+      const balanceRaw = await bankQuery
         .select('COALESCE(SUM(bank.balance), 0)', 'total')
         .getRawOne();
 
       const totalBalance = Number(balanceRaw?.total || 0);
 
       // Ingresos y egresos del período actual
-      const currentIncomeRaw = await this.movementsRepo
-        .createQueryBuilder('movement')
+      let movementQuery = this.movementsRepo.createQueryBuilder('movement');
+      if (branchId) {
+        // Vista individual: filtrar por branchId a través de las cuentas
+        const banks = await this.banksRepo.find({ where: { branchId } });
+        const accountIds = banks.map(b => b.id);
+        if (accountIds.length > 0) {
+          movementQuery = movementQuery.where('movement.accountId IN (:...accountIds)', { accountIds });
+        } else {
+          movementQuery = movementQuery.where('1=0'); // Sin cuentas, sin movimientos
+        }
+      } else if (tenantId) {
+        // Vista consolidada: filtrar por tenant a través de las cuentas
+        const companies = await this.companiesRepo.find({ where: { tenantId } });
+        const companyIds = companies.map(c => c.id);
+        const branches = await this.branchesRepo.find({ where: { companyId: In(companyIds) } });
+        const branchIds = branches.map(b => b.id);
+        const banks = await this.banksRepo.find({ where: { branchId: In(branchIds) } });
+        const accountIds = banks.map(b => b.id);
+        if (accountIds.length > 0) {
+          movementQuery = movementQuery.where('movement.accountId IN (:...accountIds)', { accountIds });
+        } else {
+          movementQuery = movementQuery.where('1=0');
+        }
+      }
+
+      const currentIncomeRaw = await movementQuery
+        .clone()
         .select('COALESCE(SUM(movement.amount), 0)', 'total')
-        .where('movement.type = :type', { type: 'INCOME' })
+        .andWhere('movement.type = :type', { type: 'INCOME' })
         .andWhere('movement.createdAt >= :startDate', { startDate })
         .andWhere('movement.createdAt <= :endDate', { endDate: now })
         .getRawOne();
 
-      const currentExpenseRaw = await this.movementsRepo
-        .createQueryBuilder('movement')
+      const currentExpenseRaw = await movementQuery
+        .clone()
         .select('COALESCE(SUM(movement.amount), 0)', 'total')
-        .where('movement.type = :type', { type: 'EXPENSE' })
+        .andWhere('movement.type = :type', { type: 'EXPENSE' })
         .andWhere('movement.createdAt >= :startDate', { startDate })
         .andWhere('movement.createdAt <= :endDate', { endDate: now })
         .getRawOne();
@@ -87,18 +123,18 @@ export class DashboardService {
       const currentExpense = Number(currentExpenseRaw?.total || 0);
 
       // Ingresos y egresos del período anterior
-      const previousIncomeRaw = await this.movementsRepo
-        .createQueryBuilder('movement')
+      const previousIncomeRaw = await movementQuery
+        .clone()
         .select('COALESCE(SUM(movement.amount), 0)', 'total')
-        .where('movement.type = :type', { type: 'INCOME' })
+        .andWhere('movement.type = :type', { type: 'INCOME' })
         .andWhere('movement.createdAt >= :startDate', { startDate: previousStartDate })
         .andWhere('movement.createdAt <= :endDate', { endDate: previousEndDate })
         .getRawOne();
 
-      const previousExpenseRaw = await this.movementsRepo
-        .createQueryBuilder('movement')
+      const previousExpenseRaw = await movementQuery
+        .clone()
         .select('COALESCE(SUM(movement.amount), 0)', 'total')
-        .where('movement.type = :type', { type: 'EXPENSE' })
+        .andWhere('movement.type = :type', { type: 'EXPENSE' })
         .andWhere('movement.createdAt >= :startDate', { startDate: previousStartDate })
         .andWhere('movement.createdAt <= :endDate', { endDate: previousEndDate })
         .getRawOne();
@@ -121,32 +157,85 @@ export class DashboardService {
       const nextDueDate = new Date();
       nextDueDate.setDate(now.getDate() + Math.floor(Math.random() * 14) + 1);
 
-      const latestMovements = await this.movementsRepo.find({
-        order: { createdAt: 'DESC' },
-        take: 5,
-      });
+      const latestMovements = await movementQuery
+        .clone()
+        .orderBy('movement.createdAt', 'DESC')
+        .take(5)
+        .getMany();
 
-      const incomeTotal = await this.movementsRepo
-        .createQueryBuilder('movement')
+      const incomeTotal = await movementQuery
+        .clone()
         .select('COALESCE(SUM(movement.amount), 0)', 'total')
-        .where('movement.type = :type', { type: 'INCOME' })
+        .andWhere('movement.type = :type', { type: 'INCOME' })
         .getRawOne();
 
-      const expenseTotal = await this.movementsRepo
-        .createQueryBuilder('movement')
+      const expenseTotal = await movementQuery
+        .clone()
         .select('COALESCE(SUM(movement.amount), 0)', 'total')
-        .where('movement.type = :type', { type: 'EXPENSE' })
+        .andWhere('movement.type = :type', { type: 'EXPENSE' })
         .getRawOne();
+
+      // Obtener desglose por empresa para vista consolidada
+      const companiesBreakdown: Array<{
+        companyId: string;
+        companyName: string;
+        balance: number;
+        income: number;
+        expense: number;
+      }> = [];
+      if (!branchId && tenantId) {
+        const companies = await this.companiesRepo.find({ where: { tenantId } });
+        for (const company of companies) {
+          const companyBranches = await this.branchesRepo.find({ where: { companyId: company.id } });
+          const companyBranchIds = companyBranches.map(b => b.id);
+          
+          if (companyBranchIds.length > 0) {
+            const companyBanks = await this.banksRepo.find({ where: { branchId: In(companyBranchIds) } });
+            const companyAccountIds = companyBanks.map(b => b.id);
+            
+            if (companyAccountIds.length > 0) {
+              const companyBalanceRaw = await this.banksRepo
+                .createQueryBuilder('bank')
+                .select('COALESCE(SUM(bank.balance), 0)', 'total')
+                .where('bank.id IN (:...accountIds)', { accountIds: companyAccountIds })
+                .getRawOne();
+              
+              const companyIncomeRaw = await this.movementsRepo
+                .createQueryBuilder('movement')
+                .select('COALESCE(SUM(movement.amount), 0)', 'total')
+                .where('movement.accountId IN (:...accountIds)', { accountIds: companyAccountIds })
+                .andWhere('movement.type = :type', { type: 'INCOME' })
+                .andWhere('movement.createdAt >= :startDate', { startDate })
+                .andWhere('movement.createdAt <= :endDate', { endDate: now })
+                .getRawOne();
+              
+              const companyExpenseRaw = await this.movementsRepo
+                .createQueryBuilder('movement')
+                .select('COALESCE(SUM(movement.amount), 0)', 'total')
+                .where('movement.accountId IN (:...accountIds)', { accountIds: companyAccountIds })
+                .andWhere('movement.type = :type', { type: 'EXPENSE' })
+                .andWhere('movement.createdAt >= :startDate', { startDate })
+                .andWhere('movement.createdAt <= :endDate', { endDate: now })
+                .getRawOne();
+              
+              companiesBreakdown.push({
+                companyId: company.id,
+                companyName: company.tradeName || company.legalName,
+                balance: Number(companyBalanceRaw?.total || 0),
+                income: Number(companyIncomeRaw?.total || 0),
+                expense: Number(companyExpenseRaw?.total || 0),
+              });
+            }
+          }
+        }
+      }
 
       await this.metricsRepo.save([
-        this.metricsRepo.create({ key: 'total_companies', value: totalCompanies }),
-        this.metricsRepo.create({ key: 'total_branches', value: totalBranches }),
+        this.metricsRepo.create({ key: 'total_companies', value: companiesBreakdown.length }),
         this.metricsRepo.create({ key: 'total_balance', value: totalBalance }),
       ]);
 
       return {
-        totalCompanies,
-        totalBranches,
         totalBalance,
         balanceVariation,
         income: currentIncome,
@@ -162,12 +251,11 @@ export class DashboardService {
           income: Number(incomeTotal?.total || 0),
           expense: Number(expenseTotal?.total || 0),
         },
+        companiesBreakdown,
       };
     } catch (error) {
       // Devolver datos en cero como fallback en lugar de error 500
       return {
-        totalCompanies: 0,
-        totalBranches: 0,
         totalBalance: 0,
         balanceVariation: 0,
         income: 0,
@@ -183,6 +271,7 @@ export class DashboardService {
           income: 0,
           expense: 0,
         },
+        companiesBreakdown: [],
       };
     }
   }
