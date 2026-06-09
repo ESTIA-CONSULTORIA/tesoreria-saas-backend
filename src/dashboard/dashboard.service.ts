@@ -188,7 +188,9 @@ export class DashboardService {
         expense: number;
       }> = [];
       if (!branchId && tenantId) {
+        console.log('tenantId usado:', tenantId);
         const companies = await this.companiesRepo.find({ where: { tenantId } });
+        console.log('empresas encontradas:', companies.length);
         for (const company of companies) {
           const companyBranches = await this.branchesRepo
             .createQueryBuilder('branch')
