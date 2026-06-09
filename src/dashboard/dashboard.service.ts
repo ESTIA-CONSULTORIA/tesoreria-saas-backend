@@ -192,15 +192,19 @@ export class DashboardService {
         const companies = await this.companiesRepo.find({ where: { tenantId } });
         console.log('empresas encontradas:', companies.length);
         for (const company of companies) {
+          console.log('Procesando empresa:', company.tradeName);
+          console.log('  companyId:', company.id);
           const companyBranches = await this.branchesRepo
             .createQueryBuilder('branch')
             .where('branch.companyId = :companyId', { companyId: company.id.toString() })
             .getMany();
           const companyBranchIds = companyBranches.map(b => b.id);
+          console.log('  sucursales encontradas:', companyBranches.length);
           
           if (companyBranchIds.length > 0) {
             const companyBanks = await this.banksRepo.find({ where: { branchId: In(companyBranchIds) } });
             const companyAccountIds = companyBanks.map(b => b.id);
+            console.log('  bancos encontrados:', companyBanks.length);
             
             if (companyAccountIds.length > 0) {
               const companyBalanceRaw = await this.banksRepo
@@ -234,7 +238,12 @@ export class DashboardService {
                 income: Number(companyIncomeRaw?.total || 0),
                 expense: Number(companyExpenseRaw?.total || 0),
               });
+              console.log('  push a companiesBreakdown OK');
+            } else {
+              console.log('  SIN cuentas bancarias - saltando');
             }
+          } else {
+            console.log('  SIN sucursales - saltando');
           }
         }
       }

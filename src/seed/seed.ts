@@ -468,6 +468,322 @@ export async function seedDatabase(dataSource: DataSource) {
     console.log('ℹ️ Datos de prueba ya existen, omitiendo creación');
   }
 
+  // ═══════════════════════════════════════════════════════════════
+  // PARTE: EMPRESAS DEL TENANT DEMO CON CUENTAS Y MOVIMIENTOS
+  // ═══════════════════════════════════════════════════════════════
+  const demoCompanies = await companiesRepository.find({ where: { tenantId: demoTenant.id } });
+  
+  // Crear EL SAZÓN MATRIZ si no existe
+  let elSazon = demoCompanies.find(c => c.tradeName === 'EL SAZÓN MATRIZ');
+  if (!elSazon) {
+    elSazon = await companiesRepository.save({
+      id: 'abbbb682-d883-4f03-a7ee-2ae08850641c',
+      tenantId: demoTenant.id,
+      legalName: 'Restaurantes El Sazón S.A. de C.V.',
+      tradeName: 'EL SAZÓN MATRIZ',
+      taxId: 'RES123456XYZ',
+      baseCurrency: 'MXN',
+      isActive: true,
+    });
+    console.log('✅ Empresa EL SAZÓN MATRIZ creada');
+  }
+
+  // Crear sucursal para EL SAZÓN MATRIZ si no existe
+  let elSazonBranch = await branchesRepository.findOne({ where: { companyId: elSazon.id } });
+  if (!elSazonBranch) {
+    elSazonBranch = await branchesRepository.save({
+      id: 'abbbb682-d883-4f03-a7ee-2ae08850641c',
+      companyId: elSazon.id,
+      code: 'SAZ-001',
+      name: 'EL SAZÓN MATRIZ',
+      address: 'Av. Principal #500, Centro',
+      city: 'Hermosillo',
+      state: 'Sonora',
+      isActive: true,
+    });
+    console.log('✅ Sucursal EL SAZÓN MATRIZ creada');
+  }
+
+  // Crear EL SONORENSE si no existe
+  let elSonorense = demoCompanies.find(c => c.tradeName === 'EL SONORENSE');
+  if (!elSonorense) {
+    elSonorense = await companiesRepository.save({
+      tenantId: demoTenant.id,
+      legalName: 'Comercializadora El Sonorense S.A. de C.V.',
+      tradeName: 'EL SONORENSE',
+      taxId: 'SON789456XYZ',
+      baseCurrency: 'MXN',
+      isActive: true,
+    });
+    console.log('✅ Empresa EL SONORENSE creada');
+  }
+
+  // Crear sucursal para EL SONORENSE si no existe
+  let elSonorenseBranch = await branchesRepository.findOne({ where: { companyId: elSonorense.id } });
+  if (!elSonorenseBranch) {
+    elSonorenseBranch = await branchesRepository.save({
+      companyId: elSonorense.id,
+      code: 'SON-001',
+      name: 'Sucursal Hermosillo',
+      address: 'Blvd. Sonora #200, Zona Norte',
+      city: 'Hermosillo',
+      state: 'Sonora',
+      isActive: true,
+    });
+    console.log('✅ Sucursal EL SONORENSE creada');
+  }
+
+  // Buscar SERVICIOS DEMO en demoTenant (si no existe, crearla)
+  let serviciosDemo = demoCompanies.find(c => c.tradeName === 'SERVICIOS DEMO');
+  if (!serviciosDemo) {
+    serviciosDemo = await companiesRepository.save({
+      tenantId: demoTenant.id,
+      legalName: 'Servicios Profesionales Demo S. de R.L.',
+      tradeName: 'SERVICIOS DEMO',
+      taxId: 'SER456789XYZ',
+      baseCurrency: 'MXN',
+      isActive: true,
+    });
+    console.log('✅ Empresa SERVICIOS DEMO creada en demoTenant');
+  }
+
+  // Crear sucursal para SERVICIOS DEMO si no existe
+  let serviciosDemoBranch = await branchesRepository.findOne({ where: { companyId: serviciosDemo.id } });
+  if (!serviciosDemoBranch) {
+    serviciosDemoBranch = await branchesRepository.save({
+      id: 'ff38db6f-2be5-4feb-b133-4b7fcfa9dec1',
+      companyId: serviciosDemo.id,
+      code: 'SER-001',
+      name: 'SERVICIOS DEMO',
+      address: 'Calle Servicios #100, Centro',
+      city: 'Hermosillo',
+      state: 'Sonora',
+      isActive: true,
+    });
+    console.log('✅ Sucursal SERVICIOS DEMO creada');
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // CREAR CUENTAS BANCARIAS PARA CADA EMPRESA
+  // ═══════════════════════════════════════════════════════════════
+  const demoBranches = await branchesRepository.find();
+  const elSazonBranchFinal = demoBranches.find(b => b.companyId === elSazon.id);
+  const elSonorenseBranchFinal = demoBranches.find(b => b.companyId === elSonorense.id);
+  const serviciosDemoBranchFinal = demoBranches.find(b => b.companyId === serviciosDemo.id);
+
+  // EL SAZÓN MATRIZ - BBVA Cuenta Operativa
+  let elSazonBBVA = await banksRepository.findOne({ where: { branchId: elSazonBranchFinal?.id, name: 'BBVA Cuenta Operativa' } });
+  if (!elSazonBBVA && elSazonBranchFinal) {
+    elSazonBBVA = await banksRepository.save({
+      branchId: elSazonBranchFinal.id,
+      name: 'BBVA Cuenta Operativa',
+      accountNumber: '012345678901',
+      bank: 'BBVA',
+      initialBalance: 85400,
+      balance: 85400,
+      currency: 'MXN',
+      type: 'BANCO',
+      isActive: true,
+    });
+    console.log('✅ BBVA Cuenta Operativa creada para EL SAZÓN MATRIZ');
+  }
+
+  // EL SAZÓN MATRIZ - Caja Chica
+  let elSazonCaja = await banksRepository.findOne({ where: { branchId: elSazonBranchFinal?.id, name: 'Caja Chica' } });
+  if (!elSazonCaja && elSazonBranchFinal) {
+    elSazonCaja = await banksRepository.save({
+      branchId: elSazonBranchFinal.id,
+      name: 'Caja Chica',
+      accountNumber: 'CAJA-SAZ-001',
+      bank: 'EFECTIVO',
+      initialBalance: 5000,
+      balance: 5000,
+      currency: 'MXN',
+      type: 'EFECTIVO',
+      isActive: true,
+    });
+    console.log('✅ Caja Chica creada para EL SAZÓN MATRIZ');
+  }
+
+  // EL SONORENSE - Banorte Cuenta Principal
+  let elSonorenseBanorte = await banksRepository.findOne({ where: { branchId: elSonorenseBranchFinal?.id, name: 'Banorte Cuenta Principal' } });
+  if (!elSonorenseBanorte && elSonorenseBranchFinal) {
+    elSonorenseBanorte = await banksRepository.save({
+      branchId: elSonorenseBranchFinal.id,
+      name: 'Banorte Cuenta Principal',
+      accountNumber: '098765432109',
+      bank: 'Banorte',
+      initialBalance: 62000,
+      balance: 62000,
+      currency: 'MXN',
+      type: 'BANCO',
+      isActive: true,
+    });
+    console.log('✅ Banorte Cuenta Principal creada para EL SONORENSE');
+  }
+
+  // EL SONORENSE - Caja Chica
+  let elSonorenseCaja = await banksRepository.findOne({ where: { branchId: elSonorenseBranchFinal?.id, name: 'Caja Chica' } });
+  if (!elSonorenseCaja && elSonorenseBranchFinal) {
+    elSonorenseCaja = await banksRepository.save({
+      branchId: elSonorenseBranchFinal.id,
+      name: 'Caja Chica',
+      accountNumber: 'CAJA-SON-001',
+      bank: 'EFECTIVO',
+      initialBalance: 3500,
+      balance: 3500,
+      currency: 'MXN',
+      type: 'EFECTIVO',
+      isActive: true,
+    });
+    console.log('✅ Caja Chica creada para EL SONORENSE');
+  }
+
+  // SERVICIOS DEMO - HSBC Cuenta Corporativa
+  let serviciosHSBC = await banksRepository.findOne({ where: { branchId: serviciosDemoBranchFinal?.id, name: 'HSBC Cuenta Corporativa' } });
+  if (!serviciosHSBC && serviciosDemoBranchFinal) {
+    serviciosHSBC = await banksRepository.save({
+      branchId: serviciosDemoBranchFinal.id,
+      name: 'HSBC Cuenta Corporativa',
+      accountNumber: '045678901234',
+      bank: 'HSBC',
+      initialBalance: 45000,
+      balance: 45000,
+      currency: 'MXN',
+      type: 'BANCO',
+      isActive: true,
+    });
+    console.log('✅ HSBC Cuenta Corporativa creada para SERVICIOS DEMO');
+  }
+
+  // SERVICIOS DEMO - Scotiabank Nómina
+  let serviciosScotiabank = await banksRepository.findOne({ where: { branchId: serviciosDemoBranchFinal?.id, name: 'Scotiabank Nómina' } });
+  if (!serviciosScotiabank && serviciosDemoBranchFinal) {
+    serviciosScotiabank = await banksRepository.save({
+      branchId: serviciosDemoBranchFinal.id,
+      name: 'Scotiabank Nómina',
+      accountNumber: '056789012345',
+      bank: 'Scotiabank',
+      initialBalance: 22000,
+      balance: 22000,
+      currency: 'MXN',
+      type: 'BANCO',
+      isActive: true,
+    });
+    console.log('✅ Scotiabank Nómina creada para SERVICIOS DEMO');
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // CREAR MOVIMIENTOS PARA CADA EMPRESA
+  // ═══════════════════════════════════════════════════════════════
+  const incomeConcepts = ['Venta del día', 'Cobro factura', 'Depósito cliente', 'Transferencia recibida'];
+  const expenseConcepts = ['Pago proveedor', 'Renta local', 'Nómina quincenal', 'Servicios', 'Insumos'];
+
+  // EL SAZÓN MATRIZ - 15 ingresos, 8 egresos
+  if (elSazonBBVA) {
+    for (let i = 0; i < 15; i++) {
+      const amount = Math.floor(Math.random() * 22000) + 3000; // $3,000 - $25,000
+      const date = new Date();
+      date.setDate(date.getDate() - Math.floor(Math.random() * 90));
+      await movementsRepository.save({
+        accountId: elSazonBBVA.id,
+        type: 'INCOME',
+        category: 'SALE',
+        concept: incomeConcepts[Math.floor(Math.random() * incomeConcepts.length)],
+        reference: `SAZ-ING-${String(i + 1).padStart(3, '0')}`,
+        amount: amount,
+        date: date,
+      });
+    }
+    console.log('✅ 15 movimientos de ingreso creados para EL SAZÓN MATRIZ');
+
+    for (let i = 0; i < 8; i++) {
+      const amount = Math.floor(Math.random() * 7500) + 500; // $500 - $8,000
+      const date = new Date();
+      date.setDate(date.getDate() - Math.floor(Math.random() * 90));
+      await movementsRepository.save({
+        accountId: elSazonBBVA.id,
+        type: 'EXPENSE',
+        category: 'OPERATIONAL',
+        concept: expenseConcepts[Math.floor(Math.random() * expenseConcepts.length)],
+        reference: `SAZ-EGR-${String(i + 1).padStart(3, '0')}`,
+        amount: amount,
+        date: date,
+      });
+    }
+    console.log('✅ 8 movimientos de egreso creados para EL SAZÓN MATRIZ');
+  }
+
+  // EL SONORENSE - 12 ingresos, 6 egresos
+  if (elSonorenseBanorte) {
+    for (let i = 0; i < 12; i++) {
+      const amount = Math.floor(Math.random() * 16000) + 2000; // $2,000 - $18,000
+      const date = new Date();
+      date.setDate(date.getDate() - Math.floor(Math.random() * 90));
+      await movementsRepository.save({
+        accountId: elSonorenseBanorte.id,
+        type: 'INCOME',
+        category: 'SALE',
+        concept: incomeConcepts[Math.floor(Math.random() * incomeConcepts.length)],
+        reference: `SON-ING-${String(i + 1).padStart(3, '0')}`,
+        amount: amount,
+        date: date,
+      });
+    }
+    console.log('✅ 12 movimientos de ingreso creados para EL SONORENSE');
+
+    for (let i = 0; i < 6; i++) {
+      const amount = Math.floor(Math.random() * 5600) + 400; // $400 - $6,000
+      const date = new Date();
+      date.setDate(date.getDate() - Math.floor(Math.random() * 90));
+      await movementsRepository.save({
+        accountId: elSonorenseBanorte.id,
+        type: 'EXPENSE',
+        category: 'OPERATIONAL',
+        concept: expenseConcepts[Math.floor(Math.random() * expenseConcepts.length)],
+        reference: `SON-EGR-${String(i + 1).padStart(3, '0')}`,
+        amount: amount,
+        date: date,
+      });
+    }
+    console.log('✅ 6 movimientos de egreso creados para EL SONORENSE');
+  }
+
+  // SERVICIOS DEMO - 10 ingresos, 5 egresos
+  if (serviciosHSBC) {
+    for (let i = 0; i < 10; i++) {
+      const amount = Math.floor(Math.random() * 25000) + 5000; // $5,000 - $30,000
+      const date = new Date();
+      date.setDate(date.getDate() - Math.floor(Math.random() * 90));
+      await movementsRepository.save({
+        accountId: serviciosHSBC.id,
+        type: 'INCOME',
+        category: 'SALE',
+        concept: incomeConcepts[Math.floor(Math.random() * incomeConcepts.length)],
+        reference: `SER-ING-${String(i + 1).padStart(3, '0')}`,
+        amount: amount,
+        date: date,
+      });
+    }
+    console.log('✅ 10 movimientos de ingreso creados para SERVICIOS DEMO');
+
+    for (let i = 0; i < 5; i++) {
+      const amount = Math.floor(Math.random() * 9000) + 1000; // $1,000 - $10,000
+      const date = new Date();
+      date.setDate(date.getDate() - Math.floor(Math.random() * 90));
+      await movementsRepository.save({
+        accountId: serviciosHSBC.id,
+        type: 'EXPENSE',
+        category: 'OPERATIONAL',
+        concept: expenseConcepts[Math.floor(Math.random() * expenseConcepts.length)],
+        reference: `SER-EGR-${String(i + 1).padStart(3, '0')}`,
+        amount: amount,
+        date: date,
+      });
+    }
+    console.log('✅ 5 movimientos de egreso creados para SERVICIOS DEMO');
+  }
+
   // Crear familias de insumos por defecto si no existen
   const existingFamilias = await familiasRepository.find();
   
