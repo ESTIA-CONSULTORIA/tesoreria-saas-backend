@@ -1,13 +1,17 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Bank } from './entities/bank.entity';
-import { Repository } from 'typeorm';
+import { Repository, In } from 'typeorm';
+import { InjectDataSource } from '@nestjs/typeorm';
+import { DataSource } from 'typeorm';
 
 @Injectable()
 export class BanksService {
   constructor(
     @InjectRepository(Bank)
     private banksRepository: Repository<Bank>,
+    @InjectDataSource()
+    private dataSource: DataSource,
   ) {}
 
   create(
@@ -45,6 +49,23 @@ export class BanksService {
   findByBranch(branchId: string) {
     return this.banksRepository.find({
       where: { branchId },
+      order: { createdAt: 'DESC' },
+    });
+  }
+
+  async findByCompany(companyId: string) {
+    const branchIds = await this.dataSource
+      .getRepository('Branch')
+      .find({ where: { companyId }, select: ['id'] });
+    
+    const ids = branchIds.map(b => b.id);
+    
+    if (ids.length === 0) {
+      return [];
+    }
+    
+    return this.banksRepository.find({
+      where: { branchId: In(ids) },
       order: { createdAt: 'DESC' },
     });
   }

@@ -30,9 +30,15 @@ export class BanksController {
   }
 
   @Get()
-  findAll(@Headers('x-branch-id') branchId?: string) {
+  findAll(
+    @Headers('x-branch-id') branchId?: string,
+    @Headers('x-company-id') companyId?: string,
+  ) {
     if (branchId) {
       return this.banksService.findByBranch(branchId);
+    }
+    if (companyId) {
+      return this.banksService.findByCompany(companyId);
     }
     return this.banksService.findAll();
   }

@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Put, Delete, Body, Param, Query } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Body, Param, Query, Headers } from '@nestjs/common';
 import { PurchasesService } from './purchases.service';
 import { Modulo } from '../auth/modulo.decorator';
 
@@ -12,8 +12,10 @@ export class PurchasesController {
   findAllOrders(
     @Query('tenantId') tenantId?: string,
     @Query('status') status?: string,
+    @Headers('x-branch-id') branchId?: string,
+    @Headers('x-company-id') companyId?: string,
   ) {
-    return this.purchasesService.findAllOrders(tenantId, status);
+    return this.purchasesService.findAllOrders(tenantId, status, branchId, companyId);
   }
 
   @Get('orders/:id')
@@ -66,8 +68,10 @@ export class PurchasesController {
   findAllPurchases(
     @Query('tenantId') tenantId?: string,
     @Query('status') status?: string,
+    @Headers('x-branch-id') branchId?: string,
+    @Headers('x-company-id') companyId?: string,
   ) {
-    return this.purchasesService.findAllPurchases(tenantId, status);
+    return this.purchasesService.findAllPurchases(tenantId, status, branchId, companyId);
   }
 
   @Get('invoices/:id')
@@ -107,7 +111,11 @@ export class PurchasesController {
 
   // Cuentas por Pagar
   @Get('accounts-payable')
-  async getAccountsPayable(@Query('tenantId') tenantId?: string) {
-    return this.purchasesService.getAccountsPayable(tenantId);
+  async getAccountsPayable(
+    @Query('tenantId') tenantId?: string,
+    @Headers('x-branch-id') branchId?: string,
+    @Headers('x-company-id') companyId?: string,
+  ) {
+    return this.purchasesService.getAccountsPayable(tenantId, branchId, companyId);
   }
 }

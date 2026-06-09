@@ -3,6 +3,8 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Movement } from './entities/movement.entity';
 import { Repository, In } from 'typeorm';
 import { Bank } from '../banks/entities/bank.entity';
+import { InjectDataSource } from '@nestjs/typeorm';
+import { DataSource } from 'typeorm';
 
 @Injectable()
 export class MovementsService {
@@ -12,6 +14,9 @@ export class MovementsService {
 
     @InjectRepository(Bank)
     private banksRepository: Repository<Bank>,
+
+    @InjectDataSource()
+    private dataSource: DataSource,
   ) {}
 
   async create(
@@ -138,6 +143,33 @@ export class MovementsService {
 
     return this.movementsRepository.find({
       where: { accountId: In(accountIds) } as any,
+      order: { createdAt: 'DESC' },
+    });
+  }
+
+  async findByCompany(companyId: string) {
+    const branchIds = await this.dataSource
+      .getRepository('Branch')
+      .find({ where: { companyId }, select: ['id'] });
+    
+    const ids = branchIds.map(b => b.id);
+    
+    if (ids.length === 0) {
+      return [];
+    }
+    
+    const banks = await this.banksRepository.find({
+      where: { branchId: In(ids) },
+    });
+
+    const accountIds = banks.map((bank) => bank.id);
+
+    if (accountIds.length === 0) {
+      return [];
+    }
+
+    return this.movementsRepository.find({
+      where: { accountId: In(accountIds) },
       order: { createdAt: 'DESC' },
     });
   }

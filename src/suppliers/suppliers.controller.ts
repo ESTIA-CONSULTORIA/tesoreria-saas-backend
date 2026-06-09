@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Put, Delete, Body, Param, Query, Req } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Body, Param, Query, Req, Headers } from '@nestjs/common';
 import { SuppliersService } from './suppliers.service';
 import { Modulo } from '../auth/modulo.decorator';
 
@@ -12,11 +12,12 @@ export class SuppliersController {
     @Query('tenantId') tenantId?: string,
     @Query('search') search?: string,
     @Query('isActive') isActive?: string,
+    @Headers('x-company-id') companyId?: string,
     @Req() req?: any,
   ) {
     const tenantIdFromReq = tenantId || req?.user?.tenantId || req?.tenantId;
     const isActiveBool = isActive === 'true' ? true : isActive === 'false' ? false : undefined;
-    return this.suppliersService.findAll(tenantIdFromReq, search, isActiveBool);
+    return this.suppliersService.findAll(tenantIdFromReq, search, isActiveBool, companyId);
   }
 
   @Get(':id')

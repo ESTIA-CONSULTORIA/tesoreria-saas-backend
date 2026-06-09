@@ -30,6 +30,7 @@ export class MovementsController {
   @Get()
   findAll(
     @Headers('x-branch-id') branchId?: string,
+    @Headers('x-company-id') companyId?: string,
     @Query('accountId') accountId?: string,
     @Query('type') type?: string,
     @Query('category') category?: string,
@@ -40,6 +41,10 @@ export class MovementsController {
   ) {
     if (branchId) {
       return this.movementsService.findByBranch(branchId);
+    }
+    
+    if (companyId) {
+      return this.movementsService.findByCompany(companyId);
     }
 
     if (accountId || type || category || startDate || endDate || page || limit) {

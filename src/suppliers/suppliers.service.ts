@@ -10,13 +10,15 @@ export class SuppliersService {
     private suppliersRepo: Repository<Supplier>,
   ) {}
 
-  findAll(tenantId?: string, search?: string, isActive?: boolean) {
+  findAll(tenantId?: string, search?: string, isActive?: boolean, companyId?: string) {
     const where: any = {};
     if (tenantId) where.tenantId = tenantId;
     if (isActive !== undefined) where.isActive = isActive;
     if (search) {
       where.nombre = Like(`%${search}%`);
     }
+    // Suppliers are tenant-level entities, companyId is ignored for now
+    // as suppliers are typically shared across companies within a tenant
 
     return this.suppliersRepo.find({
       where,

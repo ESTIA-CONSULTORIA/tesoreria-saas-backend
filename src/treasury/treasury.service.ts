@@ -48,7 +48,7 @@ export class TreasuryService {
     return banks.map((b) => b.id);
   }
 
-  async getExecutiveSummary(tenantId?: string, branchId?: string) {
+  async getExecutiveSummary(tenantId?: string, branchId?: string, companyId?: string) {
     try {
       let accountIds: string[];
       
@@ -58,6 +58,22 @@ export class TreasuryService {
           select: ['id'],
         });
         accountIds = banks.map((b) => b.id);
+      } else if (companyId) {
+        const branches = await this.banksRepo.manager.getRepository(Branch).find({
+          where: { companyId },
+          select: ['id'],
+        });
+        const branchIds = branches.map((b) => b.id);
+        
+        if (branchIds.length === 0) {
+          accountIds = [];
+        } else {
+          const banks = await this.banksRepo.find({
+            where: { branchId: In(branchIds) },
+            select: ['id'],
+          });
+          accountIds = banks.map((b) => b.id);
+        }
       } else {
         accountIds = await this.getAccountIdsByTenant(tenantId);
       }
@@ -154,7 +170,7 @@ export class TreasuryService {
     }
   }
 
-  async getCashFlowForecast(days: number = 30, tenantId?: string, branchId?: string) {
+  async getCashFlowForecast(days: number = 30, tenantId?: string, branchId?: string, companyId?: string) {
     try {
       let accountIds: string[];
       if (branchId) {
@@ -163,6 +179,22 @@ export class TreasuryService {
           select: ['id'],
         });
         accountIds = banks.map((b) => b.id);
+      } else if (companyId) {
+        const branches = await this.banksRepo.manager.getRepository(Branch).find({
+          where: { companyId },
+          select: ['id'],
+        });
+        const branchIds = branches.map((b) => b.id);
+        
+        if (branchIds.length === 0) {
+          accountIds = [];
+        } else {
+          const banks = await this.banksRepo.find({
+            where: { branchId: In(branchIds) },
+            select: ['id'],
+          });
+          accountIds = banks.map((b) => b.id);
+        }
       } else {
         accountIds = await this.getAccountIdsByTenant(tenantId);
       }
@@ -255,7 +287,7 @@ export class TreasuryService {
     }
   }
 
-  async getBankPosition(tenantId?: string, branchId?: string) {
+  async getBankPosition(tenantId?: string, branchId?: string, companyId?: string) {
     try {
       let accountIds: string[];
       if (branchId) {
@@ -264,6 +296,22 @@ export class TreasuryService {
           select: ['id'],
         });
         accountIds = banks.map((b) => b.id);
+      } else if (companyId) {
+        const branches = await this.banksRepo.manager.getRepository(Branch).find({
+          where: { companyId },
+          select: ['id'],
+        });
+        const branchIds = branches.map((b) => b.id);
+        
+        if (branchIds.length === 0) {
+          accountIds = [];
+        } else {
+          const banks = await this.banksRepo.find({
+            where: { branchId: In(branchIds) },
+            select: ['id'],
+          });
+          accountIds = banks.map((b) => b.id);
+        }
       } else {
         accountIds = await this.getAccountIdsByTenant(tenantId);
       }
@@ -321,7 +369,7 @@ export class TreasuryService {
     }
   }
 
-  async getAlerts(tenantId?: string, branchId?: string) {
+  async getAlerts(tenantId?: string, branchId?: string, companyId?: string) {
     try {
       let accountIds: string[];
       if (branchId) {
@@ -330,6 +378,22 @@ export class TreasuryService {
           select: ['id'],
         });
         accountIds = banks.map((b) => b.id);
+      } else if (companyId) {
+        const branches = await this.banksRepo.manager.getRepository(Branch).find({
+          where: { companyId },
+          select: ['id'],
+        });
+        const branchIds = branches.map((b) => b.id);
+        
+        if (branchIds.length === 0) {
+          accountIds = [];
+        } else {
+          const banks = await this.banksRepo.find({
+            where: { branchId: In(branchIds) },
+            select: ['id'],
+          });
+          accountIds = banks.map((b) => b.id);
+        }
       } else {
         accountIds = await this.getAccountIdsByTenant(tenantId);
       }
@@ -440,11 +504,23 @@ export class TreasuryService {
   }
 
   // Payment Schedule CRUD
-  async getScheduledPayments(tenantId?: string, branchId?: string) {
+  async getScheduledPayments(tenantId?: string, branchId?: string, companyId?: string) {
     try {
       const query = this.paymentScheduleRepo.createQueryBuilder('payment');
       if (tenantId) query.andWhere('payment.tenantId = :tenantId', { tenantId });
       if (branchId) query.andWhere('payment.branchId = :branchId', { branchId });
+      if (companyId) {
+        const branches = await this.banksRepo.manager.getRepository(Branch).find({
+          where: { companyId },
+          select: ['id'],
+        });
+        const branchIds = branches.map((b) => b.id);
+        if (branchIds.length > 0) {
+          query.andWhere('payment.branchId IN (:...branchIds)', { branchIds });
+        } else {
+          return [];
+        }
+      }
       return query.orderBy('payment.fechaProgramada', 'ASC').getMany();
     } catch (error) {
       console.error('TreasuryService.getScheduledPayments error:', error);
@@ -551,13 +627,25 @@ export class TreasuryService {
   }
 
   // Accounts Payable (CxP)
-  async getAccountsPayable(tenantId?: string, branchId?: string) {
+  async getAccountsPayable(tenantId?: string, branchId?: string, companyId?: string) {
     try {
       console.log('getAccountsPayable - tenantId recibido:', tenantId);
       
       const where: any = { status: In(['PENDIENTE', 'PARCIAL']) };
       if (tenantId) where.tenantId = tenantId;
       if (branchId) where.branchId = branchId;
+      if (companyId) {
+        const branches = await this.banksRepo.manager.getRepository(Branch).find({
+          where: { companyId },
+          select: ['id'],
+        });
+        const branchIds = branches.map((b) => b.id);
+        if (branchIds.length > 0) {
+          where.branchId = In(branchIds);
+        } else {
+          return [];
+        }
+      }
       
       const purchases = await this.purchasesRepo.find({
         where,
@@ -599,7 +687,7 @@ export class TreasuryService {
   }
 
   // Accounts Receivable (CxC)
-  async getAccountsReceivable(tenantId?: string, branchId?: string) {
+  async getAccountsReceivable(tenantId?: string, branchId?: string, companyId?: string) {
     try {
       const now = new Date();
       const query = this.movementsRepo
@@ -617,6 +705,26 @@ export class TreasuryService {
         const accountIds = banks.map((b) => b.id);
         if (accountIds.length > 0) {
           query.andWhere('movement.accountId IN (:...accountIds)', { accountIds });
+        } else {
+          return [];
+        }
+      } else if (companyId) {
+        const branches = await this.banksRepo.manager.getRepository(Branch).find({
+          where: { companyId },
+          select: ['id'],
+        });
+        const branchIds = branches.map((b) => b.id);
+        if (branchIds.length > 0) {
+          const banks = await this.banksRepo.find({
+            where: { branchId: In(branchIds) },
+            select: ['id'],
+          });
+          const accountIds = banks.map((b) => b.id);
+          if (accountIds.length > 0) {
+            query.andWhere('movement.accountId IN (:...accountIds)', { accountIds });
+          } else {
+            return [];
+          }
         } else {
           return [];
         }

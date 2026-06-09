@@ -5,6 +5,8 @@ import { PurchaseOrder } from './entities/purchase-order.entity';
 import { Purchase } from './entities/purchase.entity';
 import { MovementsService } from '../movements/movements.service';
 import { CostsService } from '../costs/costs.service';
+import { InjectDataSource } from '@nestjs/typeorm';
+import { DataSource } from 'typeorm';
 
 @Injectable()
 export class PurchasesService {
@@ -15,13 +17,28 @@ export class PurchasesService {
     private purchasesRepo: Repository<Purchase>,
     private movementsService: MovementsService,
     private costsService: CostsService,
+    @InjectDataSource()
+    private dataSource: DataSource,
   ) {}
 
   // Purchase Orders
-  findAllOrders(tenantId?: string, status?: string) {
+  async findAllOrders(tenantId?: string, status?: string, branchId?: string, companyId?: string) {
     const where: any = {};
     if (tenantId) where.tenantId = tenantId;
     if (status) where.status = status;
+    if (branchId) where.branchId = branchId;
+    if (companyId) {
+      const branches = await this.dataSource.getRepository('Branch').find({
+        where: { companyId },
+        select: ['id'],
+      });
+      const branchIds = branches.map((b) => b.id);
+      if (branchIds.length > 0) {
+        where.branchId = In(branchIds);
+      } else {
+        return [];
+      }
+    }
 
     return this.purchaseOrdersRepo.find({
       where,
@@ -125,10 +142,23 @@ export class PurchasesService {
   }
 
   // Purchases (Facturas)
-  findAllPurchases(tenantId?: string, status?: string) {
+  async findAllPurchases(tenantId?: string, status?: string, branchId?: string, companyId?: string) {
     const where: any = {};
     if (tenantId) where.tenantId = tenantId;
     if (status) where.status = status;
+    if (branchId) where.branchId = branchId;
+    if (companyId) {
+      const branches = await this.dataSource.getRepository('Branch').find({
+        where: { companyId },
+        select: ['id'],
+      });
+      const branchIds = branches.map((b) => b.id);
+      if (branchIds.length > 0) {
+        where.branchId = In(branchIds);
+      } else {
+        return [];
+      }
+    }
 
     return this.purchasesRepo.find({
       where,
@@ -212,9 +242,22 @@ export class PurchasesService {
   }
 
   // Cuentas por Pagar (agrupadas por proveedor)
-  async getAccountsPayable(tenantId?: string) {
+  async getAccountsPayable(tenantId?: string, branchId?: string, companyId?: string) {
     const where: any = { status: In(['PENDIENTE', 'PARCIAL']) };
     if (tenantId) where.tenantId = tenantId;
+    if (branchId) where.branchId = branchId;
+    if (companyId) {
+      const branches = await this.dataSource.getRepository('Branch').find({
+        where: { companyId },
+        select: ['id'],
+      });
+      const branchIds = branches.map((b) => b.id);
+      if (branchIds.length > 0) {
+        where.branchId = In(branchIds);
+      } else {
+        return [];
+      }
+    }
 
     const purchases = await this.purchasesRepo.find({
       where,
