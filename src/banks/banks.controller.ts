@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Headers, Param, Patch, Post } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Headers, Param, Patch, Post, Request } from '@nestjs/common';
 import { BanksService } from './banks.service';
 
 @Controller('banks')
@@ -31,14 +31,29 @@ export class BanksController {
 
   @Get()
   findAll(
-    @Headers('x-branch-id') branchId?: string,
-    @Headers('x-company-id') companyId?: string,
+    @Headers('x-branch-id') headerBranchId?: string,
+    @Headers('x-company-id') headerCompanyId?: string,
+    @Request() req?: any,
   ) {
-    if (branchId) {
-      return this.banksService.findByBranch(branchId);
+    const userBranchId = req?.user?.branchId;
+    const userCompanyId = req?.user?.companyId;
+
+    // If user has branchId in JWT, use it and ignore headers
+    if (userBranchId) {
+      return this.banksService.findByBranch(userBranchId);
     }
-    if (companyId) {
-      return this.banksService.findByCompany(companyId);
+
+    // If user has companyId but no branchId in JWT, use it and ignore X-Branch-Id header
+    if (userCompanyId) {
+      return this.banksService.findByCompany(userCompanyId);
+    }
+
+    // Otherwise, use headers (ADMIN/SOPORTE/DUEÑO case)
+    if (headerBranchId) {
+      return this.banksService.findByBranch(headerBranchId);
+    }
+    if (headerCompanyId) {
+      return this.banksService.findByCompany(headerCompanyId);
     }
     return this.banksService.findAll();
   }

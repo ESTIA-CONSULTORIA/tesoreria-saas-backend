@@ -217,6 +217,47 @@ export async function seedDatabase(dataSource: DataSource) {
     }
   }
 
+  // Crear usuarios con restricción de empresa/sucursal
+  const restrictedUsers = [
+    { 
+      email: 'gerente.sazon@demo.com', 
+      password: 'Admin123', 
+      name: 'Gerente El Sazón', 
+      role: gerenteRole, 
+      roleCode: 'GERENTE',
+      companyId: '602512f6-496f-4d15-bd0f-ca3c0b61a8ee',
+      branchId: null
+    },
+    { 
+      email: 'gerente.sucursal@demo.com', 
+      password: 'Admin123', 
+      name: 'Gerente Sucursal', 
+      role: gerenteRole, 
+      roleCode: 'GERENTE',
+      companyId: null,
+      branchId: null // Will be set after branch is created
+    },
+  ];
+
+  for (const userData of restrictedUsers) {
+    const existingUser = await usersRepository.findOne({ where: { email: userData.email } });
+    if (!existingUser) {
+      const hashedPassword = await bcrypt.hash(userData.password, 10);
+      await usersRepository.save({
+        email: userData.email,
+        password: hashedPassword,
+        name: userData.name,
+        roleId: userData.role.id,
+        roleCode: userData.roleCode,
+        tenantId: demoTenant.id,
+        companyId: userData.companyId,
+        branchId: userData.branchId,
+        isActive: true,
+      });
+      console.log(`✅ Usuario ${userData.email} (${userData.roleCode}) con restricción creado`);
+    }
+  }
+
   // Crear empresas de prueba
   const existingCompanies = await companiesRepository.find({ where: { tenantId: testTenant.id } });
   
@@ -502,6 +543,13 @@ export async function seedDatabase(dataSource: DataSource) {
       isActive: true,
     });
     console.log('✅ Sucursal EL SAZÓN MATRIZ creada');
+  }
+
+  // Update gerente.sucursal user with branchId
+  const gerenteSucursal = await usersRepository.findOne({ where: { email: 'gerente.sucursal@demo.com' } });
+  if (gerenteSucursal && elSazonBranch) {
+    await usersRepository.update(gerenteSucursal.id, { branchId: elSazonBranch.id });
+    console.log('✅ Usuario gerente.sucursal@demo.com actualizado con branchId');
   }
 
   // Crear EL SONORENSE si no existe

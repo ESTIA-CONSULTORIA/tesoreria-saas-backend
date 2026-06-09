@@ -21,6 +21,9 @@ export class User {
   roleCode: string;
 
   @Column({ nullable: true })
+  companyId: string;
+
+  @Column({ nullable: true })
   branchId: string;
 
   @Column({ nullable: true })

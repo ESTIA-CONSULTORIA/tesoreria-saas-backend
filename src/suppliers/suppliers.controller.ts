@@ -12,10 +12,12 @@ export class SuppliersController {
     @Query('tenantId') tenantId?: string,
     @Query('search') search?: string,
     @Query('isActive') isActive?: string,
-    @Headers('x-company-id') companyId?: string,
+    @Headers('x-company-id') headerCompanyId?: string,
     @Req() req?: any,
   ) {
     const tenantIdFromReq = tenantId || req?.user?.tenantId || req?.tenantId;
+    const userCompanyId = req?.user?.companyId;
+    const companyId = userCompanyId || headerCompanyId;
     const isActiveBool = isActive === 'true' ? true : isActive === 'false' ? false : undefined;
     return this.suppliersService.findAll(tenantIdFromReq, search, isActiveBool, companyId);
   }

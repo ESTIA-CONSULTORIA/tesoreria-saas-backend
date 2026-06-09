@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Put, Delete, Body, Param, Query, Headers } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Body, Param, Query, Headers, Request } from '@nestjs/common';
 import { PurchasesService } from './purchases.service';
 import { Modulo } from '../auth/modulo.decorator';
 
@@ -12,9 +12,16 @@ export class PurchasesController {
   findAllOrders(
     @Query('tenantId') tenantId?: string,
     @Query('status') status?: string,
-    @Headers('x-branch-id') branchId?: string,
-    @Headers('x-company-id') companyId?: string,
+    @Headers('x-branch-id') headerBranchId?: string,
+    @Headers('x-company-id') headerCompanyId?: string,
+    @Request() req?: any,
   ) {
+    const userBranchId = req?.user?.branchId;
+    const userCompanyId = req?.user?.companyId;
+
+    const branchId = userBranchId || headerBranchId;
+    const companyId = userCompanyId || headerCompanyId;
+
     return this.purchasesService.findAllOrders(tenantId, status, branchId, companyId);
   }
 
@@ -68,9 +75,16 @@ export class PurchasesController {
   findAllPurchases(
     @Query('tenantId') tenantId?: string,
     @Query('status') status?: string,
-    @Headers('x-branch-id') branchId?: string,
-    @Headers('x-company-id') companyId?: string,
+    @Headers('x-branch-id') headerBranchId?: string,
+    @Headers('x-company-id') headerCompanyId?: string,
+    @Request() req?: any,
   ) {
+    const userBranchId = req?.user?.branchId;
+    const userCompanyId = req?.user?.companyId;
+
+    const branchId = userBranchId || headerBranchId;
+    const companyId = userCompanyId || headerCompanyId;
+
     return this.purchasesService.findAllPurchases(tenantId, status, branchId, companyId);
   }
 
@@ -113,9 +127,16 @@ export class PurchasesController {
   @Get('accounts-payable')
   async getAccountsPayable(
     @Query('tenantId') tenantId?: string,
-    @Headers('x-branch-id') branchId?: string,
-    @Headers('x-company-id') companyId?: string,
+    @Headers('x-branch-id') headerBranchId?: string,
+    @Headers('x-company-id') headerCompanyId?: string,
+    @Request() req?: any,
   ) {
+    const userBranchId = req?.user?.branchId;
+    const userCompanyId = req?.user?.companyId;
+
+    const branchId = userBranchId || headerBranchId;
+    const companyId = userCompanyId || headerCompanyId;
+
     return this.purchasesService.getAccountsPayable(tenantId, branchId, companyId);
   }
 }

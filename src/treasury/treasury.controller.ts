@@ -6,33 +6,63 @@ export class TreasuryController {
   constructor(private treasuryService: TreasuryService) {}
 
   @Get('executive-summary')
-  getExecutiveSummary(@Request() req, @Headers('x-branch-id') branchId?: string, @Headers('x-company-id') companyId?: string) {
+  getExecutiveSummary(@Request() req, @Headers('x-branch-id') headerBranchId?: string, @Headers('x-company-id') headerCompanyId?: string) {
     const tenantId = req.user?.tenantId || req.tenantId;
+    const userBranchId = req.user?.branchId;
+    const userCompanyId = req.user?.companyId;
+
+    const branchId = userBranchId || headerBranchId;
+    const companyId = userCompanyId || headerCompanyId;
+
     return this.treasuryService.getExecutiveSummary(tenantId, branchId, companyId);
   }
 
   @Get('cash-flow-forecast')
-  getCashFlowForecast(@Query('days') days?: string, @Request() req?: any, @Headers('x-branch-id') branchId?: string, @Headers('x-company-id') companyId?: string) {
+  getCashFlowForecast(@Query('days') days?: string, @Request() req?: any, @Headers('x-branch-id') headerBranchId?: string, @Headers('x-company-id') headerCompanyId?: string) {
     const tenantId = req?.user?.tenantId || req?.tenantId;
+    const userBranchId = req?.user?.branchId;
+    const userCompanyId = req?.user?.companyId;
+
+    const branchId = userBranchId || headerBranchId;
+    const companyId = userCompanyId || headerCompanyId;
+
     return this.treasuryService.getCashFlowForecast(days ? parseInt(days) : 30, tenantId, branchId, companyId);
   }
 
   @Get('bank-position')
-  getBankPosition(@Request() req, @Headers('x-branch-id') branchId?: string, @Headers('x-company-id') companyId?: string) {
+  getBankPosition(@Request() req, @Headers('x-branch-id') headerBranchId?: string, @Headers('x-company-id') headerCompanyId?: string) {
     const tenantId = req.user?.tenantId || req.tenantId;
+    const userBranchId = req.user?.branchId;
+    const userCompanyId = req.user?.companyId;
+
+    const branchId = userBranchId || headerBranchId;
+    const companyId = userCompanyId || headerCompanyId;
+
     return this.treasuryService.getBankPosition(tenantId, branchId, companyId);
   }
 
   @Get('alerts')
-  getAlerts(@Request() req, @Headers('x-branch-id') branchId?: string, @Headers('x-company-id') companyId?: string) {
+  getAlerts(@Request() req, @Headers('x-branch-id') headerBranchId?: string, @Headers('x-company-id') headerCompanyId?: string) {
     const tenantId = req.user?.tenantId || req.tenantId;
+    const userBranchId = req.user?.branchId;
+    const userCompanyId = req.user?.companyId;
+
+    const branchId = userBranchId || headerBranchId;
+    const companyId = userCompanyId || headerCompanyId;
+
     return this.treasuryService.getAlerts(tenantId, branchId, companyId);
   }
 
   // Scheduled Payments CRUD
   @Get('scheduled-payments')
-  getScheduledPayments(@Request() req, @Headers('x-branch-id') branchId?: string, @Headers('x-company-id') companyId?: string) {
+  getScheduledPayments(@Request() req, @Headers('x-branch-id') headerBranchId?: string, @Headers('x-company-id') headerCompanyId?: string) {
     const tenantId = req.user?.tenantId || req.tenantId;
+    const userBranchId = req.user?.branchId;
+    const userCompanyId = req.user?.companyId;
+
+    const branchId = userBranchId || headerBranchId;
+    const companyId = userCompanyId || headerCompanyId;
+
     return this.treasuryService.getScheduledPayments(tenantId, branchId, companyId);
   }
 
@@ -61,8 +91,14 @@ export class TreasuryController {
 
   // Accounts Payable (CxP)
   @Get('accounts-payable')
-  getAccountsPayable(@Request() req, @Headers('x-branch-id') branchId?: string, @Headers('x-company-id') companyId?: string) {
+  getAccountsPayable(@Request() req, @Headers('x-branch-id') headerBranchId?: string, @Headers('x-company-id') headerCompanyId?: string) {
     const tenantId = req.user?.tenantId || req.tenantId;
+    const userBranchId = req.user?.branchId;
+    const userCompanyId = req.user?.companyId;
+
+    const branchId = userBranchId || headerBranchId;
+    const companyId = userCompanyId || headerCompanyId;
+
     console.log('tenantId del JWT:', tenantId);
     console.log('req.user:', req.user);
     return this.treasuryService.getAccountsPayable(tenantId, branchId, companyId);
@@ -70,8 +106,14 @@ export class TreasuryController {
 
   // Accounts Receivable (CxC)
   @Get('accounts-receivable')
-  getAccountsReceivable(@Request() req, @Headers('x-branch-id') branchId?: string, @Headers('x-company-id') companyId?: string) {
+  getAccountsReceivable(@Request() req, @Headers('x-branch-id') headerBranchId?: string, @Headers('x-company-id') headerCompanyId?: string) {
     const tenantId = req.user?.tenantId || req.tenantId;
+    const userBranchId = req.user?.branchId;
+    const userCompanyId = req.user?.companyId;
+
+    const branchId = userBranchId || headerBranchId;
+    const companyId = userCompanyId || headerCompanyId;
+
     return this.treasuryService.getAccountsReceivable(tenantId, branchId, companyId);
   }
 

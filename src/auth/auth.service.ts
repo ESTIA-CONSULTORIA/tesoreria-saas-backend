@@ -49,6 +49,8 @@ export class AuthService {
       email: user.email,
       roleCode: user.roleCode,
       tenantId: user.tenantId,
+      companyId: user.companyId || null,
+      branchId: user.branchId || null,
     }, { expiresIn: '24h' });
 
     // Calcular módulos activos según rol y tenant
@@ -78,6 +80,8 @@ export class AuthService {
         name: user.name,
         roleCode: user.roleCode,
         tenantId: user.tenantId,
+        companyId: user.companyId || null,
+        branchId: user.branchId || null,
       },
     };
   }
