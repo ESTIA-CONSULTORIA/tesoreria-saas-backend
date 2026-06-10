@@ -729,107 +729,122 @@ export async function seedDatabase(dataSource: DataSource) {
 
   // EL SAZÓN MATRIZ - 15 ingresos, 8 egresos
   if (elSazonBBVA) {
-    for (let i = 0; i < 15; i++) {
-      const amount = Math.floor(Math.random() * 22000) + 3000; // $3,000 - $25,000
-      const date = new Date();
-      date.setDate(date.getDate() - Math.floor(Math.random() * 90));
-      await movementsRepository.save({
-        accountId: elSazonBBVA.id,
-        type: 'INCOME',
-        category: 'SALE',
-        concept: incomeConcepts[Math.floor(Math.random() * incomeConcepts.length)],
-        reference: `SAZ-ING-${String(i + 1).padStart(3, '0')}`,
-        amount: amount,
-        date: date,
-      });
-    }
-    console.log('✅ 15 movimientos de ingreso creados para EL SAZÓN MATRIZ');
+    const existingMovements = await movementsRepository.count({ where: { accountId: elSazonBBVA.id } });
+    if (existingMovements === 0) {
+      for (let i = 0; i < 15; i++) {
+        const amount = Math.floor(Math.random() * 13000) + 2000; // $2,000 - $15,000
+        const date = new Date();
+        date.setDate(date.getDate() - Math.floor(Math.random() * 90));
+        await movementsRepository.save({
+          accountId: elSazonBBVA.id,
+          type: 'INCOME',
+          category: 'SALE',
+          concept: incomeConcepts[Math.floor(Math.random() * incomeConcepts.length)],
+          reference: `SAZ-ING-${String(i + 1).padStart(3, '0')}`,
+          amount: amount,
+          date: date,
+        });
+      }
+      console.log('✅ 15 movimientos de ingreso creados para EL SAZÓN MATRIZ');
 
-    for (let i = 0; i < 8; i++) {
-      const amount = Math.floor(Math.random() * 7500) + 500; // $500 - $8,000
-      const date = new Date();
-      date.setDate(date.getDate() - Math.floor(Math.random() * 90));
-      await movementsRepository.save({
-        accountId: elSazonBBVA.id,
-        type: 'EXPENSE',
-        category: 'OPERATIONAL',
-        concept: expenseConcepts[Math.floor(Math.random() * expenseConcepts.length)],
-        reference: `SAZ-EGR-${String(i + 1).padStart(3, '0')}`,
-        amount: amount,
-        date: date,
-      });
+      for (let i = 0; i < 8; i++) {
+        const amount = Math.floor(Math.random() * 4500) + 500; // $500 - $5,000
+        const date = new Date();
+        date.setDate(date.getDate() - Math.floor(Math.random() * 90));
+        await movementsRepository.save({
+          accountId: elSazonBBVA.id,
+          type: 'EXPENSE',
+          category: 'OPERATIONAL',
+          concept: expenseConcepts[Math.floor(Math.random() * expenseConcepts.length)],
+          reference: `SAZ-EGR-${String(i + 1).padStart(3, '0')}`,
+          amount: amount,
+          date: date,
+        });
+      }
+      console.log('✅ 8 movimientos de egreso creados para EL SAZÓN MATRIZ');
+    } else {
+      console.log('⏭️  Movimientos ya existen para EL SAZÓN MATRIZ, omitiendo creación');
     }
-    console.log('✅ 8 movimientos de egreso creados para EL SAZÓN MATRIZ');
   }
 
   // EL SONORENSE - 12 ingresos, 6 egresos
   if (elSonorenseBanorte) {
-    for (let i = 0; i < 12; i++) {
-      const amount = Math.floor(Math.random() * 16000) + 2000; // $2,000 - $18,000
-      const date = new Date();
-      date.setDate(date.getDate() - Math.floor(Math.random() * 90));
-      await movementsRepository.save({
-        accountId: elSonorenseBanorte.id,
-        type: 'INCOME',
-        category: 'SALE',
-        concept: incomeConcepts[Math.floor(Math.random() * incomeConcepts.length)],
-        reference: `SON-ING-${String(i + 1).padStart(3, '0')}`,
-        amount: amount,
-        date: date,
-      });
-    }
-    console.log('✅ 12 movimientos de ingreso creados para EL SONORENSE');
+    const existingMovements = await movementsRepository.count({ where: { accountId: elSonorenseBanorte.id } });
+    if (existingMovements === 0) {
+      for (let i = 0; i < 12; i++) {
+        const amount = Math.floor(Math.random() * 13000) + 2000; // $2,000 - $15,000
+        const date = new Date();
+        date.setDate(date.getDate() - Math.floor(Math.random() * 90));
+        await movementsRepository.save({
+          accountId: elSonorenseBanorte.id,
+          type: 'INCOME',
+          category: 'SALE',
+          concept: incomeConcepts[Math.floor(Math.random() * incomeConcepts.length)],
+          reference: `SON-ING-${String(i + 1).padStart(3, '0')}`,
+          amount: amount,
+          date: date,
+        });
+      }
+      console.log('✅ 12 movimientos de ingreso creados para EL SONORENSE');
 
-    for (let i = 0; i < 6; i++) {
-      const amount = Math.floor(Math.random() * 5600) + 400; // $400 - $6,000
-      const date = new Date();
-      date.setDate(date.getDate() - Math.floor(Math.random() * 90));
-      await movementsRepository.save({
-        accountId: elSonorenseBanorte.id,
-        type: 'EXPENSE',
-        category: 'OPERATIONAL',
-        concept: expenseConcepts[Math.floor(Math.random() * expenseConcepts.length)],
-        reference: `SON-EGR-${String(i + 1).padStart(3, '0')}`,
-        amount: amount,
-        date: date,
-      });
+      for (let i = 0; i < 6; i++) {
+        const amount = Math.floor(Math.random() * 4500) + 500; // $500 - $5,000
+        const date = new Date();
+        date.setDate(date.getDate() - Math.floor(Math.random() * 90));
+        await movementsRepository.save({
+          accountId: elSonorenseBanorte.id,
+          type: 'EXPENSE',
+          category: 'OPERATIONAL',
+          concept: expenseConcepts[Math.floor(Math.random() * expenseConcepts.length)],
+          reference: `SON-EGR-${String(i + 1).padStart(3, '0')}`,
+          amount: amount,
+          date: date,
+        });
+      }
+      console.log('✅ 6 movimientos de egreso creados para EL SONORENSE');
+    } else {
+      console.log('⏭️  Movimientos ya existen para EL SONORENSE, omitiendo creación');
     }
-    console.log('✅ 6 movimientos de egreso creados para EL SONORENSE');
   }
 
   // SERVICIOS DEMO - 10 ingresos, 5 egresos
   if (serviciosHSBC) {
-    for (let i = 0; i < 10; i++) {
-      const amount = Math.floor(Math.random() * 25000) + 5000; // $5,000 - $30,000
-      const date = new Date();
-      date.setDate(date.getDate() - Math.floor(Math.random() * 90));
-      await movementsRepository.save({
-        accountId: serviciosHSBC.id,
-        type: 'INCOME',
-        category: 'SALE',
-        concept: incomeConcepts[Math.floor(Math.random() * incomeConcepts.length)],
-        reference: `SER-ING-${String(i + 1).padStart(3, '0')}`,
-        amount: amount,
-        date: date,
-      });
-    }
-    console.log('✅ 10 movimientos de ingreso creados para SERVICIOS DEMO');
+    const existingMovements = await movementsRepository.count({ where: { accountId: serviciosHSBC.id } });
+    if (existingMovements === 0) {
+      for (let i = 0; i < 10; i++) {
+        const amount = Math.floor(Math.random() * 13000) + 2000; // $2,000 - $15,000
+        const date = new Date();
+        date.setDate(date.getDate() - Math.floor(Math.random() * 90));
+        await movementsRepository.save({
+          accountId: serviciosHSBC.id,
+          type: 'INCOME',
+          category: 'SALE',
+          concept: incomeConcepts[Math.floor(Math.random() * incomeConcepts.length)],
+          reference: `SER-ING-${String(i + 1).padStart(3, '0')}`,
+          amount: amount,
+          date: date,
+        });
+      }
+      console.log('✅ 10 movimientos de ingreso creados para SERVICIOS DEMO');
 
-    for (let i = 0; i < 5; i++) {
-      const amount = Math.floor(Math.random() * 9000) + 1000; // $1,000 - $10,000
-      const date = new Date();
-      date.setDate(date.getDate() - Math.floor(Math.random() * 90));
-      await movementsRepository.save({
-        accountId: serviciosHSBC.id,
-        type: 'EXPENSE',
-        category: 'OPERATIONAL',
-        concept: expenseConcepts[Math.floor(Math.random() * expenseConcepts.length)],
-        reference: `SER-EGR-${String(i + 1).padStart(3, '0')}`,
-        amount: amount,
-        date: date,
-      });
+      for (let i = 0; i < 5; i++) {
+        const amount = Math.floor(Math.random() * 4500) + 500; // $500 - $5,000
+        const date = new Date();
+        date.setDate(date.getDate() - Math.floor(Math.random() * 90));
+        await movementsRepository.save({
+          accountId: serviciosHSBC.id,
+          type: 'EXPENSE',
+          category: 'OPERATIONAL',
+          concept: expenseConcepts[Math.floor(Math.random() * expenseConcepts.length)],
+          reference: `SER-EGR-${String(i + 1).padStart(3, '0')}`,
+          amount: amount,
+          date: date,
+        });
+      }
+      console.log('✅ 5 movimientos de egreso creados para SERVICIOS DEMO');
+    } else {
+      console.log('⏭️  Movimientos ya existen para SERVICIOS DEMO, omitiendo creación');
     }
-    console.log('✅ 5 movimientos de egreso creados para SERVICIOS DEMO');
   }
 
   // Crear familias de insumos por defecto si no existen
