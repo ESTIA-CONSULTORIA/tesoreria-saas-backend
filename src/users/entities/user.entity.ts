@@ -20,10 +20,10 @@ export class User {
   @Column({ default: 'USER' })
   roleCode: string;
 
-  @Column({ nullable: true })
+  @Column({ name: 'companyId', nullable: true })
   companyId: string;
 
-  @Column({ nullable: true })
+  @Column({ name: 'branchId', nullable: true })
   branchId: string;
 
   @Column({ nullable: true })
