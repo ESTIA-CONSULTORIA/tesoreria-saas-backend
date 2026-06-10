@@ -203,9 +203,14 @@ export class ShiftsService {
         if (shift) return shift;
       }
       
-      // Fallback: buscar cualquier turno abierto
+      // Fallback: buscar cualquier turno abierto, filtrando por sucursalId si se proporciona
+      const whereConditions: any = { status: 'ABIERTO' };
+      if (sucursalId) {
+        whereConditions.sucursalId = sucursalId;
+      }
+      
       const shift = await this.shiftsRepo.findOne({
-        where: { status: 'ABIERTO' },
+        where: whereConditions,
         order: { createdAt: 'DESC' },
       });
       console.log('findOpenShift fallback result:', shift?.id);

@@ -22,10 +22,11 @@ export class DashboardService {
     private metricsRepo: Repository<DashboardMetric>,
   ) {}
 
-  async getKpis(period: string = 'month', branchId?: string, tenantId?: string) {
+  async getKpis(period: string = 'month', branchId?: string, companyId?: string, tenantId?: string) {
     console.log('=== DASHBOARD KPIS LLAMADO ===');
     console.log('tenantId recibido:', tenantId);
     console.log('branchId recibido:', branchId);
+    console.log('companyId recibido:', companyId);
 
     try {
       const now = new Date();
@@ -64,6 +65,13 @@ export class DashboardService {
       let bankQuery = this.banksRepo.createQueryBuilder('bank');
       if (branchId) {
         bankQuery = bankQuery.where('bank.branchId = :branchId', { branchId });
+      } else if (companyId) {
+        // Vista de empresa específica: obtener cuentas de todas las sucursales de esa empresa
+        const branches = await this.branchesRepo.find({ where: { companyId } });
+        const branchIds = branches.map(b => b.id);
+        if (branchIds.length > 0) {
+          bankQuery = bankQuery.where('bank.branchId IN (:...branchIds)', { branchIds });
+        }
       } else if (tenantId) {
         // Vista consolidada: obtener cuentas de todas las sucursales del tenant
         const companies = await this.companiesRepo.find({ where: { tenantId } });
@@ -91,6 +99,17 @@ export class DashboardService {
           movementQuery = movementQuery.where('movement.accountId IN (:...accountIds)', { accountIds });
         } else {
           movementQuery = movementQuery.where('1=0'); // Sin cuentas, sin movimientos
+        }
+      } else if (companyId) {
+        // Vista de empresa específica: filtrar por companyId a través de las cuentas
+        const branches = await this.branchesRepo.find({ where: { companyId } });
+        const branchIds = branches.map(b => b.id);
+        const banks = await this.banksRepo.find({ where: { branchId: In(branchIds) } });
+        const accountIds = banks.map(b => b.id);
+        if (accountIds.length > 0) {
+          movementQuery = movementQuery.where('movement.accountId IN (:...accountIds)', { accountIds });
+        } else {
+          movementQuery = movementQuery.where('1=0');
         }
       } else if (tenantId) {
         // Vista consolidada: filtrar por tenant a través de las cuentas
@@ -189,7 +208,13 @@ export class DashboardService {
       }> = [];
       if (!branchId && tenantId) {
         console.log('tenantId usado:', tenantId);
-        const companies = await this.companiesRepo.find({ where: { tenantId } });
+        let companies = await this.companiesRepo.find({ where: { tenantId } });
+        
+        // Si hay companyId específico, filtrar solo esa empresa
+        if (companyId) {
+          companies = companies.filter(c => c.id === companyId);
+        }
+        
         console.log('empresas encontradas:', companies.length);
         for (const company of companies) {
           console.log('Procesando empresa:', company.tradeName);
