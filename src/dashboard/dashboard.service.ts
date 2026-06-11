@@ -43,6 +43,14 @@ export class DashboardService {
           previousStartDate.setDate(now.getDate() - 14);
           previousEndDate = startDate;
           break;
+        case 'quarter':
+          startDate = new Date(now);
+          startDate.setDate(now.getDate() - 90);
+          previousStartDate = new Date(now);
+          previousStartDate.setDate(now.getDate() - 180);
+          previousEndDate = new Date(now);
+          previousEndDate.setDate(now.getDate() - 90);
+          break;
         case 'year':
           startDate = new Date(now.getFullYear(), 0, 1);
           previousStartDate = new Date(now.getFullYear() - 1, 0, 1);
@@ -316,6 +324,10 @@ export class DashboardService {
         case 'week':
           startDate = new Date(now);
           startDate.setDate(now.getDate() - 7);
+          break;
+        case 'quarter':
+          startDate = new Date(now);
+          startDate.setDate(now.getDate() - 90);
           break;
         case 'year':
           startDate = new Date(now.getFullYear(), 0, 1);
