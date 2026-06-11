@@ -99,8 +99,6 @@ export class TreasuryController {
     const branchId = userBranchId || headerBranchId;
     const companyId = userCompanyId || headerCompanyId;
 
-    console.log('tenantId del JWT:', tenantId);
-    console.log('req.user:', req.user);
     return this.treasuryService.getAccountsPayable(tenantId, branchId, companyId);
   }
 

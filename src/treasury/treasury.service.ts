@@ -629,8 +629,6 @@ export class TreasuryService {
   // Accounts Payable (CxP)
   async getAccountsPayable(tenantId?: string, branchId?: string, companyId?: string) {
     try {
-      console.log('getAccountsPayable - tenantId recibido:', tenantId);
-      
       const where: any = { status: In(['PENDIENTE', 'PARCIAL']) };
       if (tenantId) where.tenantId = tenantId;
       if (branchId) where.branchId = branchId;
@@ -652,13 +650,6 @@ export class TreasuryService {
         relations: ['supplier'],
         order: { fechaVencimiento: 'ASC' },
       });
-      
-      console.log('getAccountsPayable - purchases encontradas:', purchases.length);
-      console.log('getAccountsPayable - purchases:', purchases.map(p => ({ id: p.id, numero: p.numero, tenantId: p.tenantId, status: p.status })));
-      
-      if (purchases.length > 0) {
-        console.log('Primera factura:', JSON.stringify(purchases[0], null, 2));
-      }
       
       const now = new Date();
       

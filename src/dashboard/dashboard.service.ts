@@ -23,11 +23,6 @@ export class DashboardService {
   ) {}
 
   async getKpis(period: string = 'month', branchId?: string, companyId?: string, tenantId?: string) {
-    console.log('=== DASHBOARD KPIS LLAMADO ===');
-    console.log('tenantId recibido:', tenantId);
-    console.log('branchId recibido:', branchId);
-    console.log('companyId recibido:', companyId);
-
     try {
       const now = new Date();
       let startDate: Date;
@@ -94,7 +89,6 @@ export class DashboardService {
       if (branchId) {
         // Vista individual: filtrar por branchId a través de las cuentas
         const banks = await this.banksRepo.find({ where: { branchId } });
-        console.log('banks encontrados para branchId:', branchId, banks.length);
         const accountIds = banks.map(b => b.id);
         if (accountIds.length > 0) {
           movementQuery = movementQuery.where('movement.accountId IN (:...accountIds)', { accountIds });
@@ -208,37 +202,31 @@ export class DashboardService {
         expense: number;
       }> = [];
       if (!branchId && tenantId) {
-        console.log('tenantId usado:', tenantId);
         let companies = await this.companiesRepo.find({ where: { tenantId } });
-        
+
         // Si hay companyId específico, filtrar solo esa empresa
         if (companyId) {
           companies = companies.filter(c => c.id === companyId);
         }
-        
-        console.log('empresas encontradas:', companies.length);
+
         for (const company of companies) {
-          console.log('Procesando empresa:', company.tradeName);
-          console.log('  companyId:', company.id);
           const companyBranches = await this.branchesRepo
             .createQueryBuilder('branch')
             .where('branch.companyId = :companyId', { companyId: company.id.toString() })
             .getMany();
           const companyBranchIds = companyBranches.map(b => b.id);
-          console.log('  sucursales encontradas:', companyBranches.length);
-          
+
           if (companyBranchIds.length > 0) {
             const companyBanks = await this.banksRepo.find({ where: { branchId: In(companyBranchIds) } });
             const companyAccountIds = companyBanks.map(b => b.id);
-            console.log('  bancos encontrados:', companyBanks.length);
-            
+
             if (companyAccountIds.length > 0) {
               const companyBalanceRaw = await this.banksRepo
                 .createQueryBuilder('bank')
                 .select('COALESCE(SUM(bank.balance), 0)', 'total')
                 .where('bank.id IN (:...accountIds)', { accountIds: companyAccountIds })
                 .getRawOne();
-              
+
               const companyIncomeRaw = await this.movementsRepo
                 .createQueryBuilder('movement')
                 .select('COALESCE(SUM(movement.amount), 0)', 'total')
@@ -247,7 +235,7 @@ export class DashboardService {
                 .andWhere('movement.createdAt >= :startDate', { startDate })
                 .andWhere('movement.createdAt <= :endDate', { endDate: now })
                 .getRawOne();
-              
+
               const companyExpenseRaw = await this.movementsRepo
                 .createQueryBuilder('movement')
                 .select('COALESCE(SUM(movement.amount), 0)', 'total')
@@ -256,7 +244,7 @@ export class DashboardService {
                 .andWhere('movement.createdAt >= :startDate', { startDate })
                 .andWhere('movement.createdAt <= :endDate', { endDate: now })
                 .getRawOne();
-              
+
               companiesBreakdown.push({
                 companyId: company.id,
                 companyName: company.tradeName || company.legalName,
@@ -264,12 +252,7 @@ export class DashboardService {
                 income: Number(companyIncomeRaw?.total || 0),
                 expense: Number(companyExpenseRaw?.total || 0),
               });
-              console.log('  push a companiesBreakdown OK');
-            } else {
-              console.log('  SIN cuentas bancarias - saltando');
             }
-          } else {
-            console.log('  SIN sucursales - saltando');
           }
         }
       }
