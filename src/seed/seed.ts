@@ -262,7 +262,7 @@ export async function seedDatabase(dataSource: DataSource) {
   const existingCompanies = await companiesRepository.find({ where: { tenantId: testTenant.id } });
 
   // Crear Comercializadora Demo si no existe
-  let company1 = await companiesRepository.findOne({ where: { tenantId: testTenant.id, tradeName: 'Comercializadora Demo' } });
+  let company1 = await companiesRepository.findOne({ where: { id: 'e7f801da-6fb6-48e6-9464-7706903c4854' } });
   if (!company1) {
     company1 = await companiesRepository.save({
       tenantId: testTenant.id,
@@ -276,7 +276,7 @@ export async function seedDatabase(dataSource: DataSource) {
   }
 
   // Crear Servicios Demo si no existe
-  let company2 = await companiesRepository.findOne({ where: { tenantId: testTenant.id, tradeName: 'Servicios Demo' } });
+  let company2 = await companiesRepository.findOne({ where: { id: 'b3270c6b-4e4e-45b6-aff3-ab4a70e5284f' } });
   if (!company2) {
     company2 = await companiesRepository.save({
       tenantId: testTenant.id,
