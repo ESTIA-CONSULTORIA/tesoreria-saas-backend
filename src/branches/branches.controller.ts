@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Headers, Param, Patch, Post, Request } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Headers, Param, Patch, Post, Query, Request } from '@nestjs/common';
 import { BranchesService } from './branches.service';
 
 @Controller('branches')
@@ -29,15 +29,21 @@ export class BranchesController {
 
   @Get()
   findAll(
+    @Query('companyId') queryCompanyId?: string,
     @Headers('x-company-id') headerCompanyId?: string,
     @Request() req?: any,
   ) {
     const userCompanyId = req?.user?.companyId;
     const tenantId = req?.user?.tenantId || req?.tenantId;
 
-    // If user has companyId in JWT, use it and ignore header
+    // If user has companyId in JWT, use it and ignore everything else
     if (userCompanyId) {
       return this.branchesService.findByCompany(userCompanyId);
+    }
+
+    // If query param companyId is present, use it
+    if (queryCompanyId) {
+      return this.branchesService.findByCompany(queryCompanyId);
     }
 
     // If user has tenantId in JWT, filter by tenant
