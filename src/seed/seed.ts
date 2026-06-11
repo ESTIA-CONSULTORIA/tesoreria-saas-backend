@@ -1,6 +1,19 @@
 import { DataSource, IsNull, In } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 
+function randomDateDistributed(): Date {
+  const rand = Math.random();
+  const date = new Date();
+  if (rand < 0.30) {
+    date.setDate(date.getDate() - Math.floor(Math.random() * 7));
+  } else if (rand < 0.70) {
+    date.setDate(date.getDate() - (8 + Math.floor(Math.random() * 23)));
+  } else {
+    date.setDate(date.getDate() - (31 + Math.floor(Math.random() * 60)));
+  }
+  return date;
+}
+
 export async function seedDatabase(dataSource: DataSource) {
   const usersRepository = dataSource.getRepository('User');
   const rolesRepository = dataSource.getRepository('Role');
@@ -351,46 +364,11 @@ export async function seedDatabase(dataSource: DataSource) {
 
     // Crear movimientos de ingreso
     const incomeMovements = [
-      {
-        accountId: bank1.id,
-        type: 'INCOME',
-        category: 'SALE',
-        concept: 'Venta de mercancía',
-        reference: 'FAC-001',
-        amount: 15000,
-      },
-      {
-        accountId: bank1.id,
-        type: 'INCOME',
-        category: 'SALE',
-        concept: 'Venta de servicios',
-        reference: 'FAC-002',
-        amount: 8500,
-      },
-      {
-        accountId: bank1.id,
-        type: 'INCOME',
-        category: 'RENT',
-        concept: 'Renta de equipo',
-        reference: 'REC-001',
-        amount: 3200,
-      },
-      {
-        accountId: bank2.id,
-        type: 'INCOME',
-        category: 'SALE',
-        concept: 'Venta contado',
-        reference: 'FAC-003',
-        amount: 5000,
-      },
-      {
-        accountId: bank1.id,
-        type: 'INCOME',
-        category: 'TRANSFER',
-        concept: 'Transferencia de cliente',
-        reference: 'TRF-001',
-        amount: 12000,
-      },
+      { accountId: bank1.id, type: 'INCOME', category: 'SALE', concept: 'Venta de mercancía', reference: 'FAC-001', amount: 15000, date: randomDateDistributed() },
+      { accountId: bank1.id, type: 'INCOME', category: 'SALE', concept: 'Venta de servicios', reference: 'FAC-002', amount: 8500, date: randomDateDistributed() },
+      { accountId: bank1.id, type: 'INCOME', category: 'RENT', concept: 'Renta de equipo', reference: 'REC-001', amount: 3200, date: randomDateDistributed() },
+      { accountId: bank2.id, type: 'INCOME', category: 'SALE', concept: 'Venta contado', reference: 'FAC-003', amount: 5000, date: randomDateDistributed() },
+      { accountId: bank1.id, type: 'INCOME', category: 'TRANSFER', concept: 'Transferencia de cliente', reference: 'TRF-001', amount: 12000, date: randomDateDistributed() },
     ];
 
     for (const movement of incomeMovements) {
@@ -401,46 +379,11 @@ export async function seedDatabase(dataSource: DataSource) {
 
     // Crear movimientos de egreso
     const expenseMovements = [
-      {
-        accountId: bank1.id,
-        type: 'EXPENSE',
-        category: 'PAYROLL',
-        concept: 'Nómina quincenal',
-        reference: 'NOM-001',
-        amount: 25000,
-      },
-      {
-        accountId: bank1.id,
-        type: 'EXPENSE',
-        category: 'RENT',
-        concept: 'Renta de local',
-        reference: 'REN-001',
-        amount: 8000,
-      },
-      {
-        accountId: bank2.id,
-        type: 'EXPENSE',
-        category: 'SUPPLIES',
-        concept: 'Compra de papelería',
-        reference: 'GAS-001',
-        amount: 1500,
-      },
-      {
-        accountId: bank1.id,
-        type: 'EXPENSE',
-        category: 'SERVICES',
-        concept: 'Servicios de internet',
-        reference: 'SER-001',
-        amount: 1200,
-      },
-      {
-        accountId: bank1.id,
-        type: 'EXPENSE',
-        category: 'TRANSFER',
-        concept: 'Transferencia a proveedor',
-        reference: 'TRF-002',
-        amount: 4500,
-      },
+      { accountId: bank1.id, type: 'EXPENSE', category: 'PAYROLL', concept: 'Nómina quincenal', reference: 'NOM-001', amount: 25000, date: randomDateDistributed() },
+      { accountId: bank1.id, type: 'EXPENSE', category: 'RENT', concept: 'Renta de local', reference: 'REN-001', amount: 8000, date: randomDateDistributed() },
+      { accountId: bank2.id, type: 'EXPENSE', category: 'SUPPLIES', concept: 'Compra de papelería', reference: 'GAS-001', amount: 1500, date: randomDateDistributed() },
+      { accountId: bank1.id, type: 'EXPENSE', category: 'SERVICES', concept: 'Servicios de internet', reference: 'SER-001', amount: 1200, date: randomDateDistributed() },
+      { accountId: bank1.id, type: 'EXPENSE', category: 'TRANSFER', concept: 'Transferencia a proveedor', reference: 'TRF-002', amount: 4500, date: randomDateDistributed() },
     ];
 
     for (const movement of expenseMovements) {
@@ -550,8 +493,7 @@ export async function seedDatabase(dataSource: DataSource) {
     // Crear movimientos de ingreso
     for (let i = 0; i < 10; i++) {
       const amount = Math.floor(Math.random() * 8500) + 1500;
-      const date = new Date();
-      date.setDate(date.getDate() - Math.floor(Math.random() * 90));
+      const date = randomDateDistributed();
       await movementsRepository.save({
         accountId: bank2_1.id,
         type: 'INCOME',
@@ -567,8 +509,7 @@ export async function seedDatabase(dataSource: DataSource) {
     // Crear movimientos de egreso
     for (let i = 0; i < 5; i++) {
       const amount = Math.floor(Math.random() * 3100) + 400;
-      const date = new Date();
-      date.setDate(date.getDate() - Math.floor(Math.random() * 90));
+      const date = randomDateDistributed();
       await movementsRepository.save({
         accountId: bank2_1.id,
         type: 'EXPENSE',
@@ -664,8 +605,7 @@ export async function seedDatabase(dataSource: DataSource) {
       // Crear movimientos de ingreso
       for (let i = 0; i < 10; i++) {
         const amount = Math.floor(Math.random() * 10000) + 2000;
-        const date = new Date();
-        date.setDate(date.getDate() - Math.floor(Math.random() * 90));
+        const date = randomDateDistributed();
         await movementsRepository.save({
           accountId: sazonNorteBancomer.id,
           type: 'INCOME',
@@ -681,8 +621,7 @@ export async function seedDatabase(dataSource: DataSource) {
       // Crear movimientos de egreso
       for (let i = 0; i < 5; i++) {
         const amount = Math.floor(Math.random() * 3500) + 500;
-        const date = new Date();
-        date.setDate(date.getDate() - Math.floor(Math.random() * 90));
+        const date = randomDateDistributed();
         await movementsRepository.save({
           accountId: sazonNorteBancomer.id,
           type: 'EXPENSE',
@@ -850,8 +789,7 @@ export async function seedDatabase(dataSource: DataSource) {
     if (existingMovements === 0) {
       for (let i = 0; i < 15; i++) {
         const amount = Math.floor(Math.random() * 13000) + 2000; // $2,000 - $15,000
-        const date = new Date();
-        date.setDate(date.getDate() - Math.floor(Math.random() * 90));
+        const date = randomDateDistributed();
         await movementsRepository.save({
           accountId: sazonBBVA.id,
           type: 'INCOME',
@@ -866,8 +804,7 @@ export async function seedDatabase(dataSource: DataSource) {
 
       for (let i = 0; i < 8; i++) {
         const amount = Math.floor(Math.random() * 4500) + 500; // $500 - $5,000
-        const date = new Date();
-        date.setDate(date.getDate() - Math.floor(Math.random() * 90));
+        const date = randomDateDistributed();
         await movementsRepository.save({
           accountId: sazonBBVA.id,
           type: 'EXPENSE',
@@ -890,8 +827,7 @@ export async function seedDatabase(dataSource: DataSource) {
     if (existingMovements === 0) {
       for (let i = 0; i < 12; i++) {
         const amount = Math.floor(Math.random() * 13000) + 2000; // $2,000 - $15,000
-        const date = new Date();
-        date.setDate(date.getDate() - Math.floor(Math.random() * 90));
+        const date = randomDateDistributed();
         await movementsRepository.save({
           accountId: sonorenseBanorte.id,
           type: 'INCOME',
@@ -906,8 +842,7 @@ export async function seedDatabase(dataSource: DataSource) {
 
       for (let i = 0; i < 6; i++) {
         const amount = Math.floor(Math.random() * 4500) + 500; // $500 - $5,000
-        const date = new Date();
-        date.setDate(date.getDate() - Math.floor(Math.random() * 90));
+        const date = randomDateDistributed();
         await movementsRepository.save({
           accountId: sonorenseBanorte.id,
           type: 'EXPENSE',
@@ -930,8 +865,7 @@ export async function seedDatabase(dataSource: DataSource) {
     if (existingMovements === 0) {
       for (let i = 0; i < 10; i++) {
         const amount = Math.floor(Math.random() * 13000) + 2000; // $2,000 - $15,000
-        const date = new Date();
-        date.setDate(date.getDate() - Math.floor(Math.random() * 90));
+        const date = randomDateDistributed();
         await movementsRepository.save({
           accountId: serviciosHSBC.id,
           type: 'INCOME',
@@ -946,8 +880,7 @@ export async function seedDatabase(dataSource: DataSource) {
 
       for (let i = 0; i < 5; i++) {
         const amount = Math.floor(Math.random() * 4500) + 500; // $500 - $5,000
-        const date = new Date();
-        date.setDate(date.getDate() - Math.floor(Math.random() * 90));
+        const date = randomDateDistributed();
         await movementsRepository.save({
           accountId: serviciosHSBC.id,
           type: 'EXPENSE',
@@ -1528,8 +1461,7 @@ export async function seedDatabase(dataSource: DataSource) {
 
     for (let i = 0; i < 40; i++) {
       const amount = Math.floor(Math.random() * 24500) + 500; // $500 - $25,000
-      const date = new Date();
-      date.setDate(date.getDate() - Math.floor(Math.random() * 90)); // Últimos 3 meses
+      const date = randomDateDistributed();
 
       await movementsRepository.save({
         accountId: bankBBVA?.id,
@@ -1552,8 +1484,7 @@ export async function seedDatabase(dataSource: DataSource) {
 
     for (let i = 0; i < 20; i++) {
       const amount = Math.floor(Math.random() * 24500) + 500;
-      const date = new Date();
-      date.setDate(date.getDate() - Math.floor(Math.random() * 90));
+      const date = randomDateDistributed();
 
       await movementsRepository.save({
         accountId: bankBanorte?.id || bankBBVA?.id,
@@ -1569,8 +1500,7 @@ export async function seedDatabase(dataSource: DataSource) {
     // 5 transferencias entre cuentas
     for (let i = 0; i < 5; i++) {
       const amount = Math.floor(Math.random() * 10000) + 1000;
-      const date = new Date();
-      date.setDate(date.getDate() - Math.floor(Math.random() * 60));
+      const date = randomDateDistributed();
 
       await movementsRepository.save({
         accountId: bankBBVA?.id,

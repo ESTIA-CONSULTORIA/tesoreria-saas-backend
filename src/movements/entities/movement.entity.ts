@@ -26,6 +26,9 @@ categoryId: string;
   @Column({ type: 'decimal', default: 0 })
   amount: number;
 
+  @Column({ type: 'timestamp', nullable: true, default: () => 'CURRENT_TIMESTAMP' })
+  date: Date;
+
   @CreateDateColumn()
   createdAt: Date;
 }

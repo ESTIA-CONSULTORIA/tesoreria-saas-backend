@@ -125,16 +125,16 @@ export class DashboardService {
         .clone()
         .select('COALESCE(SUM(movement.amount), 0)', 'total')
         .andWhere('movement.type = :type', { type: 'INCOME' })
-        .andWhere('movement.createdAt >= :startDate', { startDate })
-        .andWhere('movement.createdAt <= :endDate', { endDate: now })
+        .andWhere('movement.date >= :startDate', { startDate })
+        .andWhere('movement.date <= :endDate', { endDate: now })
         .getRawOne();
 
       const currentExpenseRaw = await movementQuery
         .clone()
         .select('COALESCE(SUM(movement.amount), 0)', 'total')
         .andWhere('movement.type = :type', { type: 'EXPENSE' })
-        .andWhere('movement.createdAt >= :startDate', { startDate })
-        .andWhere('movement.createdAt <= :endDate', { endDate: now })
+        .andWhere('movement.date >= :startDate', { startDate })
+        .andWhere('movement.date <= :endDate', { endDate: now })
         .getRawOne();
 
       const currentIncome = Number(currentIncomeRaw?.total || 0);
@@ -145,16 +145,16 @@ export class DashboardService {
         .clone()
         .select('COALESCE(SUM(movement.amount), 0)', 'total')
         .andWhere('movement.type = :type', { type: 'INCOME' })
-        .andWhere('movement.createdAt >= :startDate', { startDate: previousStartDate })
-        .andWhere('movement.createdAt <= :endDate', { endDate: previousEndDate })
+        .andWhere('movement.date >= :startDate', { startDate: previousStartDate })
+        .andWhere('movement.date <= :endDate', { endDate: previousEndDate })
         .getRawOne();
 
       const previousExpenseRaw = await movementQuery
         .clone()
         .select('COALESCE(SUM(movement.amount), 0)', 'total')
         .andWhere('movement.type = :type', { type: 'EXPENSE' })
-        .andWhere('movement.createdAt >= :startDate', { startDate: previousStartDate })
-        .andWhere('movement.createdAt <= :endDate', { endDate: previousEndDate })
+        .andWhere('movement.date >= :startDate', { startDate: previousStartDate })
+        .andWhere('movement.date <= :endDate', { endDate: previousEndDate })
         .getRawOne();
 
       const previousIncome = Number(previousIncomeRaw?.total || 0);
@@ -177,7 +177,7 @@ export class DashboardService {
 
       const latestMovements = await movementQuery
         .clone()
-        .orderBy('movement.createdAt', 'DESC')
+        .orderBy('movement.date', 'DESC')
         .take(5)
         .getMany();
 
@@ -232,8 +232,8 @@ export class DashboardService {
                 .select('COALESCE(SUM(movement.amount), 0)', 'total')
                 .where('movement.accountId IN (:...accountIds)', { accountIds: companyAccountIds })
                 .andWhere('movement.type = :type', { type: 'INCOME' })
-                .andWhere('movement.createdAt >= :startDate', { startDate })
-                .andWhere('movement.createdAt <= :endDate', { endDate: now })
+                .andWhere('movement.date >= :startDate', { startDate })
+                .andWhere('movement.date <= :endDate', { endDate: now })
                 .getRawOne();
 
               const companyExpenseRaw = await this.movementsRepo
@@ -241,8 +241,8 @@ export class DashboardService {
                 .select('COALESCE(SUM(movement.amount), 0)', 'total')
                 .where('movement.accountId IN (:...accountIds)', { accountIds: companyAccountIds })
                 .andWhere('movement.type = :type', { type: 'EXPENSE' })
-                .andWhere('movement.createdAt >= :startDate', { startDate })
-                .andWhere('movement.createdAt <= :endDate', { endDate: now })
+                .andWhere('movement.date >= :startDate', { startDate })
+                .andWhere('movement.date <= :endDate', { endDate: now })
                 .getRawOne();
 
               companiesBreakdown.push({
@@ -354,8 +354,8 @@ export class DashboardService {
             .select('COALESCE(SUM(movement.amount), 0)', 'total')
             .where('movement.accountId IN (:...accountIds)', { accountIds })
             .andWhere('movement.type = :type', { type: 'INCOME' })
-            .andWhere('movement.createdAt >= :startDate', { startDate })
-            .andWhere('movement.createdAt <= :endDate', { endDate: now })
+            .andWhere('movement.date >= :startDate', { startDate })
+            .andWhere('movement.date <= :endDate', { endDate: now })
             .getRawOne();
 
           const expenseRaw = await this.movementsRepo
@@ -363,8 +363,8 @@ export class DashboardService {
             .select('COALESCE(SUM(movement.amount), 0)', 'total')
             .where('movement.accountId IN (:...accountIds)', { accountIds })
             .andWhere('movement.type = :type', { type: 'EXPENSE' })
-            .andWhere('movement.createdAt >= :startDate', { startDate })
-            .andWhere('movement.createdAt <= :endDate', { endDate: now })
+            .andWhere('movement.date >= :startDate', { startDate })
+            .andWhere('movement.date <= :endDate', { endDate: now })
             .getRawOne();
 
           branchesBreakdown.push({
