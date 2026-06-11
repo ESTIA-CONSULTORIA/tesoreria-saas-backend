@@ -333,9 +333,9 @@ export async function seedDatabase(dataSource: DataSource) {
   }
 
   // Check if banks already exist for branch1
-  const existingBanks = await banksRepository.find({ where: { branchId: branch1.id } });
+  const existingBanksBranch1 = await banksRepository.count({ where: { branchId: branch1.id } });
 
-  if (existingBanks.length === 0) {
+  if (existingBanksBranch1 === 0) {
     // Crear cuentas bancarias
     const bank1 = await banksRepository.save({
       branchId: branch1.id,
@@ -527,7 +527,143 @@ export async function seedDatabase(dataSource: DataSource) {
 
     console.log('✅ 3 proveedores creados');
   } else {
-    console.log('ℹ️ Bancos ya existen, omitiendo creación de datos relacionados');
+    console.log('ℹ️ Bancos ya existen para branch1, omitiendo creación de datos relacionados');
+  }
+
+  // Check if banks already exist for branch2 (Comercializadora Demo - Sucursal Norte)
+  const existingBanksBranch2 = await banksRepository.count({ where: { branchId: branch2.id } });
+
+  if (existingBanksBranch2 === 0) {
+    // Crear cuentas bancarias para Sucursal Norte
+    const bank2_1 = await banksRepository.save({
+      branchId: branch2.id,
+      name: 'Cuenta BBVA Norte',
+      accountNumber: '0123456790',
+      bank: 'BBVA',
+      initialBalance: 35000,
+      balance: 35000,
+      currency: 'MXN',
+      type: 'BANCO',
+      isActive: true,
+    });
+
+    const bank2_2 = await banksRepository.save({
+      branchId: branch2.id,
+      name: 'Caja Chica Norte',
+      accountNumber: 'CAJA-002',
+      bank: 'EFECTIVO',
+      initialBalance: 8000,
+      balance: 8000,
+      currency: 'MXN',
+      type: 'EFECTIVO',
+      isActive: true,
+    });
+
+    console.log('✅ 2 cuentas bancarias creadas para Sucursal Norte');
+
+    // Crear movimientos de ingreso
+    for (let i = 0; i < 10; i++) {
+      const amount = Math.floor(Math.random() * 8000) + 2000;
+      const date = new Date();
+      date.setDate(date.getDate() - Math.floor(Math.random() * 90));
+      await movementsRepository.save({
+        accountId: bank2_1.id,
+        type: 'INCOME',
+        category: 'SALE',
+        concept: 'Venta del día',
+        reference: `NOR-ING-${String(i + 1).padStart(3, '0')}`,
+        amount: amount,
+        date: date,
+      });
+    }
+    console.log('✅ 10 movimientos de ingreso creados para Sucursal Norte');
+
+    // Crear movimientos de egreso
+    for (let i = 0; i < 5; i++) {
+      const amount = Math.floor(Math.random() * 3000) + 500;
+      const date = new Date();
+      date.setDate(date.getDate() - Math.floor(Math.random() * 90));
+      await movementsRepository.save({
+        accountId: bank2_1.id,
+        type: 'EXPENSE',
+        category: 'OPERATIONAL',
+        concept: 'Gasto operativo',
+        reference: `NOR-EGR-${String(i + 1).padStart(3, '0')}`,
+        amount: amount,
+        date: date,
+      });
+    }
+    console.log('✅ 5 movimientos de egreso creados para Sucursal Norte');
+  } else {
+    console.log('ℹ️ Bancos ya existen para branch2, omitiendo creación');
+  }
+
+  // Check if banks already exist for branch3 (Servicios Demo - Corporativo)
+  const existingBanksBranch3 = await banksRepository.count({ where: { branchId: branch3.id } });
+
+  if (existingBanksBranch3 === 0) {
+    // Crear cuentas bancarias para Corporativo
+    const bank3_1 = await banksRepository.save({
+      branchId: branch3.id,
+      name: 'Cuenta HSBC Corporativo',
+      accountNumber: '0456789012',
+      bank: 'HSBC',
+      initialBalance: 25000,
+      balance: 25000,
+      currency: 'MXN',
+      type: 'BANCO',
+      isActive: true,
+    });
+
+    const bank3_2 = await banksRepository.save({
+      branchId: branch3.id,
+      name: 'Caja Chica Corporativo',
+      accountNumber: 'CAJA-003',
+      bank: 'EFECTIVO',
+      initialBalance: 5000,
+      balance: 5000,
+      currency: 'MXN',
+      type: 'EFECTIVO',
+      isActive: true,
+    });
+
+    console.log('✅ 2 cuentas bancarias creadas para Corporativo');
+
+    // Crear movimientos de ingreso
+    for (let i = 0; i < 8; i++) {
+      const amount = Math.floor(Math.random() * 6000) + 2000;
+      const date = new Date();
+      date.setDate(date.getDate() - Math.floor(Math.random() * 90));
+      await movementsRepository.save({
+        accountId: bank3_1.id,
+        type: 'INCOME',
+        category: 'SALE',
+        concept: 'Venta de servicios',
+        reference: `COR-ING-${String(i + 1).padStart(3, '0')}`,
+        amount: amount,
+        date: date,
+      });
+    }
+    console.log('✅ 8 movimientos de ingreso creados para Corporativo');
+
+    // Crear movimientos de egreso
+    for (let i = 0; i < 4; i++) {
+      const amount = Math.floor(Math.random() * 2500) + 500;
+      const date = new Date();
+      date.setDate(date.getDate() - Math.floor(Math.random() * 90));
+      await movementsRepository.save({
+        accountId: bank3_1.id,
+        type: 'EXPENSE',
+        category: 'OPERATIONAL',
+        concept: 'Gasto operativo',
+        reference: `COR-EGR-${String(i + 1).padStart(3, '0')}`,
+        amount: amount,
+        date: date,
+      });
+    }
+    console.log('✅ 4 movimientos de egreso creados para Corporativo');
+  } else {
+    console.log('ℹ️ Bancos ya existen para branch3, omitiendo creación');
   }
 
   // ═══════════════════════════════════════════════════════════════
@@ -574,6 +710,74 @@ export async function seedDatabase(dataSource: DataSource) {
         isActive: true,
       });
       console.log('✅ Sucursal Norte de El Sazón creada');
+    }
+
+    // Check if banks already exist for sazonNorte
+    const existingBanksSazonNorte = await banksRepository.count({ where: { branchId: sazonNorte.id } });
+
+    if (existingBanksSazonNorte === 0) {
+      // Crear cuentas bancarias para El Sazón - Norte
+      const sazonNorteBancomer = await banksRepository.save({
+        branchId: sazonNorte.id,
+        name: 'Cuenta Bancomer Norte',
+        accountNumber: '0123456791',
+        bank: 'Bancomer',
+        initialBalance: 42000,
+        balance: 42000,
+        currency: 'MXN',
+        type: 'BANCO',
+        isActive: true,
+      });
+
+      const sazonNorteCaja = await banksRepository.save({
+        branchId: sazonNorte.id,
+        name: 'Caja Chica Norte',
+        accountNumber: 'CAJA-SAZ-NOR',
+        bank: 'EFECTIVO',
+        initialBalance: 6000,
+        balance: 6000,
+        currency: 'MXN',
+        type: 'EFECTIVO',
+        isActive: true,
+      });
+
+      console.log('✅ 2 cuentas bancarias creadas para El Sazón - Norte');
+
+      // Crear movimientos de ingreso
+      for (let i = 0; i < 10; i++) {
+        const amount = Math.floor(Math.random() * 7000) + 2000;
+        const date = new Date();
+        date.setDate(date.getDate() - Math.floor(Math.random() * 90));
+        await movementsRepository.save({
+          accountId: sazonNorteBancomer.id,
+          type: 'INCOME',
+          category: 'SALE',
+          concept: 'Venta del día',
+          reference: `SAZ-NOR-ING-${String(i + 1).padStart(3, '0')}`,
+          amount: amount,
+          date: date,
+        });
+      }
+      console.log('✅ 10 movimientos de ingreso creados para El Sazón - Norte');
+
+      // Crear movimientos de egreso
+      for (let i = 0; i < 5; i++) {
+        const amount = Math.floor(Math.random() * 2500) + 500;
+        const date = new Date();
+        date.setDate(date.getDate() - Math.floor(Math.random() * 90));
+        await movementsRepository.save({
+          accountId: sazonNorteBancomer.id,
+          type: 'EXPENSE',
+          category: 'OPERATIONAL',
+          concept: 'Gasto operativo',
+          reference: `SAZ-NOR-EGR-${String(i + 1).padStart(3, '0')}`,
+          amount: amount,
+          date: date,
+        });
+      }
+      console.log('✅ 5 movimientos de egreso creados para El Sazón - Norte');
+    } else {
+      console.log('ℹ️ Bancos ya existen para El Sazón - Norte, omitiendo creación');
     }
 
     // Update gerente.sucursal user with branchId
@@ -627,8 +831,9 @@ export async function seedDatabase(dataSource: DataSource) {
   const serviciosBranchFinal = demoBranches.find(b => b.companyId === servicios?.id);
 
   // El Sazón - BBVA Cuenta Operativa
+  const existingBanksSazonMatriz = await banksRepository.count({ where: { branchId: sazonBranchFinal?.id } });
   let sazonBBVA = await banksRepository.findOne({ where: { branchId: sazonBranchFinal?.id, name: 'BBVA Cuenta Operativa' } });
-  if (!sazonBBVA && sazonBranchFinal) {
+  if (!sazonBBVA && sazonBranchFinal && existingBanksSazonMatriz === 0) {
     sazonBBVA = await banksRepository.save({
       branchId: sazonBranchFinal.id,
       name: 'BBVA Cuenta Operativa',
@@ -661,8 +866,9 @@ export async function seedDatabase(dataSource: DataSource) {
   }
 
   // El Sonorense - Banorte Cuenta Principal
+  const existingBanksSonorense = await banksRepository.count({ where: { branchId: sonorenseBranchFinal?.id } });
   let sonorenseBanorte = await banksRepository.findOne({ where: { branchId: sonorenseBranchFinal?.id, name: 'Banorte Cuenta Principal' } });
-  if (!sonorenseBanorte && sonorenseBranchFinal) {
+  if (!sonorenseBanorte && sonorenseBranchFinal && existingBanksSonorense === 0) {
     sonorenseBanorte = await banksRepository.save({
       branchId: sonorenseBranchFinal.id,
       name: 'Banorte Cuenta Principal',
@@ -695,8 +901,9 @@ export async function seedDatabase(dataSource: DataSource) {
   }
 
   // SERVICIOS DEMO - HSBC Cuenta Corporativa
+  const existingBanksServicios = await banksRepository.count({ where: { branchId: serviciosBranchFinal?.id } });
   let serviciosHSBC = await banksRepository.findOne({ where: { branchId: serviciosBranchFinal?.id, name: 'HSBC Cuenta Corporativa' } });
-  if (!serviciosHSBC && serviciosBranchFinal) {
+  if (!serviciosHSBC && serviciosBranchFinal && existingBanksServicios === 0) {
     serviciosHSBC = await banksRepository.save({
       branchId: serviciosBranchFinal.id,
       name: 'HSBC Cuenta Corporativa',
