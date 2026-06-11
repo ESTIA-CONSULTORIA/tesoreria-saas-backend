@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Branch } from './entities/branch.entity';
+import { Company } from '../companies/entities/company.entity';
 import { Repository } from 'typeorm';
 
 @Injectable()
@@ -8,6 +9,8 @@ export class BranchesService {
   constructor(
     @InjectRepository(Branch)
     private branchesRepository: Repository<Branch>,
+    @InjectRepository(Company)
+    private companiesRepository: Repository<Company>,
   ) {}
 
   create(
@@ -42,10 +45,20 @@ export class BranchesService {
   }
 
   async findByTenant(tenantId: string) {
+    // Buscar companyIds del tenant
+    const companies = await this.companiesRepository.find({
+      where: { tenantId },
+      select: ['id']
+    });
+
+    if (!companies.length) return [];
+
+    const companyIds = companies.map(c => c.id);
+
+    // Buscar sucursales de esas empresas
     return this.branchesRepository
       .createQueryBuilder('branch')
-      .innerJoin('branch.company', 'company')
-      .where('company.tenantId = :tenantId', { tenantId })
+      .where('branch.companyId IN (:...companyIds)', { companyIds })
       .getMany();
   }
 
