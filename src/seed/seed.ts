@@ -323,13 +323,13 @@ export async function seedDatabase(dataSource: DataSource) {
     branch3 = await branchesRepository.save({
       companyId: company2.id,
       code: 'SUC-003',
-      name: 'Corporativo',
+      name: 'Corporativo Norte',
       address: 'Calle Sur #789, Zona Sur',
       city: 'Ciudad de México',
       state: 'CDMX',
       isActive: true,
     });
-    console.log('✅ Sucursal Corporativo creada');
+    console.log('✅ Sucursal Corporativo Norte creada');
   }
 
   // Check if banks already exist for branch1
@@ -788,22 +788,7 @@ export async function seedDatabase(dataSource: DataSource) {
     }
   }
 
-  // Crear sucursal para El Sonorense: Hermosillo
-  if (sonorense) {
-    let sonorenseBranch = await branchesRepository.findOne({ where: { companyId: sonorense.id, code: 'SON-HER' } });
-    if (!sonorenseBranch) {
-      sonorenseBranch = await branchesRepository.save({
-        companyId: sonorense.id,
-        code: 'SON-HER',
-        name: 'Hermosillo',
-        address: 'Blvd. Sonora #200, Zona Norte',
-        city: 'Hermosillo',
-        state: 'Sonora',
-        isActive: true,
-      });
-      console.log('✅ Sucursal Hermosillo de El Sonorense creada');
-    }
-  }
+  // Sucursal SON-HER eliminada de BD - no recrear
 
   // Crear sucursal para Servicios Demo: Corporativo
   if (servicios) {

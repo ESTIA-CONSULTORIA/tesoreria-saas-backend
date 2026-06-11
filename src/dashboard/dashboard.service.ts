@@ -94,6 +94,7 @@ export class DashboardService {
       if (branchId) {
         // Vista individual: filtrar por branchId a través de las cuentas
         const banks = await this.banksRepo.find({ where: { branchId } });
+        console.log('banks encontrados para branchId:', branchId, banks.length);
         const accountIds = banks.map(b => b.id);
         if (accountIds.length > 0) {
           movementQuery = movementQuery.where('movement.accountId IN (:...accountIds)', { accountIds });
