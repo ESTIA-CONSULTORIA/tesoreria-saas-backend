@@ -295,7 +295,7 @@ export async function seedDatabase(dataSource: DataSource) {
     branch1 = await branchesRepository.save({
       companyId: company1.id,
       code: 'SUC-001',
-      name: 'Sucursal Centro',
+      name: 'Centro',
       address: 'Av. Principal #123, Centro',
       city: 'Ciudad de México',
       state: 'CDMX',
@@ -309,7 +309,7 @@ export async function seedDatabase(dataSource: DataSource) {
     branch2 = await branchesRepository.save({
       companyId: company1.id,
       code: 'SUC-002',
-      name: 'Sucursal Norte',
+      name: 'Norte',
       address: 'Blvd. Norte #456, Zona Norte',
       city: 'Ciudad de México',
       state: 'CDMX',
@@ -323,13 +323,13 @@ export async function seedDatabase(dataSource: DataSource) {
     branch3 = await branchesRepository.save({
       companyId: company2.id,
       code: 'SUC-003',
-      name: 'Sucursal Sur',
+      name: 'Corporativo',
       address: 'Calle Sur #789, Zona Sur',
       city: 'Ciudad de México',
       state: 'CDMX',
       isActive: true,
     });
-    console.log('✅ Sucursal Sur creada');
+    console.log('✅ Sucursal Corporativo creada');
   }
 
   // Check if banks already exist for branch1
@@ -534,116 +534,103 @@ export async function seedDatabase(dataSource: DataSource) {
   // PARTE: EMPRESAS DEL TENANT DEMO CON CUENTAS Y MOVIMIENTOS
   // ═══════════════════════════════════════════════════════════════
 
-  // Crear EL SAZÓN MATRIZ si no existe
-  let elSazon = await companiesRepository.findOne({ where: { tenantId: demoTenant.id, tradeName: 'EL SAZÓN MATRIZ' } });
-  if (!elSazon) {
-    elSazon = await companiesRepository.save({
-      id: 'abbbb682-d883-4f03-a7ee-2ae08850641c',
-      tenantId: demoTenant.id,
-      legalName: 'Restaurantes El Sazón S.A. de C.V.',
-      tradeName: 'EL SAZÓN MATRIZ',
-      taxId: 'RES123456XYZ',
-      baseCurrency: 'MXN',
-      isActive: true,
-    });
-    console.log('✅ Empresa EL SAZÓN MATRIZ creada');
+  // Buscar empresas existentes por sus IDs conocidos
+  const sazon = await companiesRepository.findOne({ where: { id: '602512f6-496f-4d15-bd0f-ca3c0b61a8ee' } });
+  const sonorense = await companiesRepository.findOne({ where: { id: '338dc37a-7371-4c42-ad7b-739daa8d2a40' } });
+  const comercializadora = await companiesRepository.findOne({ where: { id: 'e7f801da-6fb6-48e6-9464-7706903c4854' } });
+  const servicios = await companiesRepository.findOne({ where: { id: 'b3270c6b-4e4e-45b6-aff3-ab4a70e5284f' } });
+
+  // Actualizar nombre de "El Sazón Matriz" a "El Sazón"
+  if (sazon && sazon.tradeName === 'El Sazón Matriz') {
+    await companiesRepository.update(sazon.id, { tradeName: 'El Sazón' });
+    console.log('✅ Nombre de empresa actualizado: El Sazón Matriz → El Sazón');
   }
 
-  // Crear sucursal para EL SAZÓN MATRIZ si no existe
-  let elSazonBranch = await branchesRepository.findOne({ where: { companyId: elSazon.id } });
-  if (!elSazonBranch) {
-    elSazonBranch = await branchesRepository.save({
-      id: 'abbbb682-d883-4f03-a7ee-2ae08850641c',
-      companyId: elSazon.id,
-      code: 'SAZ-001',
-      name: 'EL SAZÓN MATRIZ',
-      address: 'Av. Principal #500, Centro',
-      city: 'Hermosillo',
-      state: 'Sonora',
-      isActive: true,
-    });
-    console.log('✅ Sucursal EL SAZÓN MATRIZ creada');
+  // Crear sucursales para El Sazón: Matriz, Norte
+  if (sazon) {
+    let sazonMatriz = await branchesRepository.findOne({ where: { companyId: sazon.id, code: 'SAZ-MAT' } });
+    if (!sazonMatriz) {
+      sazonMatriz = await branchesRepository.save({
+        companyId: sazon.id,
+        code: 'SAZ-MAT',
+        name: 'Matriz',
+        address: 'Av. Principal #500, Centro',
+        city: 'Hermosillo',
+        state: 'Sonora',
+        isActive: true,
+      });
+      console.log('✅ Sucursal Matriz de El Sazón creada');
+    }
+
+    let sazonNorte = await branchesRepository.findOne({ where: { companyId: sazon.id, code: 'SAZ-NOR' } });
+    if (!sazonNorte) {
+      sazonNorte = await branchesRepository.save({
+        companyId: sazon.id,
+        code: 'SAZ-NOR',
+        name: 'Norte',
+        address: 'Blvd. Norte #200, Zona Norte',
+        city: 'Hermosillo',
+        state: 'Sonora',
+        isActive: true,
+      });
+      console.log('✅ Sucursal Norte de El Sazón creada');
+    }
+
+    // Update gerente.sucursal user with branchId
+    const gerenteSucursal = await usersRepository.findOne({ where: { email: 'gerente.sucursal@demo.com' } });
+    if (gerenteSucursal && sazonMatriz) {
+      await usersRepository.update(gerenteSucursal.id, { branchId: sazonMatriz.id });
+      console.log('✅ Usuario gerente.sucursal@demo.com actualizado con branchId');
+    }
   }
 
-  // Update gerente.sucursal user with branchId
-  const gerenteSucursal = await usersRepository.findOne({ where: { email: 'gerente.sucursal@demo.com' } });
-  if (gerenteSucursal && elSazonBranch) {
-    await usersRepository.update(gerenteSucursal.id, { branchId: elSazonBranch.id });
-    console.log('✅ Usuario gerente.sucursal@demo.com actualizado con branchId');
+  // Crear sucursal para El Sonorense: Hermosillo
+  if (sonorense) {
+    let sonorenseBranch = await branchesRepository.findOne({ where: { companyId: sonorense.id, code: 'SON-HER' } });
+    if (!sonorenseBranch) {
+      sonorenseBranch = await branchesRepository.save({
+        companyId: sonorense.id,
+        code: 'SON-HER',
+        name: 'Hermosillo',
+        address: 'Blvd. Sonora #200, Zona Norte',
+        city: 'Hermosillo',
+        state: 'Sonora',
+        isActive: true,
+      });
+      console.log('✅ Sucursal Hermosillo de El Sonorense creada');
+    }
   }
 
-  // Crear EL SONORENSE si no existe
-  let elSonorense = await companiesRepository.findOne({ where: { tenantId: demoTenant.id, tradeName: 'EL SONORENSE' } });
-  if (!elSonorense) {
-    elSonorense = await companiesRepository.save({
-      tenantId: demoTenant.id,
-      legalName: 'Comercializadora El Sonorense S.A. de C.V.',
-      tradeName: 'EL SONORENSE',
-      taxId: 'SON789456XYZ',
-      baseCurrency: 'MXN',
-      isActive: true,
-    });
-    console.log('✅ Empresa EL SONORENSE creada');
-  }
-
-  // Crear sucursal para EL SONORENSE si no existe
-  let elSonorenseBranch = await branchesRepository.findOne({ where: { companyId: elSonorense.id } });
-  if (!elSonorenseBranch) {
-    elSonorenseBranch = await branchesRepository.save({
-      companyId: elSonorense.id,
-      code: 'SON-001',
-      name: 'Sucursal Hermosillo',
-      address: 'Blvd. Sonora #200, Zona Norte',
-      city: 'Hermosillo',
-      state: 'Sonora',
-      isActive: true,
-    });
-    console.log('✅ Sucursal EL SONORENSE creada');
-  }
-
-  // Buscar SERVICIOS DEMO en demoTenant (si no existe, crearla)
-  let serviciosDemo = await companiesRepository.findOne({ where: { tenantId: demoTenant.id, tradeName: 'SERVICIOS DEMO' } });
-  if (!serviciosDemo) {
-    serviciosDemo = await companiesRepository.save({
-      tenantId: demoTenant.id,
-      legalName: 'Servicios Profesionales Demo S. de R.L.',
-      tradeName: 'SERVICIOS DEMO',
-      taxId: 'SER456789XYZ',
-      baseCurrency: 'MXN',
-      isActive: true,
-    });
-    console.log('✅ Empresa SERVICIOS DEMO creada en demoTenant');
-  }
-
-  // Crear sucursal para SERVICIOS DEMO si no existe
-  let serviciosDemoBranch = await branchesRepository.findOne({ where: { companyId: serviciosDemo.id } });
-  if (!serviciosDemoBranch) {
-    serviciosDemoBranch = await branchesRepository.save({
-      id: 'ff38db6f-2be5-4feb-b133-4b7fcfa9dec1',
-      companyId: serviciosDemo.id,
-      code: 'SER-001',
-      name: 'SERVICIOS DEMO',
-      address: 'Calle Servicios #100, Centro',
-      city: 'Hermosillo',
-      state: 'Sonora',
-      isActive: true,
-    });
-    console.log('✅ Sucursal SERVICIOS DEMO creada');
+  // Crear sucursal para Servicios Demo: Corporativo
+  if (servicios) {
+    let serviciosBranch = await branchesRepository.findOne({ where: { companyId: servicios.id, code: 'SER-CORP' } });
+    if (!serviciosBranch) {
+      serviciosBranch = await branchesRepository.save({
+        companyId: servicios.id,
+        code: 'SER-CORP',
+        name: 'Corporativo',
+        address: 'Calle Servicios #100, Centro',
+        city: 'Hermosillo',
+        state: 'Sonora',
+        isActive: true,
+      });
+      console.log('✅ Sucursal Corporativo de Servicios Demo creada');
+    }
   }
 
   // ═══════════════════════════════════════════════════════════════
   // CREAR CUENTAS BANCARIAS PARA CADA EMPRESA
   // ═══════════════════════════════════════════════════════════════
   const demoBranches = await branchesRepository.find();
-  const elSazonBranchFinal = demoBranches.find(b => b.companyId === elSazon.id);
-  const elSonorenseBranchFinal = demoBranches.find(b => b.companyId === elSonorense.id);
-  const serviciosDemoBranchFinal = demoBranches.find(b => b.companyId === serviciosDemo.id);
+  const sazonBranchFinal = demoBranches.find(b => b.companyId === sazon?.id);
+  const sonorenseBranchFinal = demoBranches.find(b => b.companyId === sonorense?.id);
+  const serviciosBranchFinal = demoBranches.find(b => b.companyId === servicios?.id);
 
-  // EL SAZÓN MATRIZ - BBVA Cuenta Operativa
-  let elSazonBBVA = await banksRepository.findOne({ where: { branchId: elSazonBranchFinal?.id, name: 'BBVA Cuenta Operativa' } });
-  if (!elSazonBBVA && elSazonBranchFinal) {
-    elSazonBBVA = await banksRepository.save({
-      branchId: elSazonBranchFinal.id,
+  // El Sazón - BBVA Cuenta Operativa
+  let sazonBBVA = await banksRepository.findOne({ where: { branchId: sazonBranchFinal?.id, name: 'BBVA Cuenta Operativa' } });
+  if (!sazonBBVA && sazonBranchFinal) {
+    sazonBBVA = await banksRepository.save({
+      branchId: sazonBranchFinal.id,
       name: 'BBVA Cuenta Operativa',
       accountNumber: '012345678901',
       bank: 'BBVA',
@@ -653,14 +640,14 @@ export async function seedDatabase(dataSource: DataSource) {
       type: 'BANCO',
       isActive: true,
     });
-    console.log('✅ BBVA Cuenta Operativa creada para EL SAZÓN MATRIZ');
+    console.log('✅ BBVA Cuenta Operativa creada para El Sazón');
   }
 
-  // EL SAZÓN MATRIZ - Caja Chica
-  let elSazonCaja = await banksRepository.findOne({ where: { branchId: elSazonBranchFinal?.id, name: 'Caja Chica' } });
-  if (!elSazonCaja && elSazonBranchFinal) {
-    elSazonCaja = await banksRepository.save({
-      branchId: elSazonBranchFinal.id,
+  // El Sazón - Caja Chica
+  let sazonCaja = await banksRepository.findOne({ where: { branchId: sazonBranchFinal?.id, name: 'Caja Chica' } });
+  if (!sazonCaja && sazonBranchFinal) {
+    sazonCaja = await banksRepository.save({
+      branchId: sazonBranchFinal.id,
       name: 'Caja Chica',
       accountNumber: 'CAJA-SAZ-001',
       bank: 'EFECTIVO',
@@ -670,14 +657,14 @@ export async function seedDatabase(dataSource: DataSource) {
       type: 'EFECTIVO',
       isActive: true,
     });
-    console.log('✅ Caja Chica creada para EL SAZÓN MATRIZ');
+    console.log('✅ Caja Chica creada para El Sazón');
   }
 
-  // EL SONORENSE - Banorte Cuenta Principal
-  let elSonorenseBanorte = await banksRepository.findOne({ where: { branchId: elSonorenseBranchFinal?.id, name: 'Banorte Cuenta Principal' } });
-  if (!elSonorenseBanorte && elSonorenseBranchFinal) {
-    elSonorenseBanorte = await banksRepository.save({
-      branchId: elSonorenseBranchFinal.id,
+  // El Sonorense - Banorte Cuenta Principal
+  let sonorenseBanorte = await banksRepository.findOne({ where: { branchId: sonorenseBranchFinal?.id, name: 'Banorte Cuenta Principal' } });
+  if (!sonorenseBanorte && sonorenseBranchFinal) {
+    sonorenseBanorte = await banksRepository.save({
+      branchId: sonorenseBranchFinal.id,
       name: 'Banorte Cuenta Principal',
       accountNumber: '098765432109',
       bank: 'Banorte',
@@ -691,10 +678,10 @@ export async function seedDatabase(dataSource: DataSource) {
   }
 
   // EL SONORENSE - Caja Chica
-  let elSonorenseCaja = await banksRepository.findOne({ where: { branchId: elSonorenseBranchFinal?.id, name: 'Caja Chica' } });
-  if (!elSonorenseCaja && elSonorenseBranchFinal) {
+  let elSonorenseCaja = await banksRepository.findOne({ where: { branchId: sonorenseBranchFinal?.id, name: 'Caja Chica' } });
+  if (!elSonorenseCaja && sonorenseBranchFinal) {
     elSonorenseCaja = await banksRepository.save({
-      branchId: elSonorenseBranchFinal.id,
+      branchId: sonorenseBranchFinal.id,
       name: 'Caja Chica',
       accountNumber: 'CAJA-SON-001',
       bank: 'EFECTIVO',
@@ -708,10 +695,10 @@ export async function seedDatabase(dataSource: DataSource) {
   }
 
   // SERVICIOS DEMO - HSBC Cuenta Corporativa
-  let serviciosHSBC = await banksRepository.findOne({ where: { branchId: serviciosDemoBranchFinal?.id, name: 'HSBC Cuenta Corporativa' } });
-  if (!serviciosHSBC && serviciosDemoBranchFinal) {
+  let serviciosHSBC = await banksRepository.findOne({ where: { branchId: serviciosBranchFinal?.id, name: 'HSBC Cuenta Corporativa' } });
+  if (!serviciosHSBC && serviciosBranchFinal) {
     serviciosHSBC = await banksRepository.save({
-      branchId: serviciosDemoBranchFinal.id,
+      branchId: serviciosBranchFinal.id,
       name: 'HSBC Cuenta Corporativa',
       accountNumber: '045678901234',
       bank: 'HSBC',
@@ -725,10 +712,10 @@ export async function seedDatabase(dataSource: DataSource) {
   }
 
   // SERVICIOS DEMO - Scotiabank Nómina
-  let serviciosScotiabank = await banksRepository.findOne({ where: { branchId: serviciosDemoBranchFinal?.id, name: 'Scotiabank Nómina' } });
-  if (!serviciosScotiabank && serviciosDemoBranchFinal) {
+  let serviciosScotiabank = await banksRepository.findOne({ where: { branchId: serviciosBranchFinal?.id, name: 'Scotiabank Nómina' } });
+  if (!serviciosScotiabank && serviciosBranchFinal) {
     serviciosScotiabank = await banksRepository.save({
-      branchId: serviciosDemoBranchFinal.id,
+      branchId: serviciosBranchFinal.id,
       name: 'Scotiabank Nómina',
       accountNumber: '056789012345',
       bank: 'Scotiabank',
@@ -748,15 +735,15 @@ export async function seedDatabase(dataSource: DataSource) {
   const expenseConcepts = ['Pago proveedor', 'Renta local', 'Nómina quincenal', 'Servicios', 'Insumos'];
 
   // EL SAZÓN MATRIZ - 15 ingresos, 8 egresos
-  if (elSazonBBVA) {
-    const existingMovements = await movementsRepository.count({ where: { accountId: elSazonBBVA.id } });
+  if (sazonBBVA) {
+    const existingMovements = await movementsRepository.count({ where: { accountId: sazonBBVA.id } });
     if (existingMovements === 0) {
       for (let i = 0; i < 15; i++) {
         const amount = Math.floor(Math.random() * 13000) + 2000; // $2,000 - $15,000
         const date = new Date();
         date.setDate(date.getDate() - Math.floor(Math.random() * 90));
         await movementsRepository.save({
-          accountId: elSazonBBVA.id,
+          accountId: sazonBBVA.id,
           type: 'INCOME',
           category: 'SALE',
           concept: incomeConcepts[Math.floor(Math.random() * incomeConcepts.length)],
@@ -772,7 +759,7 @@ export async function seedDatabase(dataSource: DataSource) {
         const date = new Date();
         date.setDate(date.getDate() - Math.floor(Math.random() * 90));
         await movementsRepository.save({
-          accountId: elSazonBBVA.id,
+          accountId: sazonBBVA.id,
           type: 'EXPENSE',
           category: 'OPERATIONAL',
           concept: expenseConcepts[Math.floor(Math.random() * expenseConcepts.length)],
@@ -788,15 +775,15 @@ export async function seedDatabase(dataSource: DataSource) {
   }
 
   // EL SONORENSE - 12 ingresos, 6 egresos
-  if (elSonorenseBanorte) {
-    const existingMovements = await movementsRepository.count({ where: { accountId: elSonorenseBanorte.id } });
+  if (sonorenseBanorte) {
+    const existingMovements = await movementsRepository.count({ where: { accountId: sonorenseBanorte.id } });
     if (existingMovements === 0) {
       for (let i = 0; i < 12; i++) {
         const amount = Math.floor(Math.random() * 13000) + 2000; // $2,000 - $15,000
         const date = new Date();
         date.setDate(date.getDate() - Math.floor(Math.random() * 90));
         await movementsRepository.save({
-          accountId: elSonorenseBanorte.id,
+          accountId: sonorenseBanorte.id,
           type: 'INCOME',
           category: 'SALE',
           concept: incomeConcepts[Math.floor(Math.random() * incomeConcepts.length)],
@@ -812,7 +799,7 @@ export async function seedDatabase(dataSource: DataSource) {
         const date = new Date();
         date.setDate(date.getDate() - Math.floor(Math.random() * 90));
         await movementsRepository.save({
-          accountId: elSonorenseBanorte.id,
+          accountId: sonorenseBanorte.id,
           type: 'EXPENSE',
           category: 'OPERATIONAL',
           concept: expenseConcepts[Math.floor(Math.random() * expenseConcepts.length)],
