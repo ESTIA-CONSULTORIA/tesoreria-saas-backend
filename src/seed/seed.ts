@@ -537,11 +537,11 @@ export async function seedDatabase(dataSource: DataSource) {
     // Crear cuentas bancarias para Sucursal Norte
     const bank2_1 = await banksRepository.save({
       branchId: branch2.id,
-      name: 'Cuenta BBVA Norte',
+      name: 'HSBC Cuenta Norte',
       accountNumber: '0123456790',
-      bank: 'BBVA',
-      initialBalance: 35000,
-      balance: 35000,
+      bank: 'HSBC',
+      initialBalance: 38000,
+      balance: 38000,
       currency: 'MXN',
       type: 'BANCO',
       isActive: true,
@@ -552,8 +552,8 @@ export async function seedDatabase(dataSource: DataSource) {
       name: 'Caja Chica Norte',
       accountNumber: 'CAJA-002',
       bank: 'EFECTIVO',
-      initialBalance: 8000,
-      balance: 8000,
+      initialBalance: 2500,
+      balance: 2500,
       currency: 'MXN',
       type: 'EFECTIVO',
       isActive: true,
@@ -563,7 +563,7 @@ export async function seedDatabase(dataSource: DataSource) {
 
     // Crear movimientos de ingreso
     for (let i = 0; i < 10; i++) {
-      const amount = Math.floor(Math.random() * 8000) + 2000;
+      const amount = Math.floor(Math.random() * 8500) + 1500;
       const date = new Date();
       date.setDate(date.getDate() - Math.floor(Math.random() * 90));
       await movementsRepository.save({
@@ -580,7 +580,7 @@ export async function seedDatabase(dataSource: DataSource) {
 
     // Crear movimientos de egreso
     for (let i = 0; i < 5; i++) {
-      const amount = Math.floor(Math.random() * 3000) + 500;
+      const amount = Math.floor(Math.random() * 3100) + 400;
       const date = new Date();
       date.setDate(date.getDate() - Math.floor(Math.random() * 90));
       await movementsRepository.save({
@@ -719,11 +719,11 @@ export async function seedDatabase(dataSource: DataSource) {
       // Crear cuentas bancarias para El Sazón - Norte
       const sazonNorteBancomer = await banksRepository.save({
         branchId: sazonNorte.id,
-        name: 'Cuenta Bancomer Norte',
+        name: 'Bancomer Cuenta Norte',
         accountNumber: '0123456791',
         bank: 'Bancomer',
-        initialBalance: 42000,
-        balance: 42000,
+        initialBalance: 45000,
+        balance: 45000,
         currency: 'MXN',
         type: 'BANCO',
         isActive: true,
@@ -734,8 +734,8 @@ export async function seedDatabase(dataSource: DataSource) {
         name: 'Caja Chica Norte',
         accountNumber: 'CAJA-SAZ-NOR',
         bank: 'EFECTIVO',
-        initialBalance: 6000,
-        balance: 6000,
+        initialBalance: 3000,
+        balance: 3000,
         currency: 'MXN',
         type: 'EFECTIVO',
         isActive: true,
@@ -745,7 +745,7 @@ export async function seedDatabase(dataSource: DataSource) {
 
       // Crear movimientos de ingreso
       for (let i = 0; i < 10; i++) {
-        const amount = Math.floor(Math.random() * 7000) + 2000;
+        const amount = Math.floor(Math.random() * 10000) + 2000;
         const date = new Date();
         date.setDate(date.getDate() - Math.floor(Math.random() * 90));
         await movementsRepository.save({
@@ -762,7 +762,7 @@ export async function seedDatabase(dataSource: DataSource) {
 
       // Crear movimientos de egreso
       for (let i = 0; i < 5; i++) {
-        const amount = Math.floor(Math.random() * 2500) + 500;
+        const amount = Math.floor(Math.random() * 3500) + 500;
         const date = new Date();
         date.setDate(date.getDate() - Math.floor(Math.random() * 90));
         await movementsRepository.save({
