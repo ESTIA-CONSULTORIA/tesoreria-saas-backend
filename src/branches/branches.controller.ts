@@ -33,10 +33,16 @@ export class BranchesController {
     @Request() req?: any,
   ) {
     const userCompanyId = req?.user?.companyId;
+    const tenantId = req?.user?.tenantId || req?.tenantId;
 
     // If user has companyId in JWT, use it and ignore header
     if (userCompanyId) {
       return this.branchesService.findByCompany(userCompanyId);
+    }
+
+    // If user has tenantId in JWT, filter by tenant
+    if (tenantId) {
+      return this.branchesService.findByTenant(tenantId);
     }
 
     // Otherwise, use header if present

@@ -41,6 +41,14 @@ export class BranchesService {
     });
   }
 
+  async findByTenant(tenantId: string) {
+    return this.branchesRepository
+      .createQueryBuilder('branch')
+      .innerJoin('branch.company', 'company')
+      .where('company.tenantId = :tenantId', { tenantId })
+      .getMany();
+  }
+
   async update(id: string, data: { companyId?: string; code?: string; name?: string; address?: string; city?: string; state?: string; isActive?: boolean }) {
     await this.branchesRepository.update(id, data);
     return this.branchesRepository.findOne({ where: { id } });

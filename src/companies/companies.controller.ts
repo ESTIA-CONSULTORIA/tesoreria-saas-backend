@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Request } from '@nestjs/common';
 import { CompaniesService } from './companies.service';
 
 @Controller('companies')
@@ -26,7 +26,11 @@ export class CompaniesController {
   }
 
   @Get()
-  findAll() {
+  findAll(@Request() req) {
+    const tenantId = req.user?.tenantId || req.tenantId;
+    if (tenantId) {
+      return this.companiesService.findByTenant(tenantId);
+    }
     return this.companiesService.findAll();
   }
 
