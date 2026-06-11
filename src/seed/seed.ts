@@ -289,12 +289,10 @@ export async function seedDatabase(dataSource: DataSource) {
     console.log('✅ Empresa Servicios Demo creada');
   }
 
-  // Check if branches already exist for these companies
-  const existingBranches = await branchesRepository.find({ where: { companyId: In([company1.id, company2.id]) } });
-
-  if (existingBranches.length === 0) {
-    // Crear sucursales
-    const branch1 = await branchesRepository.save({
+  // Crear sucursales individualmente con verificación
+  let branch1 = await branchesRepository.findOne({ where: { companyId: company1.id, code: 'SUC-001' } });
+  if (!branch1) {
+    branch1 = await branchesRepository.save({
       companyId: company1.id,
       code: 'SUC-001',
       name: 'Sucursal Centro',
@@ -303,8 +301,12 @@ export async function seedDatabase(dataSource: DataSource) {
       state: 'CDMX',
       isActive: true,
     });
+    console.log('✅ Sucursal Centro creada');
+  }
 
-    const branch2 = await branchesRepository.save({
+  let branch2 = await branchesRepository.findOne({ where: { companyId: company1.id, code: 'SUC-002' } });
+  if (!branch2) {
+    branch2 = await branchesRepository.save({
       companyId: company1.id,
       code: 'SUC-002',
       name: 'Sucursal Norte',
@@ -313,8 +315,12 @@ export async function seedDatabase(dataSource: DataSource) {
       state: 'CDMX',
       isActive: true,
     });
+    console.log('✅ Sucursal Norte creada');
+  }
 
-    const branch3 = await branchesRepository.save({
+  let branch3 = await branchesRepository.findOne({ where: { companyId: company2.id, code: 'SUC-003' } });
+  if (!branch3) {
+    branch3 = await branchesRepository.save({
       companyId: company2.id,
       code: 'SUC-003',
       name: 'Sucursal Sur',
@@ -323,9 +329,13 @@ export async function seedDatabase(dataSource: DataSource) {
       state: 'CDMX',
       isActive: true,
     });
+    console.log('✅ Sucursal Sur creada');
+  }
 
-    console.log('✅ 3 sucursales creadas');
+  // Check if banks already exist for branch1
+  const existingBanks = await banksRepository.find({ where: { branchId: branch1.id } });
 
+  if (existingBanks.length === 0) {
     // Crear cuentas bancarias
     const bank1 = await banksRepository.save({
       branchId: branch1.id,
@@ -517,16 +527,15 @@ export async function seedDatabase(dataSource: DataSource) {
 
     console.log('✅ 3 proveedores creados');
   } else {
-    console.log('ℹ️ Sucursales ya existen, omitiendo creación de datos relacionados');
+    console.log('ℹ️ Bancos ya existen, omitiendo creación de datos relacionados');
   }
 
   // ═══════════════════════════════════════════════════════════════
   // PARTE: EMPRESAS DEL TENANT DEMO CON CUENTAS Y MOVIMIENTOS
   // ═══════════════════════════════════════════════════════════════
-  const demoCompanies = await companiesRepository.find({ where: { tenantId: demoTenant.id } });
-  
+
   // Crear EL SAZÓN MATRIZ si no existe
-  let elSazon = demoCompanies.find(c => c.tradeName === 'EL SAZÓN MATRIZ');
+  let elSazon = await companiesRepository.findOne({ where: { tenantId: demoTenant.id, tradeName: 'EL SAZÓN MATRIZ' } });
   if (!elSazon) {
     elSazon = await companiesRepository.save({
       id: 'abbbb682-d883-4f03-a7ee-2ae08850641c',
@@ -564,7 +573,7 @@ export async function seedDatabase(dataSource: DataSource) {
   }
 
   // Crear EL SONORENSE si no existe
-  let elSonorense = demoCompanies.find(c => c.tradeName === 'EL SONORENSE');
+  let elSonorense = await companiesRepository.findOne({ where: { tenantId: demoTenant.id, tradeName: 'EL SONORENSE' } });
   if (!elSonorense) {
     elSonorense = await companiesRepository.save({
       tenantId: demoTenant.id,
@@ -593,7 +602,7 @@ export async function seedDatabase(dataSource: DataSource) {
   }
 
   // Buscar SERVICIOS DEMO en demoTenant (si no existe, crearla)
-  let serviciosDemo = demoCompanies.find(c => c.tradeName === 'SERVICIOS DEMO');
+  let serviciosDemo = await companiesRepository.findOne({ where: { tenantId: demoTenant.id, tradeName: 'SERVICIOS DEMO' } });
   if (!serviciosDemo) {
     serviciosDemo = await companiesRepository.save({
       tenantId: demoTenant.id,
