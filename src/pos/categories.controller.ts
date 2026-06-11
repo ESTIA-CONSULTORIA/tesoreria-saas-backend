@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Put, Delete, Body, Param } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Body, Param, Req, Headers } from '@nestjs/common';
 import { CategoriesService } from './categories.service';
 import { Modulo } from '../auth/modulo.decorator';
 
@@ -8,7 +8,8 @@ export class CategoriesController {
   constructor(private categoriesService: CategoriesService) {}
 
   @Get()
-  findAll(@Param('branchId') branchId?: string) {
+  findAll(@Req() req: any, @Headers('x-branch-id') headerBranchId?: string) {
+    const branchId = headerBranchId || req.user?.branchId;
     return this.categoriesService.findAll(branchId);
   }
 

@@ -45,9 +45,6 @@ export class SalesService {
     referencia?: string;
   }) {
     try {
-      console.log('SalesService.create - turnoId recibido:', data.turnoId);
-      console.log('SalesService.create - data completo:', data);
-      
       const folio = await this.generateFolio();
       const now = new Date();
       const sale = this.salesRepo.create();
@@ -61,7 +58,8 @@ export class SalesService {
       sale.total = data.total;
       sale.formaPago = (data.formaPago || data.formasPago?.[0]?.forma) as any;
       sale.formasPago = data.formasPago || [];
-      sale.status = 'ABIERTA';
+      // Mark as PAGADA immediately when payment forms are included
+      sale.status = (data.formasPago && data.formasPago.length > 0) ? 'PAGADA' : 'ABIERTA';
       sale.cajero = data.cajero;
       sale.turnoId = data.turnoId;
       sale.sucursalId = data.sucursalId;
@@ -112,14 +110,8 @@ export class SalesService {
     const newStock = Math.max(0, Number(insumo.stockActual) - quantity);
     await this.insumoRepo.update(insumoId, { stockActual: newStock });
 
-    // Check if stock is at or below minimum
-    if (newStock <= Number(insumo.stockMinimo)) {
-      console.warn(`⚠️ Alerta: Insumo ${insumo.nombre} está en stock mínimo o bajo. Stock actual: ${newStock}, Mínimo: ${insumo.stockMinimo}`);
-      // TODO: Create alert in system
-    }
-
+    // TODO: Create low-stock alert in system when newStock <= insumo.stockMinimo
     // TODO: Register inventory movement type SALIDA_VENTA
-    console.log(`📦 Movimiento inventario: SALIDA_VENTA - Insumo: ${insumo.nombre}, Cantidad: ${quantity}, Referencia: ${folio}, Stock resultante: ${newStock}`);
   }
 
   async findAll(filters?: {

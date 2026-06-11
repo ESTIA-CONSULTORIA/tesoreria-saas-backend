@@ -143,15 +143,7 @@ export class ShiftsService {
   }
 
   async closeShift(id: string, data: {
-    totalVentas: number;
-    totalEfectivo: number;
-    totalTarjeta: number;
-    totalTransferencia: number;
-    totalCortesia: number;
-    totalDevoluciones: number;
-    totalRetiros: number;
-    totalDepositos: number;
-    efectivoContado: number;
+    efectivoContado?: number;
     notas?: string;
   }) {
     try {
@@ -166,18 +158,55 @@ export class ShiftsService {
         throw new Error('Debe realizar el precorte antes del corte Z');
       }
 
+      // Calculate real totals from actual paid sales in this shift
+      const sales = await this.salesRepo.find({ where: { turnoId: id, status: 'PAGADA' } });
+      let calcTotalVentas = 0;
+      let calcTotalEfectivo = 0;
+      let calcTotalTarjeta = 0;
+      let calcTotalTransferencia = 0;
+      let calcTotalCortesia = 0;
+
+      for (const sale of sales) {
+        calcTotalVentas += Number(sale.total) || 0;
+        if (Array.isArray(sale.formasPago) && sale.formasPago.length > 0) {
+          for (const fp of sale.formasPago) {
+            const monto = Number(fp.monto) || 0;
+            switch (fp.forma) {
+              case 'EFECTIVO': calcTotalEfectivo += monto; break;
+              case 'DEBITO':
+              case 'CREDITO':
+              case 'TARJETA': calcTotalTarjeta += monto; break;
+              case 'TRANSFERENCIA': calcTotalTransferencia += monto; break;
+              case 'CORTESIA': calcTotalCortesia += monto; break;
+            }
+          }
+        } else if (sale.formaPago) {
+          switch (sale.formaPago) {
+            case 'EFECTIVO': calcTotalEfectivo += Number(sale.total); break;
+            case 'DEBITO':
+            case 'CREDITO':
+            case 'TARJETA': calcTotalTarjeta += Number(sale.total); break;
+            case 'TRANSFERENCIA': calcTotalTransferencia += Number(sale.total); break;
+            case 'CORTESIA': calcTotalCortesia += Number(sale.total); break;
+          }
+        }
+      }
+
+      const cancelledSales = await this.salesRepo.find({ where: { turnoId: id, status: 'CANCELADA' } });
+      const calcTotalDevoluciones = cancelledSales.reduce((sum, s) => sum + (Number(s.total) || 0), 0);
+
       const now = new Date();
       await this.shiftsRepo.update(id, {
         horaCierre: now.toTimeString().slice(0, 8),
-        totalVentas: data.totalVentas,
-        totalEfectivo: data.totalEfectivo,
-        totalTarjeta: data.totalTarjeta,
-        totalTransferencia: data.totalTransferencia,
-        totalCortesia: data.totalCortesia,
-        totalDevoluciones: data.totalDevoluciones,
-        totalRetiros: data.totalRetiros,
-        totalDepositos: data.totalDepositos,
-        efectivoContado: data.efectivoContado,
+        totalVentas: calcTotalVentas,
+        totalEfectivo: calcTotalEfectivo,
+        totalTarjeta: calcTotalTarjeta,
+        totalTransferencia: calcTotalTransferencia,
+        totalCortesia: calcTotalCortesia,
+        totalDevoluciones: calcTotalDevoluciones,
+        totalRetiros: Number(shift.totalRetiros) || 0,
+        totalDepositos: Number(shift.totalDepositos) || 0,
+        efectivoContado: data.efectivoContado ?? Number(shift.efectivoContado) ?? 0,
         status: 'CERRADO',
         notas: data.notas || shift.notas,
       });
@@ -191,30 +220,25 @@ export class ShiftsService {
 
   async findOpenShift(cajero: string, sucursalId: string, tenantId?: string) {
     try {
-      console.log('findOpenShift params:', { cajero, sucursalId, tenantId });
-      
       // Primero intentar con tenantId
       if (tenantId) {
         const shift = await this.shiftsRepo.findOne({
           where: { status: 'ABIERTO', tenantId },
           order: { createdAt: 'DESC' },
         });
-        console.log('findOpenShift with tenantId result:', shift?.id);
         if (shift) return shift;
       }
-      
+
       // Fallback: buscar cualquier turno abierto, filtrando por sucursalId si se proporciona
       const whereConditions: any = { status: 'ABIERTO' };
       if (sucursalId) {
         whereConditions.sucursalId = sucursalId;
       }
-      
-      const shift = await this.shiftsRepo.findOne({
+
+      return this.shiftsRepo.findOne({
         where: whereConditions,
         order: { createdAt: 'DESC' },
       });
-      console.log('findOpenShift fallback result:', shift?.id);
-      return shift;
     } catch (error) {
       console.error('ShiftsService.findOpenShift error:', error);
       throw new Error(`Error al buscar turno abierto: ${error.message}`);

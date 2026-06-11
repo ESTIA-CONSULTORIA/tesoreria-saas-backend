@@ -12,37 +12,32 @@ export class CashiersService {
   ) {}
 
   async loginWithNip(nip: string, tenantId: string) {
-    console.log('loginWithNip - nip:', nip);
-    console.log('loginWithNip - tenantId:', tenantId);
-
-    // Buscar usuario con roleCode CAJERO
-    // Si tenantId es null o vacío, buscar solo por roleCode
+    // Find all CAJERO users in the tenant to match NIP against each one
     const where: any = { roleCode: 'CAJERO' };
     if (tenantId) {
       where.tenantId = tenantId;
     }
 
-    console.log('loginWithNip - where:', where);
-    const user = await this.usersRepo.findOne({ where });
-
-    console.log('loginWithNip - user found:', !!user);
-    if (user) {
-      console.log('loginWithNip - user.email:', user.email);
-      console.log('loginWithNip - user.roleCode:', user.roleCode);
-      console.log('loginWithNip - user.tenantId:', user.tenantId);
-    }
-
-    if (!user) {
+    const users = await this.usersRepo.find({ where });
+    if (!users.length) {
       throw new HttpException('NIP incorrecto', HttpStatus.UNAUTHORIZED);
     }
 
-    // Verificar NIP contra password hasheado
-    const isNipValid = await bcrypt.compare(nip, user.password);
-    console.log('loginWithNip - isNipValid:', isNipValid);
+    // Find the user whose hashed password matches the provided NIP
+    let matchedUser: (typeof users)[0] | null = null;
+    for (const u of users) {
+      const isValid = await bcrypt.compare(nip, u.password);
+      if (isValid) {
+        matchedUser = u;
+        break;
+      }
+    }
 
-    if (!isNipValid) {
+    if (!matchedUser) {
       throw new HttpException('NIP incorrecto', HttpStatus.UNAUTHORIZED);
     }
+
+    const user = matchedUser;
 
     // Generar token (reutilizar lógica de AuthService)
     const jwt = require('jsonwebtoken');
