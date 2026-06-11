@@ -260,9 +260,11 @@ export async function seedDatabase(dataSource: DataSource) {
 
   // Crear empresas de prueba
   const existingCompanies = await companiesRepository.find({ where: { tenantId: testTenant.id } });
-  
-  if (existingCompanies.length === 0) {
-    const company1 = await companiesRepository.save({
+
+  // Crear Comercializadora Demo si no existe
+  let company1 = await companiesRepository.findOne({ where: { tenantId: testTenant.id, tradeName: 'Comercializadora Demo' } });
+  if (!company1) {
+    company1 = await companiesRepository.save({
       tenantId: testTenant.id,
       legalName: 'Comercializadora Demo S.A. de C.V.',
       tradeName: 'Comercializadora Demo',
@@ -270,8 +272,13 @@ export async function seedDatabase(dataSource: DataSource) {
       baseCurrency: 'MXN',
       isActive: true,
     });
+    console.log('✅ Empresa Comercializadora Demo creada');
+  }
 
-    const company2 = await companiesRepository.save({
+  // Crear Servicios Demo si no existe
+  let company2 = await companiesRepository.findOne({ where: { tenantId: testTenant.id, tradeName: 'Servicios Demo' } });
+  if (!company2) {
+    company2 = await companiesRepository.save({
       tenantId: testTenant.id,
       legalName: 'Servicios Profesionales Demo S. de R.L.',
       tradeName: 'Servicios Demo',
@@ -279,9 +286,13 @@ export async function seedDatabase(dataSource: DataSource) {
       baseCurrency: 'MXN',
       isActive: true,
     });
+    console.log('✅ Empresa Servicios Demo creada');
+  }
 
-    console.log('✅ 2 empresas de prueba creadas');
+  // Check if branches already exist for these companies
+  const existingBranches = await branchesRepository.find({ where: { companyId: In([company1.id, company2.id]) } });
 
+  if (existingBranches.length === 0) {
     // Crear sucursales
     const branch1 = await branchesRepository.save({
       companyId: company1.id,
@@ -506,7 +517,7 @@ export async function seedDatabase(dataSource: DataSource) {
 
     console.log('✅ 3 proveedores creados');
   } else {
-    console.log('ℹ️ Datos de prueba ya existen, omitiendo creación');
+    console.log('ℹ️ Sucursales ya existen, omitiendo creación de datos relacionados');
   }
 
   // ═══════════════════════════════════════════════════════════════
