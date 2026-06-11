@@ -318,20 +318,6 @@ export async function seedDatabase(dataSource: DataSource) {
     console.log('✅ Sucursal Norte creada');
   }
 
-  let branch3 = await branchesRepository.findOne({ where: { companyId: company2.id, code: 'SUC-003' } });
-  if (!branch3) {
-    branch3 = await branchesRepository.save({
-      companyId: company2.id,
-      code: 'SUC-003',
-      name: 'Corporativo Norte',
-      address: 'Calle Sur #789, Zona Sur',
-      city: 'Ciudad de México',
-      state: 'CDMX',
-      isActive: true,
-    });
-    console.log('✅ Sucursal Corporativo Norte creada');
-  }
-
   // Check if banks already exist for branch1
   const existingBanksBranch1 = await banksRepository.count({ where: { branchId: branch1.id } });
 
@@ -596,74 +582,6 @@ export async function seedDatabase(dataSource: DataSource) {
     console.log('✅ 5 movimientos de egreso creados para Sucursal Norte');
   } else {
     console.log('ℹ️ Bancos ya existen para branch2, omitiendo creación');
-  }
-
-  // Check if banks already exist for branch3 (Servicios Demo - Corporativo)
-  const existingBanksBranch3 = await banksRepository.count({ where: { branchId: branch3.id } });
-
-  if (existingBanksBranch3 === 0) {
-    // Crear cuentas bancarias para Corporativo
-    const bank3_1 = await banksRepository.save({
-      branchId: branch3.id,
-      name: 'Cuenta HSBC Corporativo',
-      accountNumber: '0456789012',
-      bank: 'HSBC',
-      initialBalance: 25000,
-      balance: 25000,
-      currency: 'MXN',
-      type: 'BANCO',
-      isActive: true,
-    });
-
-    const bank3_2 = await banksRepository.save({
-      branchId: branch3.id,
-      name: 'Caja Chica Corporativo',
-      accountNumber: 'CAJA-003',
-      bank: 'EFECTIVO',
-      initialBalance: 5000,
-      balance: 5000,
-      currency: 'MXN',
-      type: 'EFECTIVO',
-      isActive: true,
-    });
-
-    console.log('✅ 2 cuentas bancarias creadas para Corporativo');
-
-    // Crear movimientos de ingreso
-    for (let i = 0; i < 8; i++) {
-      const amount = Math.floor(Math.random() * 6000) + 2000;
-      const date = new Date();
-      date.setDate(date.getDate() - Math.floor(Math.random() * 90));
-      await movementsRepository.save({
-        accountId: bank3_1.id,
-        type: 'INCOME',
-        category: 'SALE',
-        concept: 'Venta de servicios',
-        reference: `COR-ING-${String(i + 1).padStart(3, '0')}`,
-        amount: amount,
-        date: date,
-      });
-    }
-    console.log('✅ 8 movimientos de ingreso creados para Corporativo');
-
-    // Crear movimientos de egreso
-    for (let i = 0; i < 4; i++) {
-      const amount = Math.floor(Math.random() * 2500) + 500;
-      const date = new Date();
-      date.setDate(date.getDate() - Math.floor(Math.random() * 90));
-      await movementsRepository.save({
-        accountId: bank3_1.id,
-        type: 'EXPENSE',
-        category: 'OPERATIONAL',
-        concept: 'Gasto operativo',
-        reference: `COR-EGR-${String(i + 1).padStart(3, '0')}`,
-        amount: amount,
-        date: date,
-      });
-    }
-    console.log('✅ 4 movimientos de egreso creados para Corporativo');
-  } else {
-    console.log('ℹ️ Bancos ya existen para branch3, omitiendo creación');
   }
 
   // ═══════════════════════════════════════════════════════════════
