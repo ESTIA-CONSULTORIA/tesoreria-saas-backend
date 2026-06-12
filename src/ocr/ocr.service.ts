@@ -60,7 +60,8 @@ export class OcrService {
 
   private async extractPdfText(buffer: Buffer): Promise<string> {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const pdfParse = require('pdf-parse');
+    const pdfParseModule = require('pdf-parse');
+    const pdfParse = typeof pdfParseModule === 'function' ? pdfParseModule : pdfParseModule.default;
     const result = await pdfParse(buffer);
     return result.text || '';
   }
