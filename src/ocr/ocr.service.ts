@@ -68,7 +68,7 @@ export class OcrService {
 
   private parseText(text: string): Record<string, string> {
     if (!text || text.startsWith('[OCR')) {
-      return { documentNumber: '', date: '', provider: '', totalAmount: '', concept: '' };
+      return { numeroDocumento: '', fecha: '', proveedor: '', montoTotal: '', concepto: '' };
     }
 
     const lines = text.split('\n').map((l) => l.trim()).filter(Boolean);
@@ -105,11 +105,11 @@ export class OcrService {
     const providerFallback = (providerMatch?.[1]?.trim() ?? lines[0] ?? '').slice(0, 100);
 
     return {
-      documentNumber: docNumberMatch?.[1]?.trim() ?? '',
-      date: dateMatch?.[1]?.trim() ?? '',
-      provider: providerFallback,
-      totalAmount: (totalMatch?.[1] ?? '').replace(/,/g, ''),
-      concept: (conceptMatch?.[1]?.trim() ?? lines.slice(0, 3).join(' ')).slice(0, 150),
+      numeroDocumento: docNumberMatch?.[1]?.trim() ?? '',
+      fecha: dateMatch?.[1]?.trim() ?? '',
+      proveedor: providerFallback,
+      montoTotal: (totalMatch?.[1] ?? '').replace(/,/g, ''),
+      concepto: (conceptMatch?.[1]?.trim() ?? lines.slice(0, 3).join(' ')).slice(0, 150),
     };
   }
 
