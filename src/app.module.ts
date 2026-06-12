@@ -35,6 +35,7 @@ import { PurchasesModule } from './purchases/purchases.module';
 import { CostsModule } from './costs/costs.module';
 import { AddonsModule } from './addons/addons.module';
 import { AuditModule } from './audit/audit.module';
+import { OcrModule } from './ocr/ocr.module';
 
 @Module({
   imports: [
@@ -83,6 +84,7 @@ import { AuditModule } from './audit/audit.module';
     CostsModule,
     AddonsModule,
     AuditModule,
+    OcrModule,
   ],
 
   providers: [
