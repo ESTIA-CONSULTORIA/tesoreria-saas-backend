@@ -41,6 +41,11 @@ export class OcrController {
     return this.ocrService.processDocument(file, tenantId, companyId);
   }
 
+  @Get('documents/:id')
+  findOne(@Param('id') id: string) {
+    return this.ocrService.findOne(id);
+  }
+
   @Get('documents')
   findAll(
     @Headers('x-tenant-id') headerTenantId?: string,
