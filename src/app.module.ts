@@ -36,6 +36,7 @@ import { CostsModule } from './costs/costs.module';
 import { AddonsModule } from './addons/addons.module';
 import { AuditModule } from './audit/audit.module';
 import { OcrModule } from './ocr/ocr.module';
+import { PosChatModule } from './pos-chat/pos-chat.module';
 
 @Module({
   imports: [
@@ -85,6 +86,7 @@ import { OcrModule } from './ocr/ocr.module';
     AddonsModule,
     AuditModule,
     OcrModule,
+    PosChatModule,
   ],
 
   providers: [
