@@ -15,7 +15,7 @@ export class Movement {
   category: string; // SALE, RENT, PAYROLL, TRANSFER, etc.
 
   @Column({ nullable: true })
-categoryId: string;
+  categoryId: string;
 
   @Column({ default: '' })
   concept: string;
@@ -28,6 +28,18 @@ categoryId: string;
 
   @Column({ type: 'timestamp', nullable: true, default: () => 'CURRENT_TIMESTAMP' })
   date: Date;
+
+  @Column({ default: 'APPROVED' })
+  status: string; // APPROVED | PENDING_APPROVAL | REJECTED
+
+  @Column({ nullable: true })
+  approvedBy: string;
+
+  @Column({ type: 'timestamp', nullable: true })
+  approvedAt: Date;
+
+  @Column({ nullable: true })
+  rejectionReason: string;
 
   @CreateDateColumn()
   createdAt: Date;

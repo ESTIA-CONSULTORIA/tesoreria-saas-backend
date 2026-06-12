@@ -1,10 +1,12 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
+import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Movement } from './entities/movement.entity';
 import { Repository, In } from 'typeorm';
 import { Bank } from '../banks/entities/bank.entity';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
+
+const APPROVAL_THRESHOLD = 50_000;
 
 @Injectable()
 export class MovementsService {
@@ -53,6 +55,8 @@ export class MovementsService {
 
     await this.banksRepository.save(account);
 
+    const requiresApproval = numericAmount >= APPROVAL_THRESHOLD;
+
     const movement = this.movementsRepository.create({
       accountId,
       type: normalizedType,
@@ -60,6 +64,7 @@ export class MovementsService {
       concept,
       reference,
       amount: numericAmount,
+      status: requiresApproval ? 'PENDING_APPROVAL' : 'APPROVED',
     });
 
     return this.movementsRepository.save(movement);
@@ -121,6 +126,28 @@ export class MovementsService {
       total,
       totalPages: Math.ceil(total / limit),
     };
+  }
+
+  async approve(id: string, approvedBy: string): Promise<Movement> {
+    const mov = await this.movementsRepository.findOne({ where: { id } });
+    if (!mov) throw new NotFoundException('Movimiento no encontrado');
+    await this.movementsRepository.update(id, {
+      status: 'APPROVED',
+      approvedBy,
+      approvedAt: new Date(),
+    });
+    return this.movementsRepository.findOne({ where: { id } }) as Promise<Movement>;
+  }
+
+  async reject(id: string, approvedBy: string, reason: string): Promise<Movement> {
+    const mov = await this.movementsRepository.findOne({ where: { id } });
+    if (!mov) throw new NotFoundException('Movimiento no encontrado');
+    await this.movementsRepository.update(id, {
+      status: 'REJECTED',
+      approvedBy,
+      rejectionReason: reason,
+    });
+    return this.movementsRepository.findOne({ where: { id } }) as Promise<Movement>;
   }
 
   findByAccount(accountId: string) {

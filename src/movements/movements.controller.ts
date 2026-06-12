@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Headers, Param, Post, Query, Request } from '@nestjs/common';
+import { Body, Controller, Get, Headers, Param, Post, Put, Query, Request } from '@nestjs/common';
 import { MovementsService } from './movements.service';
 
 @Controller('movements')
@@ -80,5 +80,24 @@ export class MovementsController {
   @Get('account/:accountId')
   findByAccount(@Param('accountId') accountId: string) {
     return this.movementsService.findByAccount(accountId);
+  }
+
+  @Put(':id/approve')
+  approve(
+    @Param('id') id: string,
+    @Request() req?: any,
+  ) {
+    const approvedBy = req?.user?.email ?? req?.user?.name ?? 'admin';
+    return this.movementsService.approve(id, approvedBy);
+  }
+
+  @Put(':id/reject')
+  reject(
+    @Param('id') id: string,
+    @Body() body: { reason?: string },
+    @Request() req?: any,
+  ) {
+    const approvedBy = req?.user?.email ?? req?.user?.name ?? 'admin';
+    return this.movementsService.reject(id, approvedBy, body.reason ?? '');
   }
 }
