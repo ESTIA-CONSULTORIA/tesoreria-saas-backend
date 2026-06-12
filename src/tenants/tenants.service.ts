@@ -33,4 +33,9 @@ export class TenantsService {
     await this.tenantsRepository.update(id, { plan });
     return this.tenantsRepository.findOne({ where: { id } });
   }
+
+  async markOnboarded(id: string) {
+    await this.tenantsRepository.update(id, { isOnboarded: true });
+    return this.tenantsRepository.findOne({ where: { id } });
+  }
 }

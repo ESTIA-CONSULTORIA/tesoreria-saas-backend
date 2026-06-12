@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, Put, Param } from '@nestjs/common';
+import { Body, Controller, Get, Post, Put, Patch, Param } from '@nestjs/common';
 import { TenantsService } from './tenants.service';
 
 @Controller('tenants')
@@ -34,5 +34,10 @@ export class TenantsController {
   @Put(':id/plan')
   updatePlan(@Param('id') id: string, @Body('plan') plan: string) {
     return this.tenantsService.updatePlan(id, plan);
+  }
+
+  @Patch(':id/onboard')
+  markOnboarded(@Param('id') id: string) {
+    return this.tenantsService.markOnboarded(id);
   }
 }

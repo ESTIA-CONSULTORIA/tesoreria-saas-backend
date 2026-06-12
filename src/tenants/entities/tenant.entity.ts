@@ -19,4 +19,7 @@ export class Tenant {
 
   @Column({ default: true })
   isActive: boolean;
+
+  @Column({ default: false })
+  isOnboarded: boolean;
 }
