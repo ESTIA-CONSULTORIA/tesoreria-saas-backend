@@ -37,6 +37,7 @@ import { AddonsModule } from './addons/addons.module';
 import { AuditModule } from './audit/audit.module';
 import { OcrModule } from './ocr/ocr.module';
 import { PosChatModule } from './pos-chat/pos-chat.module';
+import { HrModule } from './hr/hr.module';
 
 @Module({
   imports: [
@@ -87,6 +88,7 @@ import { PosChatModule } from './pos-chat/pos-chat.module';
     AuditModule,
     OcrModule,
     PosChatModule,
+    HrModule,
   ],
 
   providers: [
