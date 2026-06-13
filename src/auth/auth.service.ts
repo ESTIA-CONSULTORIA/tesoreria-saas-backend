@@ -85,4 +85,41 @@ export class AuthService {
       },
     };
   }
+
+  async executiveLogin(tenantId: string, pin: string) {
+    if (!tenantId || !pin) {
+      throw new UnauthorizedException('Credenciales inválidas');
+    }
+    const users = await this.usersService.findAll(tenantId);
+    const candidates = users.filter(
+      (u) => ['ADMIN', 'GERENTE'].includes(u.roleCode || '') && u.isActive !== false,
+    );
+    for (const user of candidates) {
+      if (!user.password) continue;
+      const valid = await bcrypt.compare(pin, user.password);
+      if (valid) {
+        const token = this.jwtService.sign(
+          {
+            sub: user.id,
+            email: user.email,
+            roleCode: user.roleCode,
+            tenantId: user.tenantId,
+            companyId: user.companyId || null,
+            branchId: user.branchId || null,
+          },
+          { expiresIn: '8h' },
+        );
+        return {
+          access_token: token,
+          user: {
+            id: user.id,
+            email: user.email,
+            name: user.name,
+            roleCode: user.roleCode,
+          },
+        };
+      }
+    }
+    throw new UnauthorizedException('PIN incorrecto');
+  }
 }

@@ -17,4 +17,10 @@ export class AuthController {
   login(@Body() body: { email: string; password: string }) {
     return this.authService.login(body.email, body.password);
   }
+
+  @Public()
+  @Post('executive-login')
+  executiveLogin(@Body() body: { tenantId: string; pin: string }) {
+    return this.authService.executiveLogin(body.tenantId, body.pin);
+  }
 }
