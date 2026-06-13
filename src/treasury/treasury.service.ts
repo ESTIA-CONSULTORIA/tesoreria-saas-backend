@@ -629,20 +629,16 @@ export class TreasuryService {
   // Accounts Payable (CxP)
   async getAccountsPayable(tenantId?: string, branchId?: string, companyId?: string) {
     try {
+      // Purchase entity only has tenantId — no branchId column exists
       const where: any = { status: In(['PENDIENTE', 'PARCIAL']) };
       if (tenantId) where.tenantId = tenantId;
-      if (branchId) where.branchId = branchId;
       if (companyId) {
-        const branches = await this.banksRepo.manager.getRepository(Branch).find({
-          where: { companyId },
-          select: ['id'],
-        });
-        const branchIds = branches.map((b) => b.id);
-        if (branchIds.length > 0) {
-          where.branchId = In(branchIds);
-        } else {
-          return [];
-        }
+        // Resolve company → tenant and filter by tenantId
+        const company = await this.banksRepo.manager
+          .getRepository(Company)
+          .findOne({ where: { id: companyId }, select: ['tenantId'] });
+        if (!company) return [];
+        where.tenantId = company.tenantId;
       }
       
       const purchases = await this.purchasesRepo.find({
@@ -681,13 +677,18 @@ export class TreasuryService {
   async getAccountsReceivable(tenantId?: string, branchId?: string, companyId?: string) {
     try {
       const now = new Date();
+      // Movement entity has no tenantId column — filter by accountId via banks instead
+      // Show income movements from the last 90 days (createdAt <= now)
+      const ninetyDaysAgo = new Date();
+      ninetyDaysAgo.setDate(now.getDate() - 90);
+
       const query = this.movementsRepo
         .createQueryBuilder('movement')
         .where('movement.type = :type', { type: 'INCOME' })
-        .andWhere('movement.createdAt >= :now', { now })
-        .orderBy('movement.createdAt', 'ASC');
-      
-      if (tenantId) query.andWhere('movement.tenantId = :tenantId', { tenantId });
+        .andWhere('movement.createdAt >= :startDate', { startDate: ninetyDaysAgo })
+        .andWhere('movement.createdAt <= :now', { now })
+        .orderBy('movement.createdAt', 'DESC');
+
       if (branchId) {
         const banks = await this.banksRepo.find({
           where: { branchId },
