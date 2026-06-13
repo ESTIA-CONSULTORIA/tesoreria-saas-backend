@@ -12,7 +12,7 @@ export class TenantSetting {
   @Column({ nullable: true })
   name: string;
 
-  @Column({ nullable: true })
+  @Column({ nullable: true, type: 'text' })
   logoUrl: string;
 
   @Column({ nullable: true })
