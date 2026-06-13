@@ -16,6 +16,9 @@ export class UsersService {
     name?: string,
     roleId?: string,
     roleCode?: string,
+    tenantId?: string,
+    companyId?: string,
+    branchId?: string,
   ) {
     const user = this.usersRepository.create({
       email,
@@ -24,6 +27,9 @@ export class UsersService {
       roleId,
       roleCode: roleCode || 'USER',
       isActive: true,
+      tenantId,
+      companyId,
+      branchId,
     });
     return this.usersRepository.save(user);
   }

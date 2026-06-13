@@ -44,7 +44,7 @@ export class SubscriptionGuard implements CanActivate {
       return true;
     }
 
-    const tenantId = request.headers['tenant-id'];
+    const tenantId = request.user?.tenantId;
 
     if (!tenantId) {
       throw new ForbiddenException('Sesión inválida');

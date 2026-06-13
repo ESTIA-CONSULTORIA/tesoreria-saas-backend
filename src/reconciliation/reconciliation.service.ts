@@ -76,6 +76,7 @@ export class ReconciliationService {
     startDate?: string;
     endDate?: string;
     type?: InvoiceType;
+    tenantId?: string;
   }) {
     // Obtener movimientos bancarios
     const movementsQuery = this.movementsRepo.createQueryBuilder('movement');
@@ -92,6 +93,9 @@ export class ReconciliationService {
 
     // Obtener facturas
     const invoicesQuery = this.invoicesRepo.createQueryBuilder('invoice');
+    if (filters?.tenantId) {
+      invoicesQuery.andWhere('invoice.tenantId = :tenantId', { tenantId: filters.tenantId });
+    }
     if (filters?.bankAccountId) {
       invoicesQuery.andWhere('invoice.bankAccountId = :bankAccountId', { bankAccountId: filters.bankAccountId });
     }

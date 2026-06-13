@@ -74,7 +74,7 @@ export class MovementsController {
       );
     }
 
-    return this.movementsService.findAll();
+    return [];
   }
 
   @Get('account/:accountId')
@@ -88,7 +88,7 @@ export class MovementsController {
     @Request() req?: any,
   ) {
     const roleCode = req?.user?.roleCode;
-    if (!['ADMIN', 'GERENTE', 'SOPORTE'].includes(roleCode)) {
+    if (!['ADMIN', 'GERENTE'].includes(roleCode)) {
       throw new ForbiddenException('No tienes permisos para aprobar movimientos');
     }
     const approvedBy = req?.user?.email ?? req?.user?.name ?? 'admin';
@@ -102,7 +102,7 @@ export class MovementsController {
     @Request() req?: any,
   ) {
     const roleCode = req?.user?.roleCode;
-    if (!['ADMIN', 'GERENTE', 'SOPORTE'].includes(roleCode)) {
+    if (!['ADMIN', 'GERENTE'].includes(roleCode)) {
       throw new ForbiddenException('No tienes permisos para rechazar movimientos');
     }
     const approvedBy = req?.user?.email ?? req?.user?.name ?? 'admin';

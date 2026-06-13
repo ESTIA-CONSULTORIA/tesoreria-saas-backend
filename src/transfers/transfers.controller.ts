@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, Put, Param, Req } from '@nestjs/common';
+import { Body, Controller, ForbiddenException, Get, Post, Put, Param, Req } from '@nestjs/common';
 import { TransfersService } from './transfers.service';
 import { Feature } from '../auth/feature/decorator';
 
@@ -46,7 +46,11 @@ export class TransfersController {
 
   @Put(':id/authorize')
   @Feature('TREASURY')
-  authorize(@Param('id') id: string) {
+  authorize(@Param('id') id: string, @Req() req: any) {
+    const roleCode = req?.user?.roleCode;
+    if (!['ADMIN'].includes(roleCode)) {
+      throw new ForbiddenException('Solo los administradores pueden autorizar transferencias');
+    }
     return this.transfersService.authorize(id);
   }
 

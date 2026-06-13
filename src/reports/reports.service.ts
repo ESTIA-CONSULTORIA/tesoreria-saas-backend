@@ -76,6 +76,7 @@ export class ReportsService {
   async balanceByAccount(tenantId?: string, companyId?: string) {
     try {
       const query = this.banksRepo.createQueryBuilder('bank');
+      if (tenantId) query.andWhere('bank.tenantId = :tenantId', { tenantId });
       if (companyId) query.andWhere('bank.branchId IN (SELECT id FROM branch WHERE company_id = :companyId)', { companyId });
       
       const accounts = await query.orderBy('bank.name', 'ASC').getMany();

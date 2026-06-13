@@ -33,7 +33,8 @@ export class PurchasesController {
   @Post('orders')
   createOrder(@Body() data: any, @Request() req?: any) {
     const tenantId = req?.user?.tenantId;
-    return this.purchasesService.createOrder({ ...data, tenantId });
+    const branchId = req?.user?.branchId;
+    return this.purchasesService.createOrder({ ...data, tenantId, branchId });
   }
 
   @Put('orders/:id')

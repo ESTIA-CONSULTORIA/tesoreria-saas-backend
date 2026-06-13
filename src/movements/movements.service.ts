@@ -53,9 +53,11 @@ export class MovementsService {
       throw new BadRequestException('Tipo inválido');
     }
 
-    await this.banksRepository.save(account);
-
     const requiresApproval = numericAmount >= APPROVAL_THRESHOLD;
+
+    if (!requiresApproval) {
+      await this.banksRepository.save(account);
+    }
 
     const movement = this.movementsRepository.create({
       accountId,
@@ -131,6 +133,21 @@ export class MovementsService {
   async approve(id: string, approvedBy: string): Promise<Movement> {
     const mov = await this.movementsRepository.findOne({ where: { id } });
     if (!mov) throw new NotFoundException('Movimiento no encontrado');
+
+    if (mov.status === 'PENDING_APPROVAL') {
+      const account = await this.banksRepository.findOne({ where: { id: mov.accountId } });
+      if (account) {
+        const numericAmount = Number(mov.amount);
+        const currentBalance = Number(account.balance);
+        if (mov.type === 'INCOME') {
+          account.balance = currentBalance + numericAmount;
+        } else if (mov.type === 'EXPENSE') {
+          account.balance = currentBalance - numericAmount;
+        }
+        await this.banksRepository.save(account);
+      }
+    }
+
     await this.movementsRepository.update(id, {
       status: 'APPROVED',
       approvedBy,

@@ -8,6 +8,9 @@ export class Bank {
   @Column({ nullable: true })
   branchId: string;
 
+  @Column({ nullable: true })
+  tenantId: string;
+
   @Column({ default: '' })
   name: string;
 

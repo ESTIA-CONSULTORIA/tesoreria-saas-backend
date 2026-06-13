@@ -178,10 +178,10 @@ export class DashboardService {
       // CxC y CxP (simulado - usaría tablas reales de facturas)
       const accountsReceivable = currentIncome * 0.15; // 15% pendiente
       const accountsPayable = currentExpense * 0.10; // 10% pendiente
-      const pendingInvoices = Math.floor(Math.random() * 10) + 1;
-      
+      const pendingInvoices = 0;
+
       const nextDueDate = new Date();
-      nextDueDate.setDate(now.getDate() + Math.floor(Math.random() * 14) + 1);
+      nextDueDate.setDate(now.getDate() + 7);
 
       const latestMovements = await movementQuery
         .clone()

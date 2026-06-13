@@ -30,12 +30,15 @@ export class ReconciliationController {
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
     @Query('type') type?: InvoiceType,
+    @Request() req?: any,
   ) {
+    const tenantId = req?.user?.tenantId;
     return this.reconciliationService.getReconciliationData({
       bankAccountId,
       startDate,
       endDate,
       type,
+      tenantId,
     });
   }
 

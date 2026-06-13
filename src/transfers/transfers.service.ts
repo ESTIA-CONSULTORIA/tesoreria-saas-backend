@@ -186,6 +186,9 @@ export class TransfersService {
   }
 
   async reject(id: string, motivo: string) {
+    if (!motivo || !motivo.trim()) {
+      throw new BadRequestException('El motivo del rechazo es obligatorio');
+    }
     const transfer = await this.transferRepo.findOne({ where: { id } });
     if (!transfer) {
       throw new BadRequestException('Transferencia no encontrada');

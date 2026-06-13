@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Employee } from './entities/employee.entity';
@@ -26,20 +26,28 @@ export class HrService {
     return this.empRepo.save(this.empRepo.create(data));
   }
 
-  async updateEmployee(id: string, data: Partial<Employee>): Promise<Employee> {
-    await this.empRepo.update(id, data);
+  async updateEmployee(id: string, data: Partial<Employee>, tenantId?: string): Promise<Employee> {
     const emp = await this.empRepo.findOne({ where: { id } });
     if (!emp) throw new NotFoundException('Empleado no encontrado');
-    return emp;
+    if (tenantId && emp.tenantId && emp.tenantId !== tenantId) {
+      throw new ForbiddenException('No tienes permiso sobre este empleado');
+    }
+    await this.empRepo.update(id, data);
+    return this.empRepo.findOne({ where: { id } }) as Promise<Employee>;
   }
 
-  async removeEmployee(id: string): Promise<void> {
+  async removeEmployee(id: string, tenantId?: string): Promise<void> {
+    const emp = await this.empRepo.findOne({ where: { id } });
+    if (!emp) throw new NotFoundException('Empleado no encontrado');
+    if (tenantId && emp.tenantId && emp.tenantId !== tenantId) {
+      throw new ForbiddenException('No tienes permiso sobre este empleado');
+    }
     await this.empRepo.delete(id);
   }
 
   // --- Documents ---
 
-  findDocsByEmployee(employeeId: string): Promise<HrDocument[]> {
+  findDocsByEmployee(employeeId: string, tenantId?: string): Promise<HrDocument[]> {
     return this.docRepo.find({ where: { employeeId }, order: { uploadedAt: 'DESC' } });
   }
 

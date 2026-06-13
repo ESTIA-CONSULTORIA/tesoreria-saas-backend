@@ -5,14 +5,14 @@ import { TenantSettingsService } from './tenant-settings.service';
 export class TenantSettingsController {
   constructor(private service: TenantSettingsService) {}
 
-  @Get(':tenantId')
-  findByTenant(@Param('tenantId') tenantId: string) {
-    return this.service.findByTenant(tenantId);
-  }
-
   @Get('defaults')
   getDefaults() {
     return this.service.getDefaults();
+  }
+
+  @Get(':tenantId')
+  findByTenant(@Param('tenantId') tenantId: string) {
+    return this.service.findByTenant(tenantId);
   }
 
   @Post(':tenantId')

@@ -17,15 +17,19 @@ export class BanksController {
       currency?: string;
       type: string;
     },
+    @Request() req?: any,
   ) {
+    const tenantId = req?.user?.tenantId;
+    const branchId = req?.user?.branchId || body.branchId;
     return this.banksService.create(
-      body.branchId,
+      branchId,
       body.name,
       body.accountNumber,
       body.bank,
       body.initialBalance,
       body.currency || 'MXN',
       body.type,
+      tenantId,
     );
   }
 
@@ -38,24 +42,15 @@ export class BanksController {
     const userBranchId = req?.user?.branchId;
     const userCompanyId = req?.user?.companyId;
 
-    // If user has branchId in JWT, use it and ignore headers
-    if (userBranchId) {
-      return this.banksService.findByBranch(userBranchId);
-    }
+    if (userBranchId) return this.banksService.findByBranch(userBranchId);
+    if (userCompanyId) return this.banksService.findByCompany(userCompanyId);
+    if (headerBranchId) return this.banksService.findByBranch(headerBranchId);
+    if (headerCompanyId) return this.banksService.findByCompany(headerCompanyId);
 
-    // If user has companyId but no branchId in JWT, use it and ignore X-Branch-Id header
-    if (userCompanyId) {
-      return this.banksService.findByCompany(userCompanyId);
-    }
+    const tenantId = req?.user?.tenantId;
+    if (tenantId) return this.banksService.findByTenant(tenantId);
 
-    // Otherwise, use headers (ADMIN/SOPORTE/DUEÑO case)
-    if (headerBranchId) {
-      return this.banksService.findByBranch(headerBranchId);
-    }
-    if (headerCompanyId) {
-      return this.banksService.findByCompany(headerCompanyId);
-    }
-    return this.banksService.findAll();
+    return [];
   }
 
   @Get('branch/:branchId')

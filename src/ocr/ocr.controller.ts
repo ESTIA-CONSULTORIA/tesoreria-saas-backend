@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Controller,
   Delete,
   Get,
@@ -36,6 +37,9 @@ export class OcrController {
     @Headers('x-company-id') headerCompanyId?: string,
     @Request() req?: any,
   ) {
+    if (!file) {
+      throw new BadRequestException('Tipo de archivo no permitido o archivo ausente');
+    }
     const tenantId = req?.user?.tenantId ?? headerTenantId;
     const companyId = req?.user?.companyId ?? headerCompanyId;
     return this.ocrService.processDocument(file, tenantId, companyId);

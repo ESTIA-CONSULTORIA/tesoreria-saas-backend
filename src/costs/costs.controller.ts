@@ -10,9 +10,11 @@ export class CostsController {
   // Insumos
   @Get('insumos')
   findAllInsumos(
-    @Query('tenantId') tenantId?: string,
+    @Query('tenantId') queryTenantId?: string,
     @Query('categoriaId') categoriaId?: string,
+    @Request() req?: any,
   ) {
+    const tenantId = req?.user?.tenantId || queryTenantId;
     return this.costsService.findAllInsumos(tenantId, categoriaId);
   }
 
@@ -22,6 +24,11 @@ export class CostsController {
     @Query('limit') limit?: number,
   ) {
     return this.costsService.searchInsumos(search, limit);
+  }
+
+  @Get('insumos/next-code')
+  getNextInsumoCode(@Query('familiaId') familiaId: string) {
+    return this.costsService.getNextInsumoCode(familiaId);
   }
 
   @Get('insumos/:id')
@@ -45,11 +52,6 @@ export class CostsController {
     return this.costsService.deleteInsumo(id);
   }
 
-  @Get('insumos/next-code')
-  getNextInsumoCode(@Query('familiaId') familiaId: string) {
-    return this.costsService.getNextInsumoCode(familiaId);
-  }
-
   @Post('insumos/import')
   importInsumos(@Body() data: { insumos: any[] }) {
     return this.costsService.importInsumos(data.insumos);
@@ -58,9 +60,11 @@ export class CostsController {
   // Almacenes
   @Get('almacenes')
   findAllAlmacenes(
-    @Query('tenantId') tenantId?: string,
+    @Query('tenantId') queryTenantId?: string,
     @Query('sucursalId') sucursalId?: string,
+    @Request() req?: any,
   ) {
+    const tenantId = req?.user?.tenantId || queryTenantId;
     return this.costsService.findAllAlmacenes(tenantId, sucursalId);
   }
 
@@ -87,7 +91,8 @@ export class CostsController {
 
   // Familias de Insumos
   @Get('familias')
-  findAllFamilias(@Query('tenantId') tenantId?: string) {
+  findAllFamilias(@Query('tenantId') queryTenantId?: string, @Request() req?: any) {
+    const tenantId = req?.user?.tenantId || queryTenantId;
     return this.costsService.findAllFamilias(tenantId);
   }
 
@@ -115,9 +120,11 @@ export class CostsController {
   // Recetas
   @Get('recipes')
   findAllRecipes(
-    @Query('tenantId') tenantId?: string,
+    @Query('tenantId') queryTenantId?: string,
     @Query('tipo') tipo?: string,
+    @Request() req?: any,
   ) {
+    const tenantId = req?.user?.tenantId || queryTenantId;
     return this.costsService.findAllRecipes(tenantId, tipo);
   }
 

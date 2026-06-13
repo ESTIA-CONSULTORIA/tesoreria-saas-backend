@@ -178,16 +178,19 @@ export class PurchasesService {
     if (savedPurchase.items && Array.isArray(savedPurchase.items)) {
       for (const item of savedPurchase.items) {
         if (item.insumoId && item.cantidad) {
-          // Buscar el inventario actual del insumo
           const insumo = await this.costsService.findOneInsumo(item.insumoId);
           if (insumo) {
-            // Actualizar stock del insumo
             await this.costsService.updateInsumo(item.insumoId, {
               stockActual: Number(insumo.stockActual) + Number(item.cantidad),
             });
           }
         }
       }
+    }
+
+    // Transicionar OC a FACTURADA cuando se vincula una factura
+    if (data.ocId) {
+      await this.purchaseOrdersRepo.update(data.ocId, { status: 'FACTURADA' });
     }
 
     return savedPurchase;

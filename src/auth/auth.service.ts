@@ -51,7 +51,7 @@ export class AuthService {
       tenantId: user.tenantId,
       companyId: user.companyId || null,
       branchId: user.branchId || null,
-    }, { expiresIn: '24h' });
+    });
 
     // Calcular módulos activos según rol y tenant
     let modulosActivos: string[] = [];

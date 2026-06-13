@@ -26,12 +26,7 @@ export class OcrService {
       rawText = `[OCR no disponible: ${err?.message || 'error desconocido'}]`;
     }
 
-    // DEBUG: log texto extraído y datos parseados
-    console.log('[OCR] Archivo:', file.originalname, '| MIME:', file.mimetype);
-    console.log('[OCR] Texto extraído (primeros 600 chars):\n', rawText.slice(0, 600));
-
     const extractedData = this.parseText(rawText);
-    console.log('[OCR] extractedData parseado:', extractedData);
 
     const documentType = this.detectDocumentType(rawText);
 

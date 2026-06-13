@@ -30,19 +30,22 @@ export class HrController {
   }
 
   @Put('employees/:id')
-  update(@Param('id') id: string, @Body() body: any) {
-    return this.service.updateEmployee(id, body);
+  update(@Param('id') id: string, @Body() body: any, @Request() req?: any) {
+    const tenantId = req?.user?.tenantId;
+    return this.service.updateEmployee(id, body, tenantId);
   }
 
   @Delete('employees/:id')
-  remove(@Param('id') id: string) {
-    return this.service.removeEmployee(id);
+  remove(@Param('id') id: string, @Request() req?: any) {
+    const tenantId = req?.user?.tenantId;
+    return this.service.removeEmployee(id, tenantId);
   }
 
   // Documents
   @Get('employees/:employeeId/documents')
-  getDocuments(@Param('employeeId') employeeId: string) {
-    return this.service.findDocsByEmployee(employeeId);
+  getDocuments(@Param('employeeId') employeeId: string, @Request() req?: any) {
+    const tenantId = req?.user?.tenantId;
+    return this.service.findDocsByEmployee(employeeId, tenantId);
   }
 
   @Post('employees/:employeeId/documents')

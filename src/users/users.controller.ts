@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Post, Put, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Post, Put, Query, Request } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { Public } from '../auth/public.decorator';
 
@@ -15,20 +15,30 @@ export class UsersController {
       name?: string;
       roleId?: string;
       roleCode?: string;
+      tenantId?: string;
+      companyId?: string;
+      branchId?: string;
     },
+    @Request() req?: any,
   ) {
+    const tenantId = body.tenantId || req?.user?.tenantId;
+    const companyId = body.companyId || req?.user?.companyId;
+    const branchId = body.branchId || req?.user?.branchId;
     return this.usersService.create(
       body.email,
       body.password,
       body.name,
       body.roleId,
       body.roleCode,
+      tenantId,
+      companyId,
+      branchId,
     );
   }
 
   @Get()
-  @Public()
-  findAll(@Query('tenantId') tenantId?: string) {
+  findAll(@Query('tenantId') queryTenantId?: string, @Request() req?: any) {
+    const tenantId = req?.user?.tenantId || queryTenantId;
     return this.usersService.findAll(tenantId);
   }
 
@@ -44,7 +54,6 @@ export class UsersController {
   }
 
   @Put(':id')
-  @Public()
   update(
     @Param('id') id: string,
     @Body()

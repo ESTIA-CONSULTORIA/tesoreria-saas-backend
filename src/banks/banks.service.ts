@@ -22,6 +22,7 @@ export class BanksService {
     initialBalance: number,
     currency: string,
     type: string,
+    tenantId?: string,
   ) {
     const numericInitialBalance = Number(initialBalance || 0);
 
@@ -35,6 +36,7 @@ export class BanksService {
       currency: currency || 'MXN',
       type,
       isActive: true,
+      tenantId,
     });
 
     return this.banksRepository.save(bankAccount);
@@ -42,6 +44,13 @@ export class BanksService {
 
   findAll() {
     return this.banksRepository.find({
+      order: { createdAt: 'DESC' },
+    });
+  }
+
+  findByTenant(tenantId: string) {
+    return this.banksRepository.find({
+      where: { tenantId },
       order: { createdAt: 'DESC' },
     });
   }
