@@ -17,6 +17,9 @@ export class HrDocument {
   @Column({ nullable: true })
   url: string;
 
+  @Column({ nullable: true, type: 'text' })
+  fileData: string;
+
   @Column({ nullable: true })
   notas: string;
 
