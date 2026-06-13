@@ -1,4 +1,4 @@
-import { Controller, Get, Query, Request } from '@nestjs/common';
+import { Controller, Get, Query, Request, Headers } from '@nestjs/common';
 import { ReportsService } from './reports.service';
 
 @Controller('reports')
@@ -10,17 +10,23 @@ export class ReportsController {
     @Request() req,
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
+    @Headers('x-company-id') headerCompanyId?: string,
   ) {
     const user = req.user;
     const tenantId = req.tenantId || user?.tenantId;
-    return this.reportsService.cashFlow(startDate, endDate, tenantId);
+    const companyId = user?.companyId || headerCompanyId;
+    return this.reportsService.cashFlow(startDate, endDate, tenantId, companyId);
   }
 
   @Get('balance-by-account')
-  balanceByAccount(@Request() req) {
+  balanceByAccount(
+    @Request() req,
+    @Headers('x-company-id') headerCompanyId?: string,
+  ) {
     const user = req.user;
     const tenantId = req.tenantId || user?.tenantId;
-    return this.reportsService.balanceByAccount(tenantId);
+    const companyId = user?.companyId || headerCompanyId;
+    return this.reportsService.balanceByAccount(tenantId, companyId);
   }
 
   @Get('category-summary')
@@ -28,10 +34,12 @@ export class ReportsController {
     @Request() req,
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
+    @Headers('x-company-id') headerCompanyId?: string,
   ) {
     const user = req.user;
     const tenantId = req.tenantId || user?.tenantId;
-    return this.reportsService.categorySummary(startDate, endDate, tenantId);
+    const companyId = user?.companyId || headerCompanyId;
+    return this.reportsService.categorySummary(startDate, endDate, tenantId, companyId);
   }
 
   @Get('income-statement')
@@ -39,10 +47,12 @@ export class ReportsController {
     @Request() req,
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
+    @Headers('x-company-id') headerCompanyId?: string,
   ) {
     const user = req.user;
     const tenantId = req.tenantId || user?.tenantId;
-    return this.reportsService.incomeStatement(startDate, endDate, tenantId);
+    const companyId = user?.companyId || headerCompanyId;
+    return this.reportsService.incomeStatement(startDate, endDate, tenantId, companyId);
   }
 
   @Get('break-even-point')
@@ -50,9 +60,11 @@ export class ReportsController {
     @Request() req,
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
+    @Headers('x-company-id') headerCompanyId?: string,
   ) {
     const user = req.user;
     const tenantId = req.tenantId || user?.tenantId;
-    return this.reportsService.breakEvenPoint(startDate, endDate, tenantId);
+    const companyId = user?.companyId || headerCompanyId;
+    return this.reportsService.breakEvenPoint(startDate, endDate, tenantId, companyId);
   }
 }

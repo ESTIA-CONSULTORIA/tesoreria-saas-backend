@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Put, Delete, Body, Param, Query } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Body, Param, Query, Request } from '@nestjs/common';
 import { CostsService } from './costs.service';
 import { Modulo } from '../auth/modulo.decorator';
 
@@ -30,8 +30,9 @@ export class CostsController {
   }
 
   @Post('insumos')
-  createInsumo(@Body() data: any) {
-    return this.costsService.createInsumo(data);
+  createInsumo(@Body() data: any, @Request() req?: any) {
+    const tenantId = req?.user?.tenantId;
+    return this.costsService.createInsumo({ ...data, tenantId });
   }
 
   @Put('insumos/:id')
@@ -69,8 +70,9 @@ export class CostsController {
   }
 
   @Post('almacenes')
-  createAlmacen(@Body() data: any) {
-    return this.costsService.createAlmacen(data);
+  createAlmacen(@Body() data: any, @Request() req?: any) {
+    const tenantId = req?.user?.tenantId;
+    return this.costsService.createAlmacen({ ...data, tenantId });
   }
 
   @Put('almacenes/:id')
@@ -95,8 +97,9 @@ export class CostsController {
   }
 
   @Post('familias')
-  createFamilia(@Body() data: any) {
-    return this.costsService.createFamilia(data);
+  createFamilia(@Body() data: any, @Request() req?: any) {
+    const tenantId = req?.user?.tenantId;
+    return this.costsService.createFamilia({ ...data, tenantId });
   }
 
   @Put('familias/:id')
@@ -124,8 +127,9 @@ export class CostsController {
   }
 
   @Post('recipes')
-  createRecipe(@Body() data: any) {
-    return this.costsService.createRecipe(data);
+  createRecipe(@Body() data: any, @Request() req?: any) {
+    const tenantId = req?.user?.tenantId;
+    return this.costsService.createRecipe({ ...data, tenantId });
   }
 
   @Put('recipes/:id')
@@ -207,8 +211,9 @@ export class CostsController {
   }
 
   @Post('physical-counts')
-  async createPhysicalCount(@Body() data: any) {
-    return this.costsService.createPhysicalCount(data);
+  async createPhysicalCount(@Body() data: any, @Request() req?: any) {
+    const tenantId = req?.user?.tenantId;
+    return this.costsService.createPhysicalCount({ ...data, tenantId });
   }
 
   // Justificables

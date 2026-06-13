@@ -31,8 +31,9 @@ export class PurchasesController {
   }
 
   @Post('orders')
-  createOrder(@Body() data: any) {
-    return this.purchasesService.createOrder(data);
+  createOrder(@Body() data: any, @Request() req?: any) {
+    const tenantId = req?.user?.tenantId;
+    return this.purchasesService.createOrder({ ...data, tenantId });
   }
 
   @Put('orders/:id')
@@ -94,8 +95,9 @@ export class PurchasesController {
   }
 
   @Post('invoices')
-  createPurchase(@Body() data: any) {
-    return this.purchasesService.createPurchase(data);
+  createPurchase(@Body() data: any, @Request() req?: any) {
+    const tenantId = req?.user?.tenantId;
+    return this.purchasesService.createPurchase({ ...data, tenantId });
   }
 
   @Put('invoices/:id')

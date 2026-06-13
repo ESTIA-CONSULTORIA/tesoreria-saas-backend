@@ -16,11 +16,12 @@ export class ReportsService {
     private reportsRepo: Repository<Report>,
   ) {}
 
-  async cashFlow(startDate?: string, endDate?: string, tenantId?: string) {
+  async cashFlow(startDate?: string, endDate?: string, tenantId?: string, companyId?: string) {
     try {
       const query = this.movementsRepo.createQueryBuilder('movement');
 
       if (tenantId) query.andWhere('movement.tenantId = :tenantId', { tenantId });
+      if (companyId) query.andWhere('movement.accountId IN (SELECT id FROM bank WHERE branch_id IN (SELECT id FROM branch WHERE company_id = :companyId))', { companyId });
       if (startDate) query.andWhere('movement.createdAt >= :startDate', { startDate });
       if (endDate) query.andWhere('movement.createdAt <= :endDate', { endDate: `${endDate} 23:59:59` });
 
@@ -72,10 +73,10 @@ export class ReportsService {
     }
   }
 
-  async balanceByAccount(tenantId?: string) {
+  async balanceByAccount(tenantId?: string, companyId?: string) {
     try {
       const query = this.banksRepo.createQueryBuilder('bank');
-      if (tenantId) query.andWhere('bank.tenantId = :tenantId', { tenantId });
+      if (companyId) query.andWhere('bank.branchId IN (SELECT id FROM branch WHERE company_id = :companyId)', { companyId });
       
       const accounts = await query.orderBy('bank.name', 'ASC').getMany();
       
@@ -95,10 +96,11 @@ export class ReportsService {
     }
   }
 
-  async categorySummary(startDate?: string, endDate?: string, tenantId?: string) {
+  async categorySummary(startDate?: string, endDate?: string, tenantId?: string, companyId?: string) {
     try {
       const query = this.movementsRepo.createQueryBuilder('movement');
       if (tenantId) query.andWhere('movement.tenantId = :tenantId', { tenantId });
+      if (companyId) query.andWhere('movement.accountId IN (SELECT id FROM bank WHERE branch_id IN (SELECT id FROM branch WHERE company_id = :companyId))', { companyId });
       if (startDate) query.andWhere('movement.createdAt >= :startDate', { startDate });
       if (endDate) query.andWhere('movement.createdAt <= :endDate', { endDate: `${endDate} 23:59:59` });
 
@@ -125,10 +127,11 @@ export class ReportsService {
     }
   }
 
-  async incomeStatement(startDate?: string, endDate?: string, tenantId?: string) {
+  async incomeStatement(startDate?: string, endDate?: string, tenantId?: string, companyId?: string) {
     try {
       const query = this.movementsRepo.createQueryBuilder('movement');
       if (tenantId) query.andWhere('movement.tenantId = :tenantId', { tenantId });
+      if (companyId) query.andWhere('movement.accountId IN (SELECT id FROM bank WHERE branch_id IN (SELECT id FROM branch WHERE company_id = :companyId))', { companyId });
       if (startDate) query.andWhere('movement.createdAt >= :startDate', { startDate });
       if (endDate) query.andWhere('movement.createdAt <= :endDate', { endDate: `${endDate} 23:59:59` });
 
@@ -214,10 +217,11 @@ export class ReportsService {
     }
   }
 
-  async breakEvenPoint(startDate?: string, endDate?: string, tenantId?: string) {
+  async breakEvenPoint(startDate?: string, endDate?: string, tenantId?: string, companyId?: string) {
     try {
       const query = this.movementsRepo.createQueryBuilder('movement');
       if (tenantId) query.andWhere('movement.tenantId = :tenantId', { tenantId });
+      if (companyId) query.andWhere('movement.accountId IN (SELECT id FROM bank WHERE branch_id IN (SELECT id FROM branch WHERE company_id = :companyId))', { companyId });
       if (startDate) query.andWhere('movement.createdAt >= :startDate', { startDate });
       if (endDate) query.andWhere('movement.createdAt <= :endDate', { endDate: `${endDate} 23:59:59` });
 
