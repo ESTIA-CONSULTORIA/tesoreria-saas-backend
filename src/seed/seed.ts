@@ -1445,6 +1445,23 @@ export async function seedDatabase(dataSource: DataSource) {
     }
   }
 
+  // Migración: asignar tenantId a insumos y recetas existentes sin tenant
+  const insumosWithoutTenant = await insumosRepository.find({ where: { tenantId: IsNull() } });
+  if (insumosWithoutTenant.length > 0) {
+    for (const insumo of insumosWithoutTenant) {
+      await insumosRepository.update(insumo.id, { tenantId: demoTenant.id });
+    }
+    console.log(`✅ ${insumosWithoutTenant.length} insumos actualizados con tenantId`);
+  }
+
+  const recipesWithoutTenant = await recipesRepository.find({ where: { tenantId: IsNull() } });
+  if (recipesWithoutTenant.length > 0) {
+    for (const recipe of recipesWithoutTenant) {
+      await recipesRepository.update(recipe.id, { tenantId: demoTenant.id });
+    }
+    console.log(`✅ ${recipesWithoutTenant.length} recetas actualizadas con tenantId`);
+  }
+
   // ═══════════════════════════════════════════════════════════════
   // PARTE 4: AGREGAR MOVIMIENTOS HISTÓRICOS (40 ingresos, 20 egresos, 5 transferencias)
   // ═══════════════════════════════════════════════════════════════
