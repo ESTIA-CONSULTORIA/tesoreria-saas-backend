@@ -17,7 +17,7 @@ export class DashboardController {
     @Query('period') period?: string,
     @Headers('x-branch-id') headerBranchId?: string,
     @Headers('x-company-id') headerCompanyId?: string,
-    @Headers('tenant-id') headerTenantId?: string,
+    @Headers('x-tenant-id') headerTenantId?: string,
     @Request() req?: any,
   ) {
     const userBranchId = req?.user?.branchId;
@@ -48,7 +48,7 @@ export class DashboardController {
   async getCompanyKpis(
     @Param('companyId') companyId: string,
     @Query('period') period?: string,
-    @Headers('tenant-id') headerTenantId?: string,
+    @Headers('x-tenant-id') headerTenantId?: string,
     @Request() req?: any,
   ) {
     const tenantId = req?.user?.tenantId 

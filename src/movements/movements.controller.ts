@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Headers, Param, Post, Put, Query, Request } from '@nestjs/common';
+import { Body, Controller, ForbiddenException, Get, Headers, Param, Post, Put, Query, Request } from '@nestjs/common';
 import { MovementsService } from './movements.service';
 
 @Controller('movements')
@@ -87,6 +87,10 @@ export class MovementsController {
     @Param('id') id: string,
     @Request() req?: any,
   ) {
+    const roleCode = req?.user?.roleCode;
+    if (!['ADMIN', 'GERENTE', 'SOPORTE'].includes(roleCode)) {
+      throw new ForbiddenException('No tienes permisos para aprobar movimientos');
+    }
     const approvedBy = req?.user?.email ?? req?.user?.name ?? 'admin';
     return this.movementsService.approve(id, approvedBy);
   }
@@ -97,6 +101,10 @@ export class MovementsController {
     @Body() body: { reason?: string },
     @Request() req?: any,
   ) {
+    const roleCode = req?.user?.roleCode;
+    if (!['ADMIN', 'GERENTE', 'SOPORTE'].includes(roleCode)) {
+      throw new ForbiddenException('No tienes permisos para rechazar movimientos');
+    }
     const approvedBy = req?.user?.email ?? req?.user?.name ?? 'admin';
     return this.movementsService.reject(id, approvedBy, body.reason ?? '');
   }

@@ -88,7 +88,7 @@ export class TransfersService {
         accountId: fromAccountId,
         type: 'EXPENSE',
         category: 'TRANSFER',
-        concepto: concept || `Traslado interno a ${toAccountId}`,
+        concept: concept || `Traslado interno a ${toAccountId}`,
         reference: `TRANSFER-OUT-${Date.now()}`,
         amount: numericAmount,
       });
@@ -97,7 +97,7 @@ export class TransfersService {
         accountId: toAccountId,
         type: 'INCOME',
         category: 'TRANSFER',
-        concepto: concept || `Traslado interno desde ${fromAccountId}`,
+        concept: concept || `Traslado interno desde ${fromAccountId}`,
         reference: `TRANSFER-IN-${Date.now()}`,
         amount: numericAmount,
       });
@@ -162,7 +162,7 @@ export class TransfersService {
         accountId: transfer.fromAccountId,
         type: 'EXPENSE',
         category: 'TRANSFER',
-        concepto: transfer.concept || `Traslado intercompañía a ${transfer.empresaDestinoId}`,
+        concept: transfer.concept || `Traslado intercompañía a ${transfer.empresaDestinoId}`,
         reference: transfer.referencia || `TIC-${Date.now()}`,
         amount: Number(transfer.amount),
       });
@@ -171,7 +171,7 @@ export class TransfersService {
         accountId: transfer.toAccountId,
         type: 'INCOME',
         category: 'TRANSFER',
-        concepto: transfer.concept || `Traslado intercompañía desde ${transfer.empresaOrigenId}`,
+        concept: transfer.concept || `Traslado intercompañía desde ${transfer.empresaOrigenId}`,
         reference: transfer.referencia || `TIC-${Date.now()}`,
         amount: Number(transfer.amount),
       });

@@ -66,6 +66,9 @@ export class Invoice {
   @Column({ nullable: true })
   concept?: string;
 
+  @Column({ nullable: true })
+  tenantId?: string;
+
   @Column({ default: false })
   needsManualReview: boolean;
 

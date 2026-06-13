@@ -26,6 +26,8 @@ export class JwtMiddleware implements NestMiddleware {
           email: decoded.email,
           roleCode: decoded.roleCode,
           tenantId: decoded.tenantId,
+          companyId: decoded.companyId || null,
+          branchId: decoded.branchId || null,
         };
       } catch (error) {
         // Si el token es inválido, no asignar usuario

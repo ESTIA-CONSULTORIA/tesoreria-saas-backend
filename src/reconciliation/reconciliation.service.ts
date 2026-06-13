@@ -16,15 +16,16 @@ export class ReconciliationService {
     private banksRepo: Repository<Bank>,
   ) {}
 
-  async getAllInvoices() {
-    return this.invoicesRepo.find({ order: { createdAt: 'DESC' } });
+  async getAllInvoices(tenantId?: string) {
+    const where: any = {};
+    if (tenantId) where.tenantId = tenantId;
+    return this.invoicesRepo.find({ where, order: { createdAt: 'DESC' } });
   }
 
-  async getInvoicesByStatus(status: ReconciliationStatus) {
-    return this.invoicesRepo.find({
-      where: { reconciliationStatus: status },
-      order: { createdAt: 'DESC' },
-    });
+  async getInvoicesByStatus(status: ReconciliationStatus, tenantId?: string) {
+    const where: any = { reconciliationStatus: status };
+    if (tenantId) where.tenantId = tenantId;
+    return this.invoicesRepo.find({ where, order: { createdAt: 'DESC' } });
   }
 
   async createInvoice(data: {
@@ -36,6 +37,7 @@ export class ReconciliationService {
     accountId?: string;
     bankAccountId?: string;
     concept?: string;
+    tenantId?: string;
   }) {
     const invoice = this.invoicesRepo.create({
       ...data,
@@ -55,8 +57,10 @@ export class ReconciliationService {
     return this.invoicesRepo.findOne({ where: { id } });
   }
 
-  async getReconciliationSummary() {
-    const all = await this.invoicesRepo.find();
+  async getReconciliationSummary(tenantId?: string) {
+    const where: any = {};
+    if (tenantId) where.tenantId = tenantId;
+    const all = await this.invoicesRepo.find({ where });
     return {
       total: all.length,
       conciliadas: all.filter((i) => i.reconciliationStatus === ReconciliationStatus.CONCILIADA).length,
@@ -135,6 +139,11 @@ export class ReconciliationService {
     };
   }
 
+  async deleteInvoice(id: string) {
+    await this.invoicesRepo.delete(id);
+    return { deleted: true };
+  }
+
   async manualReconciliation(invoiceId: string, movementId: string) {
     await this.invoicesRepo.update(invoiceId, {
       movementId,
@@ -151,7 +160,7 @@ export class ReconciliationService {
     return query.orderBy('movement.createdAt', 'DESC').getMany();
   }
 
-  async importInvoices(invoices: any[]) {
+  async importInvoices(invoices: any[], tenantId?: string) {
     try {
       const results: Invoice[] = [];
       for (const invoiceData of invoices) {
@@ -163,6 +172,7 @@ export class ReconciliationService {
           dueDate: new Date(invoiceData.dueDate),
           bankAccountId: invoiceData.bankAccountId,
           concept: invoiceData.concept,
+          tenantId,
           reconciliationStatus: ReconciliationStatus.PENDIENTE,
           needsManualReview: false,
         });

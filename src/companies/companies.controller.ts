@@ -39,6 +39,11 @@ export class CompaniesController {
     return this.companiesService.findByTenant(tenantId);
   }
 
+  @Get(':id')
+  findOne(@Param('id') id: string) {
+    return this.companiesService.findOne(id);
+  }
+
   @Patch(':id')
   update(
     @Param('id') id: string,
