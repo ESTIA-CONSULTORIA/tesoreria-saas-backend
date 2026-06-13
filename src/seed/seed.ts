@@ -201,10 +201,10 @@ export async function seedDatabase(dataSource: DataSource) {
 
   // Crear usuarios demo para el tenant "Grupo Empresarial Demo"
   const demoUsers = [
-    { email: 'admin@demo.com', password: 'Admin123', name: 'Administrador Demo', role: adminRole, roleCode: 'ADMIN' },
-    { email: 'gerente@demo.com', password: 'Admin123', name: 'Gerente Demo', role: gerenteRole, roleCode: 'GERENTE' },
-    { email: 'cajero@demo.com', password: '1234', name: 'Cajero Demo', role: cajeroRole, roleCode: 'CAJERO' },
-    { email: 'contador@demo.com', password: 'Admin123', name: 'Contador Demo', role: contadorRole, roleCode: 'CONTADOR' },
+    { email: 'admin@demo.com', password: 'Admin123', name: 'Administrador Demo', role: adminRole, roleCode: 'ADMIN', executivePin: '1234' },
+    { email: 'gerente@demo.com', password: 'Admin123', name: 'Gerente Demo', role: gerenteRole, roleCode: 'GERENTE', executivePin: '1234' },
+    { email: 'cajero@demo.com', password: '1234', name: 'Cajero Demo', role: cajeroRole, roleCode: 'CAJERO', executivePin: null },
+    { email: 'contador@demo.com', password: 'Admin123', name: 'Contador Demo', role: contadorRole, roleCode: 'CONTADOR', executivePin: null },
   ];
 
   for (const userData of demoUsers) {
@@ -219,6 +219,7 @@ export async function seedDatabase(dataSource: DataSource) {
         roleCode: userData.roleCode,
         tenantId: demoTenant.id,
         isActive: true,
+        executivePin: userData.executivePin,
       });
       if (userData.email === 'cajero@demo.com') {
         console.log('✅ Usuario cajero@demo.com creado');
@@ -232,23 +233,25 @@ export async function seedDatabase(dataSource: DataSource) {
 
   // Crear usuarios con restricción de empresa/sucursal
   const restrictedUsers = [
-    { 
-      email: 'gerente.sazon@demo.com', 
-      password: 'Admin123', 
-      name: 'Gerente El Sazón', 
-      role: gerenteRole, 
+    {
+      email: 'gerente.sazon@demo.com',
+      password: 'Admin123',
+      name: 'Gerente El Sazón',
+      role: gerenteRole,
       roleCode: 'GERENTE',
       companyId: '602512f6-496f-4d15-bd0f-ca3c0b61a8ee',
-      branchId: null
+      branchId: null,
+      executivePin: '1234',
     },
-    { 
-      email: 'gerente.sucursal@demo.com', 
-      password: 'Admin123', 
-      name: 'Gerente Sucursal', 
-      role: gerenteRole, 
+    {
+      email: 'gerente.sucursal@demo.com',
+      password: 'Admin123',
+      name: 'Gerente Sucursal',
+      role: gerenteRole,
       roleCode: 'GERENTE',
       companyId: null,
-      branchId: null // Will be set after branch is created
+      branchId: null, // Will be set after branch is created
+      executivePin: '1234',
     },
   ];
 
@@ -266,6 +269,7 @@ export async function seedDatabase(dataSource: DataSource) {
         companyId: userData.companyId,
         branchId: userData.branchId,
         isActive: true,
+        executivePin: userData.executivePin,
       });
       console.log(`✅ Usuario ${userData.email} (${userData.roleCode}) con restricción creado`);
     }

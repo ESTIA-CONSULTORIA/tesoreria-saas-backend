@@ -95,8 +95,8 @@ export class AuthService {
       (u) => ['ADMIN', 'GERENTE'].includes(u.roleCode || '') && u.isActive !== false,
     );
     for (const user of candidates) {
-      if (!user.password) continue;
-      const valid = await bcrypt.compare(pin, user.password);
+      if (!user.executivePin) continue;
+      const valid = pin === user.executivePin;
       if (valid) {
         const token = this.jwtService.sign(
           {

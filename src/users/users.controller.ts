@@ -18,6 +18,7 @@ export class UsersController {
       tenantId?: string;
       companyId?: string;
       branchId?: string;
+      executivePin?: string;
     },
     @Request() req?: any,
   ) {
@@ -33,6 +34,7 @@ export class UsersController {
       tenantId,
       companyId,
       branchId,
+      body.executivePin,
     );
   }
 
@@ -62,6 +64,7 @@ export class UsersController {
       roleId?: string;
       roleCode?: string;
       isActive?: boolean;
+      executivePin?: string;
     },
   ) {
     return this.usersService.update(id, body);

@@ -19,6 +19,7 @@ export class UsersService {
     tenantId?: string,
     companyId?: string,
     branchId?: string,
+    executivePin?: string,
   ) {
     const user = this.usersRepository.create({
       email,
@@ -30,6 +31,7 @@ export class UsersService {
       tenantId,
       companyId,
       branchId,
+      executivePin,
     });
     return this.usersRepository.save(user);
   }
@@ -56,7 +58,7 @@ export class UsersService {
     });
   }
 
-  async update(id: string, data: { name?: string; roleId?: string; roleCode?: string; isActive?: boolean }) {
+  async update(id: string, data: { name?: string; roleId?: string; roleCode?: string; isActive?: boolean; executivePin?: string }) {
     await this.usersRepository.update(id, data);
     return this.usersRepository.findOne({ where: { id } });
   }
