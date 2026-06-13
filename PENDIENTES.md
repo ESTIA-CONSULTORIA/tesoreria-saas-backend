@@ -23,10 +23,10 @@
 
 ## ⚪ MEJORAS (fase 3 — antes de integraciones)
 - [x] Quitar console.logs del backend
-- [ ] White Label completo (logo, colores, dominio)
+- [x] White Label básico (logo, nombre, color de acento)
 - [ ] Refactor estilos inline a Tailwind
-- [ ] Memoización para performance
-- [ ] Debouncing en filtros
+- [x] Memoización para performance
+- [x] Debouncing en filtros
 
 ## 🔵 INTEGRACIONES (fase 4)
 - [ ] APIs bancarias (BBVA, Banorte, HSBC, Banamex)
