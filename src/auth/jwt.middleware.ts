@@ -28,6 +28,7 @@ export class JwtMiddleware implements NestMiddleware {
           tenantId: decoded.tenantId,
           companyId: decoded.companyId || null,
           branchId: decoded.branchId || null,
+          executiveAccess: decoded.executiveAccess === true,
         };
       } catch (error) {
         // Si el token es inválido, no asignar usuario

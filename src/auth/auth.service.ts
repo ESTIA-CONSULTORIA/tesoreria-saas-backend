@@ -106,6 +106,7 @@ export class AuthService {
             tenantId: user.tenantId,
             companyId: user.companyId || null,
             branchId: user.branchId || null,
+            executiveAccess: true,
           },
           { expiresIn: '8h' },
         );

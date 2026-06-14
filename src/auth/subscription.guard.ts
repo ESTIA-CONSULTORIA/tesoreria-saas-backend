@@ -28,8 +28,8 @@ export class SubscriptionGuard implements CanActivate {
     const request = context.switchToHttp().getRequest();
     const user = request.user;
 
-    // SOPORTE tiene acceso a todo sin restricciones de suscripción
-    if (user && user.roleCode === 'SOPORTE') {
+    // SOPORTE y vista ejecutiva tienen acceso sin restricciones de suscripción
+    if (user && (user.roleCode === 'SOPORTE' || user.executiveAccess === true)) {
       return true;
     }
 

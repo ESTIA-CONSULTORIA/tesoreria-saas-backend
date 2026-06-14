@@ -26,8 +26,8 @@ export class PlanModuloGuard implements CanActivate {
     const request = context.switchToHttp().getRequest();
     const user = request.user;
 
-    // SOPORTE tiene acceso a todos los módulos
-    if (user?.roleCode === 'SOPORTE') {
+    // SOPORTE y vista ejecutiva tienen acceso a todos los módulos
+    if (user?.roleCode === 'SOPORTE' || user?.executiveAccess === true) {
       return true;
     }
 
