@@ -47,16 +47,28 @@ import { HrModule } from './hr/hr.module';
 
     TypeOrmModule.forRootAsync({
       inject: [ConfigService],
-      useFactory: (config: ConfigService) => ({
-        type: 'postgres',
-        host: config.get<string>('DB_HOST'),
-        port: Number(config.get<string>('DB_PORT')),
-        username: config.get<string>('DB_USER'),
-        password: config.get<string>('DB_PASS'),
-        database: config.get<string>('DB_NAME'),
-        autoLoadEntities: true,
-        synchronize: true,
-      }),
+      useFactory: (config: ConfigService) => {
+        const databaseUrl = config.get<string>('DATABASE_URL');
+        if (databaseUrl) {
+          return {
+            type: 'postgres',
+            url: databaseUrl,
+            ssl: { rejectUnauthorized: false },
+            autoLoadEntities: true,
+            synchronize: true,
+          };
+        }
+        return {
+          type: 'postgres',
+          host: config.get<string>('DB_HOST') || 'localhost',
+          port: Number(config.get<string>('DB_PORT') || '5432'),
+          username: config.get<string>('DB_USER') || 'postgres',
+          password: config.get<string>('DB_PASS') || 'postgres',
+          database: config.get<string>('DB_NAME') || 'tesoreria',
+          autoLoadEntities: true,
+          synchronize: true,
+        };
+      },
     }),
 
     UsersModule,
