@@ -5,6 +5,9 @@
   "author": "",
   "private": true,
   "license": "UNLICENSED",
+  "engines": {
+    "node": ">=20.0.0"
+  },
   "scripts": {
     "build": "nest build",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
@@ -27,6 +30,7 @@
     "@nestjs/platform-express": "^11.0.1",
     "@nestjs/typeorm": "^11.0.1",
     "@types/multer": "^2.1.0",
+    "body-parser": "^1.20.3",
     "bcrypt": "^6.0.0",
     "pdf-parse": "^2.4.5",
     "pg": "^8.20.0",
