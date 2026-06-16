@@ -86,6 +86,33 @@ export class AuthService {
     };
   }
 
+  async switchCompany(userId: string, tenantId: string, companyId: string) {
+    const users = await this.usersService.findAll(tenantId);
+    const user = users.find((u) => u.id === userId);
+    if (!user) {
+      throw new UnauthorizedException('Usuario no encontrado');
+    }
+    const token = this.jwtService.sign({
+      sub: user.id,
+      email: user.email,
+      roleCode: user.roleCode,
+      tenantId: user.tenantId,
+      companyId: companyId || null,
+      branchId: user.branchId || null,
+    });
+    return {
+      access_token: token,
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        roleCode: user.roleCode,
+        tenantId: user.tenantId,
+        companyId: companyId || null,
+      },
+    };
+  }
+
   async executiveLogin(tenantId: string, pin: string) {
     if (!tenantId || !pin) {
       throw new UnauthorizedException('Credenciales inválidas');

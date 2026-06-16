@@ -47,6 +47,15 @@ export class Employee {
   @Column({ default: 'ACTIVO' })
   status: string; // ACTIVO | BAJA | VACACIONES
 
+  @Column({ nullable: true })
+  userId: string;
+
+  @Column({ nullable: true })
+  whatsapp: string;
+
+  @Column({ nullable: true })
+  shiftId: string;
+
   @CreateDateColumn()
   createdAt: Date;
 }

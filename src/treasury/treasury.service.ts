@@ -7,6 +7,7 @@ import { PaymentSchedule } from './entities/payment-schedule.entity';
 import { Purchase } from '../purchases/entities/purchase.entity';
 import { Company } from '../companies/entities/company.entity';
 import { Branch } from '../branches/entities/branch.entity';
+import { Shift } from '../pos/entities/shift.entity';
 
 @Injectable()
 export class TreasuryService {
@@ -19,6 +20,8 @@ export class TreasuryService {
     private paymentScheduleRepo: Repository<PaymentSchedule>,
     @InjectRepository(Purchase)
     private purchasesRepo: Repository<Purchase>,
+    @InjectRepository(Shift)
+    private shiftsRepo: Repository<Shift>,
   ) {}
 
   private async getAccountIdsByTenant(tenantId?: string): Promise<string[]> {
@@ -766,6 +769,99 @@ export class TreasuryService {
     } catch (error) {
       console.error('TreasuryService.updateAlertConfig error:', error);
       throw new Error(`Error al actualizar configuración de alertas: ${error.message}`);
+    }
+  }
+
+  async getAgingReport(tenantId: string, companyId?: string) {
+    try {
+      const where: any = { tenantId };
+      if (companyId) where.companyId = companyId;
+
+      const purchases = await this.purchasesRepo.find({ where });
+      const pending = purchases.filter(
+        (p) => p.status === 'PENDIENTE' || p.status === 'PARCIAL',
+      );
+
+      const today = new Date();
+      const buckets = {
+        current: { label: '0–30 días', min: 0, max: 30, total: 0, items: [] as any[] },
+        days31: { label: '31–60 días', min: 31, max: 60, total: 0, items: [] as any[] },
+        days61: { label: '61–90 días', min: 61, max: 90, total: 0, items: [] as any[] },
+        over90: { label: '+90 días', min: 91, max: Infinity, total: 0, items: [] as any[] },
+      };
+
+      for (const p of pending) {
+        const venc = p.fechaVencimiento ? new Date(p.fechaVencimiento) : null;
+        const dias = venc ? Math.floor((today.getTime() - venc.getTime()) / 86400000) : 0;
+        const monto = Number(p.total || 0);
+        const item = { id: p.id, proveedor: (p as any).proveedor || '', folio: (p as any).folio || p.id, monto, diasVencido: dias, fechaVencimiento: venc };
+
+        if (dias <= 30) { buckets.current.total += monto; buckets.current.items.push(item); }
+        else if (dias <= 60) { buckets.days31.total += monto; buckets.days31.items.push(item); }
+        else if (dias <= 90) { buckets.days61.total += monto; buckets.days61.items.push(item); }
+        else { buckets.over90.total += monto; buckets.over90.items.push(item); }
+      }
+
+      return {
+        totalPendiente: pending.reduce((s, p) => s + Number(p.total || 0), 0),
+        buckets: Object.values(buckets),
+      };
+    } catch (error) {
+      console.error('TreasuryService.getAgingReport error:', error);
+      throw new Error(`Error en aging report: ${error.message}`);
+    }
+  }
+
+  async getPendingDeposits(tenantId: string, branchId?: string) {
+    try {
+      const where: any = { tenantId, status: 'CERRADO' };
+      if (branchId) where.sucursalId = branchId;
+      const shifts = await this.shiftsRepo.find({ where, order: { fecha: 'DESC' } });
+      // Shifts that have cash but no confirmed deposit movement
+      const result = shifts
+        .filter((s) => Number(s.totalEfectivo) > 0)
+        .map((s) => ({
+          shiftId: s.id,
+          cajero: s.cajero,
+          sucursalId: s.sucursalId,
+          fecha: s.fecha,
+          totalEfectivo: Number(s.totalEfectivo),
+          fondoInicial: Number(s.fondoInicial),
+          montoDepositar: Math.max(0, Number(s.totalEfectivo) - Number(s.fondoInicial)),
+        }));
+      return { deposits: result, total: result.reduce((s, d) => s + d.montoDepositar, 0) };
+    } catch (error) {
+      console.error('TreasuryService.getPendingDeposits error:', error);
+      throw new Error(`Error al obtener depósitos pendientes: ${error.message}`);
+    }
+  }
+
+  async confirmDeposit(shiftId: string, tenantId: string, bankId: string, amount: number) {
+    try {
+      const shift = await this.shiftsRepo.findOne({ where: { id: shiftId } });
+      if (!shift) throw new Error('Turno no encontrado');
+
+      // Create a movement in the bank
+      const movement = this.movementsRepo.create({
+        bankId,
+        tenantId,
+        tipo: 'DEPOSITO',
+        monto: amount,
+        descripcion: `Depósito en tránsito — turno ${shift.cajero} ${shift.fecha}`,
+        fecha: new Date(),
+        status: 'CONFIRMADO',
+      } as any);
+      const saved = (await this.movementsRepo.save(movement)) as any;
+
+      // Mark shift totalDepositos
+      await this.shiftsRepo.update(shiftId, {
+        totalDepositos: amount,
+      });
+
+      return { success: true, movementId: saved.id };
+    } catch (error) {
+      console.error('TreasuryService.confirmDeposit error:', error);
+      throw new Error(`Error al confirmar depósito: ${error.message}`);
     }
   }
 }

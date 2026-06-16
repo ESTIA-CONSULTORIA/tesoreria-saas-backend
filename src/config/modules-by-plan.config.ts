@@ -62,6 +62,7 @@ export const MODULES_BY_PLAN: Record<Plan, string[]> = {
     'reportes',
     'tesoreria',
     'conciliacion',
+    'pos',
     'configuracion-pos',
     'integraciones',
     'rh',
@@ -70,6 +71,8 @@ export const MODULES_BY_PLAN: Record<Plan, string[]> = {
     'proveedores',
     'compras',
     'costos',
+    'ocr',
+    'audit',
   ],
 };
 
@@ -90,6 +93,7 @@ export const ALL_MODULES = [
   'reportes',
   'tesoreria',
   'conciliacion',
+  'pos',
   'configuracion-pos',
   'integraciones',
   'rh',
@@ -98,4 +102,6 @@ export const ALL_MODULES = [
   'proveedores',
   'compras',
   'costos',
+  'ocr',
+  'audit',
 ];

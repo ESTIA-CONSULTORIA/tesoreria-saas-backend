@@ -7,6 +7,9 @@ export class Table {
   id: string;
 
   @Column({ nullable: true })
+  tenantId: string;
+
+  @Column({ nullable: true })
   branchId: string;
 
   @Column({ nullable: true })

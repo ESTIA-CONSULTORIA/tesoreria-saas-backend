@@ -3,9 +3,12 @@ import {
   PrimaryGeneratedColumn,
   Column,
   CreateDateColumn,
+  UpdateDateColumn,
+  Unique,
 } from 'typeorm';
 
-@Entity()
+@Entity('integration')
+@Unique(['tenantId', 'slug'])
 export class Integration {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -17,9 +20,31 @@ export class Integration {
   companyId: string;
 
   @Column({ default: '' })
-  provider: string;
+  slug: string;
 
   @Column({ default: '' })
+  name: string;
+
+  @Column({ default: false })
+  isActive: boolean;
+
+  @Column({ default: 'DISCONNECTED' })
+  status: string;
+
+  @Column({ type: 'text', nullable: true })
+  credentials: string;
+
+  @Column({ type: 'text', nullable: true })
+  config: string;
+
+  @Column({ type: 'timestamp', nullable: true })
+  lastSync: Date;
+
+  // Legacy fields — kept nullable so existing rows don't break
+  @Column({ nullable: true })
+  provider: string;
+
+  @Column({ nullable: true })
   type: string;
 
   @Column({ nullable: true })
@@ -37,12 +62,12 @@ export class Integration {
   @Column({ default: false })
   syncEnabled: boolean;
 
-  @Column({ nullable: true })
+  @Column({ type: 'timestamp', nullable: true })
   lastSyncAt: Date;
-
-  @Column({ default: true })
-  isActive: boolean;
 
   @CreateDateColumn()
   createdAt: Date;
+
+  @UpdateDateColumn()
+  updatedAt: Date;
 }

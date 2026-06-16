@@ -29,6 +29,27 @@ export class SalesService {
     return `VTA-${today}-${nextNumber}`;
   }
 
+  private async calculateCostoReal(items: SaleItem[]): Promise<number> {
+    let total = 0;
+    for (const item of items) {
+      const product = await this.productRepo.findOne({ where: { id: item.productoId } });
+      if (!product) continue;
+      if (product.type === 'PREPARADO' && product.recipeId) {
+        const recipe = await this.recipeRepo.findOne({ where: { id: product.recipeId } });
+        if (recipe?.items) {
+          for (const ri of recipe.items) {
+            const insumo = await this.insumoRepo.findOne({ where: { id: ri.insumoId } });
+            if (insumo) total += Number(insumo.costoUnitario) * ri.cantidad * item.cantidad;
+          }
+        }
+      } else if (product.type === 'SIMPLE' && product.insumoId) {
+        const insumo = await this.insumoRepo.findOne({ where: { id: product.insumoId } });
+        if (insumo) total += Number(insumo.costoUnitario) * item.cantidad;
+      }
+    }
+    return Math.round(total * 100) / 100;
+  }
+
   async create(data: {
     items: SaleItem[];
     subtotal: number;
@@ -43,6 +64,7 @@ export class SalesService {
     tenantId: string;
     notas?: string;
     referencia?: string;
+    tableId?: string;
   }) {
     try {
       const folio = await this.generateFolio();
@@ -66,7 +88,9 @@ export class SalesService {
       sale.tenantId = data.tenantId;
       sale.notas = data.notas || '';
       sale.referencia = data.referencia || '';
-      
+      sale.tableId = data.tableId || null;
+      sale.costoReal = await this.calculateCostoReal(data.items);
+
       const savedSale = await this.salesRepo.save(sale);
       
       // Deduct inventory for each product sold

@@ -1,24 +1,38 @@
-import { Body, Controller, Get, Param, Post } from '@nestjs/common';
-
+import { Body, Controller, Delete, Get, Param, Post, Put, Request } from '@nestjs/common';
 import { IntegrationsService } from './integrations.service';
-import { Integration } from './entities/integration.entity';
 
 @Controller('integrations')
 export class IntegrationsController {
-  constructor(private integrationsService: IntegrationsService) {}
-
-  @Post()
-  create(@Body() body: Partial<Integration>) {
-    return this.integrationsService.create(body);
-  }
+  constructor(private readonly service: IntegrationsService) {}
 
   @Get()
-  findAll() {
-    return this.integrationsService.findAll();
+  findAll(@Request() req?: any) {
+    const tenantId = req?.user?.tenantId;
+    const companyId = req?.user?.companyId;
+    return this.service.findAll(tenantId, companyId);
   }
 
-  @Get('company/:companyId')
-  findByCompany(@Param('companyId') companyId: string) {
-    return this.integrationsService.findByCompany(companyId);
+  @Post(':slug/activate')
+  activate(@Param('slug') slug: string, @Body() body: { credentials: Record<string, string>; config?: Record<string, any> }, @Request() req?: any) {
+    const tenantId = req?.user?.tenantId;
+    return this.service.activate(tenantId, slug, body.credentials, body.config);
+  }
+
+  @Delete(':slug')
+  deactivate(@Param('slug') slug: string, @Request() req?: any) {
+    const tenantId = req?.user?.tenantId;
+    return this.service.deactivate(tenantId, slug);
+  }
+
+  @Put(':slug/config')
+  updateConfig(@Param('slug') slug: string, @Body() config: Record<string, any>, @Request() req?: any) {
+    const tenantId = req?.user?.tenantId;
+    return this.service.updateConfig(tenantId, slug, config);
+  }
+
+  @Get(':slug/test')
+  testConnection(@Param('slug') slug: string, @Request() req?: any) {
+    const tenantId = req?.user?.tenantId;
+    return this.service.testConnection(tenantId, slug);
   }
 }

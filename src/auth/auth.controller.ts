@@ -1,4 +1,4 @@
-import { Body, Controller, Post, Headers } from '@nestjs/common';
+import { Body, Controller, Post, Headers, Request } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { Public } from './public.decorator';
 
@@ -16,6 +16,12 @@ export class AuthController {
   @Post('login')
   login(@Body() body: { email: string; password: string }) {
     return this.authService.login(body.email, body.password);
+  }
+
+  @Post('switch-company')
+  switchCompany(@Body() body: { companyId: string }, @Request() req) {
+    const user = req.user;
+    return this.authService.switchCompany(user.id, user.tenantId, body.companyId);
   }
 
   @Public()

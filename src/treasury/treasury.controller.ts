@@ -53,6 +53,26 @@ export class TreasuryController {
     return this.treasuryService.getAlerts(tenantId, branchId, companyId);
   }
 
+  @Get('aging-report')
+  getAgingReport(@Request() req, @Headers('x-company-id') headerCompanyId?: string) {
+    const tenantId = req.user?.tenantId;
+    const companyId = req.user?.companyId || headerCompanyId;
+    return this.treasuryService.getAgingReport(tenantId, companyId);
+  }
+
+  @Get('pending-deposits')
+  getPendingDeposits(@Request() req, @Headers('x-branch-id') headerBranchId?: string) {
+    const tenantId = req.user?.tenantId;
+    const branchId = req.user?.branchId || headerBranchId;
+    return this.treasuryService.getPendingDeposits(tenantId, branchId);
+  }
+
+  @Post('confirm-deposit/:shiftId')
+  confirmDeposit(@Param('shiftId') shiftId: string, @Body() body: { bankId: string; amount: number }, @Request() req) {
+    const tenantId = req.user?.tenantId;
+    return this.treasuryService.confirmDeposit(shiftId, tenantId, body.bankId, body.amount);
+  }
+
   // Scheduled Payments CRUD
   @Get('scheduled-payments')
   getScheduledPayments(@Request() req, @Headers('x-branch-id') headerBranchId?: string, @Headers('x-company-id') headerCompanyId?: string) {

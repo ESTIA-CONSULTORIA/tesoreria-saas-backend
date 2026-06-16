@@ -83,6 +83,12 @@ export class Sale {
   @Column({ type: 'decimal', precision: 10, scale: 2, default: 0 })
   cambio: number;
 
+  @Column({ type: 'decimal', precision: 10, scale: 2, default: 0 })
+  costoReal: number;
+
+  @Column({ nullable: true })
+  tableId: string | null;
+
   @CreateDateColumn()
   createdAt: Date;
 }
