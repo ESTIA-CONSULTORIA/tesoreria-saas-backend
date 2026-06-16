@@ -86,7 +86,7 @@ export class Sale {
   @Column({ type: 'decimal', precision: 10, scale: 2, default: 0 })
   costoReal: number;
 
-  @Column({ nullable: true })
+  @Column({ type: 'varchar', nullable: true })
   tableId: string | null;
 
   @CreateDateColumn()

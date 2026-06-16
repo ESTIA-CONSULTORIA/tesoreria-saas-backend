@@ -6,7 +6,15 @@ import { JwtMiddleware } from './auth/jwt.middleware';
 import * as bodyParser from 'body-parser';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule, { bodyParser: false });
+  const app = await NestFactory.create(AppModule, {
+    bodyParser: false,
+    cors: {
+      origin: true,
+      credentials: true,
+      methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+      allowedHeaders: ['Content-Type', 'Authorization', 'x-tenant-id', 'tenant-id', 'x-company-id', 'x-branch-id'],
+    },
+  });
 
   // CORS manual — antes de bodyParser y de enableCors
   app.use((req, res, next) => {
@@ -22,20 +30,6 @@ async function bootstrap() {
 
   app.use(bodyParser.json({ limit: '50mb' }));
   app.use(bodyParser.urlencoded({ limit: '50mb', extended: true }));
-
-  app.enableCors({
-    origin: true,
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    allowedHeaders: [
-      'Content-Type',
-      'Authorization',
-      'x-tenant-id',
-      'tenant-id',
-      'x-company-id',
-      'x-branch-id',
-    ],
-  });
 
   // Timeout de conexión
   app.use((req, res, next) => {
