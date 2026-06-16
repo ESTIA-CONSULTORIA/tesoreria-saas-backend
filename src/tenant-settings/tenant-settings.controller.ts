@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Put } from '@nestjs/common';
 import { TenantSettingsService } from './tenant-settings.service';
 
 @Controller('tenant-settings')
@@ -13,6 +13,11 @@ export class TenantSettingsController {
   @Get(':tenantId')
   findByTenant(@Param('tenantId') tenantId: string) {
     return this.service.findByTenant(tenantId);
+  }
+
+  @Put(':tenantId')
+  update(@Param('tenantId') tenantId: string, @Body() body: any) {
+    return this.service.upsert(tenantId, body);
   }
 
   @Post(':tenantId')
