@@ -46,10 +46,10 @@ export class Insumo {
   @Column({ nullable: true })
   categoriaId: string;
 
-  @Column({ default: 0 })
+  @Column({ type: 'decimal', precision: 10, scale: 2, default: 0 })
   stockActual: number;
 
-  @Column({ default: 0 })
+  @Column({ type: 'decimal', precision: 10, scale: 2, default: 0 })
   stockMinimo: number;
 
   @Column({ default: true })
