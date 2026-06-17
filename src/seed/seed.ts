@@ -1906,6 +1906,244 @@ export async function seedDatabase(dataSource: DataSource) {
     console.log('⚠️ Cajero no encontrado, no se actualizó password');
   }
 
+  // ═══════════════════════════════════════════════════════════════
+  // PARTE HR: EMPLEADOS, TURNOS, ASISTENCIAS, SOLICITUDES DEMO
+  // ═══════════════════════════════════════════════════════════════
+  try {
+    const empRepo = dataSource.getRepository('Employee');
+    const docRepo = dataSource.getRepository('HrDocument');
+    const hrShiftRepo = dataSource.getRepository('HrShift');
+    const attendanceRepo = dataSource.getRepository('Attendance');
+    const vacationRepo = dataSource.getRepository('VacationRequest');
+    const permissionRepo = dataSource.getRepository('PermissionRequest');
+
+    const SAZON_COMPANY_ID = '602512f6-496f-4d15-bd0f-ca3c0b61a8ee';
+
+    const sazonMatrizHR = await branchesRepository.findOne({
+      where: { companyId: SAZON_COMPANY_ID, code: 'SAZ-MAT' },
+    });
+
+    if (!sazonMatrizHR) {
+      console.log('⚠️ Sucursal SAZ-MAT no encontrada, omitiendo HR demo data');
+    } else {
+      // ─── Nuevos usuarios ────────────────────────────────────────
+      const cajero2Exists = await usersRepository.findOne({ where: { email: 'cajero2@demo.com' } });
+      if (!cajero2Exists) {
+        const hp = await bcrypt.hash('Admin123', 10);
+        await usersRepository.save({
+          email: 'cajero2@demo.com', password: hp, name: 'Cajero 2 Demo',
+          roleId: cajeroRole!.id, roleCode: 'CAJERO', tenantId: demoTenant.id,
+          isActive: true, executivePin: '1234',
+        });
+        console.log('✅ Usuario cajero2@demo.com creado');
+      }
+
+      const meseroUserExists = await usersRepository.findOne({ where: { email: 'mesero@demo.com' } });
+      if (!meseroUserExists) {
+        const hp = await bcrypt.hash('Admin123', 10);
+        await usersRepository.save({
+          email: 'mesero@demo.com', password: hp, name: 'Mesero Demo',
+          roleId: cajeroRole!.id, roleCode: 'CAJERO', tenantId: demoTenant.id,
+          isActive: true, executivePin: '1234',
+        });
+        console.log('✅ Usuario mesero@demo.com creado');
+      }
+
+      // ─── Lookup usuarios para vincular empleados ─────────────────
+      const uGerenteSazon = await usersRepository.findOne({ where: { email: 'gerente.sazon@demo.com' } });
+      const uCajero = await usersRepository.findOne({ where: { email: 'cajero@demo.com' } });
+      const uMesero = await usersRepository.findOne({ where: { email: 'mesero@demo.com' } });
+      const uContador = await usersRepository.findOne({ where: { email: 'contador@demo.com' } });
+
+      const fechaIngresoHR = new Date();
+      fechaIngresoHR.setFullYear(fechaIngresoHR.getFullYear() - 1);
+      const fechaIngresoStr = fechaIngresoHR.toISOString().split('T')[0];
+
+      // ─── 6 Empleados ─────────────────────────────────────────────
+      const empDataList = [
+        { nombre: 'Juan López', apellidos: 'Gerente', puesto: 'Gerente Operaciones', departamento: 'Dirección', salarioQuincenal: 18000, userId: uGerenteSazon?.id },
+        { nombre: 'María García', apellidos: '', puesto: 'Cajera', departamento: 'Operaciones', salarioQuincenal: 6500, userId: uCajero?.id },
+        { nombre: 'Carlos Mendoza', apellidos: '', puesto: 'Mesero', departamento: 'Servicio', salarioQuincenal: 5500, userId: uMesero?.id },
+        { nombre: 'Ana Martínez', apellidos: '', puesto: 'Cocinera', departamento: 'Cocina', salarioQuincenal: 7000, userId: undefined },
+        { nombre: 'Roberto Sánchez', apellidos: '', puesto: 'Contador', departamento: 'Administración', salarioQuincenal: 12000, userId: uContador?.id },
+        { nombre: 'Laura Torres', apellidos: '', puesto: 'Hostess', departamento: 'Servicio', salarioQuincenal: 5000, userId: undefined },
+      ];
+
+      const savedEmps: any[] = [];
+      for (const ed of empDataList) {
+        const existingEmp = await empRepo.findOne({ where: { tenantId: demoTenant.id, nombre: ed.nombre } });
+        if (!existingEmp) {
+          const emp = await empRepo.save({
+            tenantId: demoTenant.id,
+            companyId: SAZON_COMPANY_ID,
+            branchId: sazonMatrizHR.id,
+            nombre: ed.nombre,
+            apellidos: ed.apellidos || undefined,
+            puesto: ed.puesto,
+            departamento: ed.departamento,
+            salarioQuincenal: ed.salarioQuincenal,
+            userId: ed.userId || undefined,
+            status: 'ACTIVO',
+            fechaIngreso: fechaIngresoStr,
+          });
+          savedEmps.push(emp);
+          console.log(`✅ Empleado "${ed.nombre}" creado`);
+        } else {
+          savedEmps.push(existingEmp);
+          console.log(`ℹ️ Empleado "${ed.nombre}" ya existe`);
+        }
+      }
+
+      // ─── 3 Documentos por empleado ────────────────────────────────
+      const docTemplates = [
+        { tipo: 'INE', nombre: 'INE Vigente', notas: 'Copia frontal y trasera', url: 'https://example.com/doc-ine.pdf' },
+        { tipo: 'CURP', nombre: 'CURP Oficial', notas: null, url: 'https://example.com/doc-curp.pdf' },
+        { tipo: 'CONTRATO', nombre: 'Contrato Indefinido', notas: 'Firmado digitalmente', url: 'https://example.com/doc-contrato.pdf' },
+      ];
+      for (const emp of savedEmps) {
+        for (const tpl of docTemplates) {
+          const existsDoc = await docRepo.findOne({ where: { employeeId: emp.id, tipo: tpl.tipo } });
+          if (!existsDoc) {
+            await docRepo.save({ employeeId: emp.id, tipo: tpl.tipo, nombre: tpl.nombre, notas: tpl.notas, url: tpl.url });
+          }
+        }
+      }
+      console.log('✅ Documentos de expediente creados para empleados');
+
+      // ─── Turnos ───────────────────────────────────────────────────
+      const shiftTemplates = [
+        { name: 'Turno Mañana', startTime: '07:00', endTime: '15:00', days: '["LUN","MAR","MIE","JUE","VIE"]', toleranceMinutes: 15 },
+        { name: 'Turno Tarde', startTime: '15:00', endTime: '23:00', days: '["LUN","MAR","MIE","JUE","VIE"]', toleranceMinutes: 15 },
+        { name: 'Turno Fin de Semana', startTime: '10:00', endTime: '20:00', days: '["SAB","DOM"]', toleranceMinutes: 20 },
+      ];
+      const savedShifts: Record<string, any> = {};
+      for (const st of shiftTemplates) {
+        const existingShift = await hrShiftRepo.findOne({ where: { tenantId: demoTenant.id, name: st.name } });
+        if (!existingShift) {
+          const shift = await hrShiftRepo.save({ ...st, tenantId: demoTenant.id, isActive: true });
+          savedShifts[st.name] = shift;
+          console.log(`✅ Turno "${st.name}" creado`);
+        } else {
+          savedShifts[st.name] = existingShift;
+        }
+      }
+
+      // ─── Asignar turnos a empleados ────────────────────────────────
+      const shiftAssignments: Record<string, string> = {
+        'Juan López': 'Turno Mañana',
+        'María García': 'Turno Mañana',
+        'Carlos Mendoza': 'Turno Tarde',
+        'Ana Martínez': 'Turno Mañana',
+        'Roberto Sánchez': 'Turno Fin de Semana',
+        'Laura Torres': 'Turno Mañana',
+      };
+      for (const emp of savedEmps) {
+        const shiftName = shiftAssignments[emp.nombre];
+        const shift = shiftName ? savedShifts[shiftName] : undefined;
+        if (shift && emp.shiftId !== shift.id) {
+          await empRepo.update(emp.id, { shiftId: shift.id });
+        }
+      }
+      console.log('✅ Turnos asignados a empleados');
+
+      // ─── Asistencias últimos 5 días hábiles ────────────────────────
+      const businessDays: string[] = [];
+      const bdCursor = new Date();
+      bdCursor.setHours(0, 0, 0, 0);
+      bdCursor.setDate(bdCursor.getDate() - 1); // start from yesterday
+      while (businessDays.length < 5) {
+        const dow = bdCursor.getDay();
+        if (dow !== 0 && dow !== 6) businessDays.push(bdCursor.toISOString().split('T')[0]);
+        bdCursor.setDate(bdCursor.getDate() - 1);
+      }
+
+      // Fixed check-in times (minutes from midnight); status: PRESENTE if <= 7:15 (435)
+      const checkInMins  = [6 * 60 + 52, 7 * 60 + 8,  6 * 60 + 55, 7 * 60 + 18, 7 * 60 + 3];
+      const checkOutMins = [15 * 60 + 10, 15 * 60 + 25, 15 * 60 + 5, 15 * 60 + 30, 15 * 60 + 15];
+
+      const attendanceEmps = savedEmps.filter(e =>
+        ['Juan López', 'María García', 'Carlos Mendoza'].includes(e.nombre)
+      );
+
+      for (const emp of attendanceEmps) {
+        for (let i = 0; i < 5; i++) {
+          const dateStr = businessDays[i];
+          const existingAtt = await attendanceRepo.findOne({
+            where: { employeeId: emp.id, date: dateStr as any },
+          });
+          if (!existingAtt) {
+            const dayBase = new Date(dateStr + 'T00:00:00');
+            const ci = new Date(dayBase);
+            ci.setHours(Math.floor(checkInMins[i] / 60), checkInMins[i] % 60, 0, 0);
+            const co = new Date(dayBase);
+            co.setHours(Math.floor(checkOutMins[i] / 60), checkOutMins[i] % 60, 0, 0);
+            const status = checkInMins[i] <= 7 * 60 + 15 ? 'PRESENTE' : 'TARDANZA';
+            await attendanceRepo.save({
+              employeeId: emp.id,
+              tenantId: demoTenant.id,
+              branchId: sazonMatrizHR.id,
+              date: dateStr as any,
+              checkIn: ci,
+              checkOut: co,
+              method: 'WEB_GPS',
+              status,
+            });
+          }
+        }
+      }
+      console.log('✅ Asistencias de los últimos 5 días hábiles creadas');
+
+      // ─── Solicitudes de vacaciones ─────────────────────────────────
+      const juan   = savedEmps.find(e => e.nombre === 'Juan López');
+      const carlos = savedEmps.find(e => e.nombre === 'Carlos Mendoza');
+      const maria  = savedEmps.find(e => e.nombre === 'María García');
+
+      if (juan) {
+        const existsJuanVac = await vacationRepo.findOne({ where: { employeeId: juan.id, startDate: '2024-12-15' as any } });
+        if (!existsJuanVac) {
+          await vacationRepo.save({
+            tenantId: demoTenant.id, employeeId: juan.id,
+            startDate: '2024-12-15' as any, endDate: '2024-12-19' as any,
+            daysRequested: 5, reason: 'Vacaciones de fin de año', status: 'PENDIENTE',
+          });
+          console.log('✅ Solicitud de vacaciones Juan López creada');
+        }
+      }
+
+      if (carlos) {
+        const existsCarlosVac = await vacationRepo.findOne({ where: { employeeId: carlos.id, startDate: '2025-01-20' as any } });
+        if (!existsCarlosVac) {
+          await vacationRepo.save({
+            tenantId: demoTenant.id, employeeId: carlos.id,
+            startDate: '2025-01-20' as any, endDate: '2025-01-24' as any,
+            daysRequested: 5, reason: 'Vacaciones enero', status: 'APROBADA',
+          });
+          console.log('✅ Solicitud de vacaciones Carlos Mendoza creada');
+        }
+      }
+
+      // ─── Solicitud de permiso María ─────────────────────────────────
+      if (maria) {
+        const tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        const tomorrowStr = tomorrow.toISOString().split('T')[0];
+        const existsMariaPerm = await permissionRepo.findOne({ where: { employeeId: maria.id, date: tomorrowStr as any } });
+        if (!existsMariaPerm) {
+          await permissionRepo.save({
+            tenantId: demoTenant.id, employeeId: maria.id,
+            date: tomorrowStr as any, hours: 4, type: 'MEDICO',
+            reason: 'Cita médica', status: 'PENDIENTE',
+          });
+          console.log('✅ Solicitud de permiso María García creada');
+        }
+      }
+
+      console.log('✅ HR DEMO DATA completado: 6 empleados, 18 docs, 3 turnos, asistencias y solicitudes');
+    }
+  } catch (hrError: any) {
+    console.log('⚠️ Error en HR demo data (entidades pueden no existir aún):', hrError.message);
+  }
+
   // Resumen final del seed
   const totalCompanies = await companiesRepository.count({ where: { tenantId: testTenant.id } });
   const totalBranches = await branchesRepository.count();
