@@ -774,37 +774,57 @@ export class TreasuryService {
 
   async getAgingReport(tenantId: string, companyId?: string) {
     try {
-      const where: any = { tenantId };
-      if (companyId) where.companyId = companyId;
+      // Purchase entity has no companyId column — filter only by tenantId
+      if (!tenantId) {
+        return { bucket0_30: 0, bucket31_60: 0, bucket61_90: 0, bucket90plus: 0, items: [], totalPendiente: 0 };
+      }
 
-      const purchases = await this.purchasesRepo.find({ where });
+      const purchases = await this.purchasesRepo.find({
+        where: { tenantId },
+        relations: ['supplier'],
+      });
+
       const pending = purchases.filter(
         (p) => p.status === 'PENDIENTE' || p.status === 'PARCIAL',
       );
 
       const today = new Date();
-      const buckets = {
-        current: { label: '0–30 días', min: 0, max: 30, total: 0, items: [] as any[] },
-        days31: { label: '31–60 días', min: 31, max: 60, total: 0, items: [] as any[] },
-        days61: { label: '61–90 días', min: 61, max: 90, total: 0, items: [] as any[] },
-        over90: { label: '+90 días', min: 91, max: Infinity, total: 0, items: [] as any[] },
-      };
+      let bucket0_30 = 0;
+      let bucket31_60 = 0;
+      let bucket61_90 = 0;
+      let bucket90plus = 0;
+      const items: any[] = [];
 
       for (const p of pending) {
         const venc = p.fechaVencimiento ? new Date(p.fechaVencimiento) : null;
-        const dias = venc ? Math.floor((today.getTime() - venc.getTime()) / 86400000) : 0;
+        const diasRaw = venc ? Math.floor((today.getTime() - venc.getTime()) / 86400000) : 0;
+        const dias = Math.max(0, diasRaw); // negative = not yet due → treat as 0
         const monto = Number(p.total || 0);
-        const item = { id: p.id, proveedor: (p as any).proveedor || '', folio: (p as any).folio || p.id, monto, diasVencido: dias, fechaVencimiento: venc };
+        const saldoPendiente = Math.max(0, monto - Number(p.montoPagado || 0));
 
-        if (dias <= 30) { buckets.current.total += monto; buckets.current.items.push(item); }
-        else if (dias <= 60) { buckets.days31.total += monto; buckets.days31.items.push(item); }
-        else if (dias <= 90) { buckets.days61.total += monto; buckets.days61.items.push(item); }
-        else { buckets.over90.total += monto; buckets.over90.items.push(item); }
+        const item = {
+          id: p.id,
+          proveedor: p.supplier?.nombre || p.supplier?.razonSocial || p.supplierId || '—',
+          folio: p.numero || p.id,
+          monto: saldoPendiente,
+          diasVencido: dias,
+          fechaVencimiento: venc,
+        };
+        items.push(item);
+
+        if (dias <= 30) bucket0_30 += saldoPendiente;
+        else if (dias <= 60) bucket31_60 += saldoPendiente;
+        else if (dias <= 90) bucket61_90 += saldoPendiente;
+        else bucket90plus += saldoPendiente;
       }
 
       return {
-        totalPendiente: pending.reduce((s, p) => s + Number(p.total || 0), 0),
-        buckets: Object.values(buckets),
+        bucket0_30,
+        bucket31_60,
+        bucket61_90,
+        bucket90plus,
+        items,
+        totalPendiente: items.reduce((s, i) => s + i.monto, 0),
       };
     } catch (error) {
       console.error('TreasuryService.getAgingReport error:', error);
