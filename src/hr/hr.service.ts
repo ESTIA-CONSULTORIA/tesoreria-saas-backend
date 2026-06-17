@@ -1,4 +1,4 @@
-import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Employee } from './entities/employee.entity';
@@ -8,6 +8,18 @@ import { PermissionRequest } from './entities/permission-request.entity';
 import { HrShift } from './entities/hr-shift.entity';
 import { Attendance } from './entities/attendance.entity';
 import { BiometricCredential } from './entities/biometric-credential.entity';
+import { Branch } from '../branches/entities/branch.entity';
+
+function haversineMeters(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371000;
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
 
 @Injectable()
 export class HrService {
@@ -26,6 +38,8 @@ export class HrService {
     private readonly attendanceRepo: Repository<Attendance>,
     @InjectRepository(BiometricCredential)
     private readonly bioRepo: Repository<BiometricCredential>,
+    @InjectRepository(Branch)
+    private readonly branchRepo: Repository<Branch>,
   ) {}
 
   // --- Employees ---
@@ -102,7 +116,6 @@ export class HrService {
   // --- Vacation Requests ---
 
   createVacationRequest(data: Partial<VacationRequest>): Promise<VacationRequest> {
-    // Calculate daysRequested
     if (data.startDate && data.endDate) {
       const start = new Date(data.startDate);
       const end = new Date(data.endDate);
@@ -155,18 +168,72 @@ export class HrService {
 
   // --- Attendance ---
 
-  async checkIn(employeeId: string, tenantId: string, branchId?: string, method?: string, lat?: number, lng?: number): Promise<Attendance> {
+  private getShiftStatus(now: Date, shift: HrShift): string {
+    const [startH, startM] = shift.startTime.split(':').map(Number);
+    const nowMins = now.getHours() * 60 + now.getMinutes();
+    const startMins = startH * 60 + startM;
+    const tolerance = shift.toleranceMinutes ?? 15;
+    if (nowMins < startMins - 30) return 'ANTICIPADA';
+    if (nowMins <= startMins + tolerance) return 'PRESENTE';
+    return 'TARDANZA';
+  }
+
+  async checkIn(
+    employeeId: string,
+    tenantId: string,
+    branchId?: string,
+    method?: string,
+    lat?: number,
+    lng?: number,
+  ): Promise<Attendance> {
+    if (!employeeId) throw new BadRequestException('ID de empleado requerido');
+
+    // Anti-double check
     const today = new Date().toISOString().slice(0, 10);
     const existing = await this.attendanceRepo.findOne({
       where: { employeeId, date: today as any },
     });
-    if (existing && !existing.checkOut) {
-      return existing;
+    if (existing) {
+      if (!existing.checkOut) return existing;
+      throw new BadRequestException('Ya tienes una jornada completa registrada hoy.');
     }
+
+    // Geofencing — validate distance only when branch has coordinates AND employee sent GPS
+    let verificationMethod = method || 'WEB_NO_GPS';
+    if (branchId && lat !== undefined && lng !== undefined) {
+      const branch = await this.branchRepo.findOne({ where: { id: branchId } });
+      if (branch && branch.lat != null && branch.lng != null) {
+        const distance = haversineMeters(Number(branch.lat), Number(branch.lng), lat, lng);
+        if (distance > 10) {
+          throw new BadRequestException(
+            `Estás a ${Math.round(distance)}m de la sucursal. El máximo permitido es 10 metros.`,
+          );
+        }
+      }
+      verificationMethod = 'WEB_GPS';
+    }
+
+    // Server timestamp — never from request body
+    const serverNow = new Date();
+
+    // Time-window status from employee's assigned shift
+    let attendanceStatus = 'PRESENTE';
+    const employee = await this.empRepo.findOne({ where: { id: employeeId } });
+    if (employee?.shiftId) {
+      const shift = await this.shiftRepo.findOne({ where: { id: employee.shiftId } });
+      if (shift) attendanceStatus = this.getShiftStatus(serverNow, shift);
+    }
+
     const rec = this.attendanceRepo.create({
-      employeeId, tenantId, branchId, method: method || 'WEB',
-      date: today as any, checkIn: new Date(), status: 'PRESENTE',
-      lat, lng,
+      employeeId,
+      tenantId,
+      branchId,
+      method: verificationMethod,
+      date: today as any,
+      checkIn: serverNow,
+      status: attendanceStatus,
+      lat,
+      lng,
     });
     return this.attendanceRepo.save(rec);
   }
@@ -176,9 +243,28 @@ export class HrService {
     const rec = await this.attendanceRepo.findOne({
       where: { employeeId, date: today as any },
     });
-    if (!rec || rec.checkOut) return rec;
+    if (!rec) throw new BadRequestException('No tienes una entrada registrada hoy.');
+    if (rec.checkOut) throw new BadRequestException('Tu salida ya fue registrada hoy.');
     await this.attendanceRepo.update(rec.id, { checkOut: new Date() });
     return this.attendanceRepo.findOne({ where: { id: rec.id } });
+  }
+
+  async findTodayAttendanceByEmployee(employeeId: string): Promise<Attendance | null> {
+    const today = new Date().toISOString().slice(0, 10);
+    return this.attendanceRepo.findOne({ where: { employeeId, date: today as any } });
+  }
+
+  // Portal-specific: resolve employee by userId, then check in/out
+  async portalCheckIn(userId: string, lat?: number, lng?: number, method?: string): Promise<Attendance> {
+    const employee = await this.empRepo.findOne({ where: { userId } });
+    if (!employee) throw new NotFoundException('No tienes un perfil de empleado vinculado a tu usuario.');
+    return this.checkIn(employee.id, employee.tenantId, employee.branchId, method, lat, lng);
+  }
+
+  async portalCheckOut(userId: string): Promise<Attendance | null> {
+    const employee = await this.empRepo.findOne({ where: { userId } });
+    if (!employee) throw new NotFoundException('No tienes un perfil de empleado vinculado a tu usuario.');
+    return this.checkOut(employee.id);
   }
 
   findAttendanceToday(branchId: string): Promise<Attendance[]> {

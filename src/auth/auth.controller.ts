@@ -18,6 +18,12 @@ export class AuthController {
     return this.authService.login(body.email, body.password);
   }
 
+  @Public()
+  @Post('portal-login')
+  portalLogin(@Body() body: { email: string; password: string }) {
+    return this.authService.portalLogin(body.email, body.password);
+  }
+
   @Post('switch-company')
   switchCompany(@Body() body: { companyId: string }, @Request() req) {
     const user = req.user;

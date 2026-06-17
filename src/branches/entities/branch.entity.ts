@@ -25,4 +25,10 @@ export class Branch {
 
   @Column({ default: true })
   isActive: boolean;
+
+  @Column({ type: 'decimal', precision: 10, scale: 6, nullable: true })
+  lat: number;
+
+  @Column({ type: 'decimal', precision: 10, scale: 6, nullable: true })
+  lng: number;
 }

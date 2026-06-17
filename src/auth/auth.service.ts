@@ -3,8 +3,11 @@ import { UsersService } from '../users/users.service';
 import { JwtService } from '@nestjs/jwt';
 import { SubscriptionsService } from '../subscriptions/subscriptions.service';
 import { AddonsService } from '../addons/addons.service';
+import { HrService } from '../hr/hr.service';
 import { getModulesByPlan, Plan, ALL_MODULES } from '../config/modules-by-plan.config';
 import * as bcrypt from 'bcrypt';
+
+const ATTENDANCE_GATED_ROLES = ['CAJERO', 'MESERO', 'GERENTE', 'CONTADOR', 'EMPLEADO'];
 
 @Injectable()
 export class AuthService {
@@ -13,6 +16,7 @@ export class AuthService {
     private jwtService: JwtService,
     private subscriptionsService: SubscriptionsService,
     private addonsService: AddonsService,
+    private hrService: HrService,
   ) {}
 
   async register(email: string, password: string) {
@@ -31,7 +35,7 @@ export class AuthService {
     };
   }
 
-  async login(email: string, password: string) {
+  async login(email: string, password: string, skipAttendanceGate = false) {
     const user = await this.usersService.findByEmail(email);
 
     if (!user) {
@@ -42,6 +46,24 @@ export class AuthService {
 
     if (!isPasswordValid) {
       throw new UnauthorizedException('Credenciales incorrectas');
+    }
+
+    // Attendance gate — gated roles must have checked in before accessing main system
+    if (!skipAttendanceGate && user.tenantId && ATTENDANCE_GATED_ROLES.includes(user.roleCode || '')) {
+      const employee = await this.hrService.findEmployeeByUserId(user.id);
+      if (employee) {
+        const attendance = await this.hrService.findTodayAttendanceByEmployee(employee.id);
+        if (!attendance?.checkIn) {
+          throw new UnauthorizedException(
+            'Debes registrar tu asistencia antes de acceder al sistema. Usa el portal del empleado para registrar tu entrada.',
+          );
+        }
+        if (attendance.checkOut) {
+          throw new UnauthorizedException(
+            'Tu jornada laboral ha terminado. No puedes acceder al sistema.',
+          );
+        }
+      }
     }
 
     const token = this.jwtService.sign({
@@ -84,6 +106,10 @@ export class AuthService {
         branchId: user.branchId || null,
       },
     };
+  }
+
+  async portalLogin(email: string, password: string) {
+    return this.login(email, password, true);
   }
 
   async switchCompany(userId: string, tenantId: string, companyId: string) {

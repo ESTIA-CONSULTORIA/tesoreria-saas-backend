@@ -227,4 +227,25 @@ export class HrController {
       return this.service.createPermissionRequest({ ...body, employeeId: emp.id, tenantId });
     });
   }
+
+  @Get('portal/attendance-today')
+  portalAttendanceToday(@Request() req?: any) {
+    const userId = req?.user?.id;
+    return this.service.findEmployeeByUserId(userId).then((emp) => {
+      if (!emp) return null;
+      return this.service.findTodayAttendanceByEmployee(emp.id);
+    });
+  }
+
+  @Post('portal/check-in')
+  portalCheckIn(@Body() body: any, @Request() req?: any) {
+    const userId = req?.user?.id;
+    return this.service.portalCheckIn(userId, body.lat, body.lng, body.method);
+  }
+
+  @Post('portal/check-out')
+  portalCheckOut(@Request() req?: any) {
+    const userId = req?.user?.id;
+    return this.service.portalCheckOut(userId);
+  }
 }
