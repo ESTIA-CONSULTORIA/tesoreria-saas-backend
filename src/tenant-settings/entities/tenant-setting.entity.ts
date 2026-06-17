@@ -18,7 +18,7 @@ export class TenantSetting {
   @Column({ nullable: true })
   faviconUrl: string;
 
-  @Column({ nullable: true })
+  @Column({ type: 'text', nullable: true })
   backgroundImage: string;
 
   @Column({ default: '#2563eb' })
