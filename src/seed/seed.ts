@@ -1917,15 +1917,35 @@ export async function seedDatabase(dataSource: DataSource) {
     const vacationRepo = dataSource.getRepository('VacationRequest');
     const permissionRepo = dataSource.getRepository('PermissionRequest');
 
-    const SAZON_COMPANY_ID = '602512f6-496f-4d15-bd0f-ca3c0b61a8ee';
-
-    const sazonMatrizHR = await branchesRepository.findOne({
-      where: { companyId: SAZON_COMPANY_ID, code: 'SAZ-MAT' },
+    const sazonCompany = await companiesRepository.findOne({
+      where: [
+        { tenantId: demoTenant.id, tradeName: 'El Sazón' },
+        { tenantId: demoTenant.id, legalName: 'El Sazón' },
+        { tenantId: demoTenant.id, tradeName: 'El Sazon' },
+      ],
+    }) || await companiesRepository.save({
+      tenantId: demoTenant.id,
+      legalName: 'El Sazón SA de CV',
+      tradeName: 'El Sazón',
+      rfc: 'SAZO123456789',
+      giro: 'Restaurante',
+      isActive: true,
     });
 
-    if (!sazonMatrizHR) {
-      console.log('⚠️ Sucursal SAZ-MAT no encontrada, omitiendo HR demo data');
-    } else {
+    const sazonMatriz = await branchesRepository.findOne({
+      where: { companyId: sazonCompany.id },
+      order: { createdAt: 'ASC' },
+    }) || await branchesRepository.save({
+      tenantId: demoTenant.id,
+      companyId: sazonCompany.id,
+      name: 'Matriz',
+      code: 'SAZ-MAT',
+      city: 'Mexicali',
+      state: 'Baja California',
+      isActive: true,
+    });
+
+    {
       // ─── Nuevos usuarios ────────────────────────────────────────
       const cajero2Exists = await usersRepository.findOne({ where: { email: 'cajero2@demo.com' } });
       if (!cajero2Exists) {
@@ -1975,8 +1995,8 @@ export async function seedDatabase(dataSource: DataSource) {
         if (!existingEmp) {
           const emp = await empRepo.save({
             tenantId: demoTenant.id,
-            companyId: SAZON_COMPANY_ID,
-            branchId: sazonMatrizHR.id,
+            companyId: sazonCompany.id,
+            branchId: sazonMatriz.id,
             nombre: ed.nombre,
             apellidos: ed.apellidos || undefined,
             puesto: ed.puesto,
@@ -2081,7 +2101,7 @@ export async function seedDatabase(dataSource: DataSource) {
             await attendanceRepo.save({
               employeeId: emp.id,
               tenantId: demoTenant.id,
-              branchId: sazonMatrizHR.id,
+              branchId: sazonMatriz.id,
               date: dateStr as any,
               checkIn: ci,
               checkOut: co,
