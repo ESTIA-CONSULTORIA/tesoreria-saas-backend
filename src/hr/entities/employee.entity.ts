@@ -56,6 +56,48 @@ export class Employee {
   @Column({ nullable: true })
   shiftId: string;
 
+  // Datos personales adicionales
+  @Column({ nullable: true })
+  domicilio: string;
+
+  @Column({ nullable: true })
+  colonia: string;
+
+  @Column({ nullable: true })
+  ciudad: string;
+
+  @Column({ nullable: true })
+  estado: string;
+
+  @Column({ nullable: true })
+  codigoPostal: string;
+
+  @Column({ nullable: true })
+  numeroIne: string;
+
+  // Relación laboral
+  @Column({ nullable: true })
+  tipoJornada: string;
+
+  @Column({ nullable: true })
+  tipoContrato: string;
+
+  @Column({ nullable: true })
+  tipoSalario: string;
+
+  @Column({ type: 'decimal', nullable: true, default: 0 })
+  salarioDiarioIntegrado: number;
+
+  @Column({ nullable: true })
+  claveRiesgoTrabajo: string;
+
+  // Nómina
+  @Column({ nullable: true })
+  banco: string;
+
+  @Column({ nullable: true })
+  clabe: string;
+
   @CreateDateColumn()
   createdAt: Date;
 }

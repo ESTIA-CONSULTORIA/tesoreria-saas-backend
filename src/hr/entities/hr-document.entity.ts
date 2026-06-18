@@ -23,6 +23,12 @@ export class HrDocument {
   @Column({ nullable: true })
   notas: string;
 
+  @Column({ type: 'jsonb', nullable: true })
+  ocrExtracted: Record<string, any>;
+
+  @Column({ default: false })
+  ocrConfirmed: boolean;
+
   @CreateDateColumn()
   uploadedAt: Date;
 }

@@ -58,6 +58,23 @@ export class HrController {
     return this.service.removeDocument(id);
   }
 
+  @Post('employees/:employeeId/documents/ocr')
+  ocrDocument(
+    @Param('employeeId') employeeId: string,
+    @Body() body: { fileData: string; tipo: string },
+  ) {
+    return this.service.ocrDocument(employeeId, body.fileData, body.tipo);
+  }
+
+  @Post('employees/:employeeId/documents/ocr/:documentId/confirm')
+  confirmOcr(
+    @Param('employeeId') employeeId: string,
+    @Param('documentId') documentId: string,
+    @Body() body: { fields: Record<string, string> },
+  ) {
+    return this.service.confirmOcr(employeeId, documentId, body.fields);
+  }
+
   // Shifts (HR turnos, not POS)
   @Get('shifts')
   findShifts(@Request() req?: any) {

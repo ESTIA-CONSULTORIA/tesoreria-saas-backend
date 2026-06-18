@@ -153,4 +153,93 @@ export class OcrService {
   async remove(id: string): Promise<void> {
     await this.repo.delete(id);
   }
+
+  async extractTextFromBuffer(buffer: Buffer, mimetype: string): Promise<string> {
+    try {
+      return mimetype === 'application/pdf'
+        ? await this.extractPdfText(buffer)
+        : await this.extractImageText(buffer);
+    } catch (err: any) {
+      return `[OCR no disponible: ${err?.message || 'error desconocido'}]`;
+    }
+  }
+
+  extractHrFields(text: string, tipo: string): Record<string, string> {
+    const fields: Record<string, string> = {};
+    if (!text || text.startsWith('[OCR')) return fields;
+
+    // CURP — patrón universal presente en varios documentos
+    const curpMatch = text.match(/[A-Z]{4}[0-9]{6}[HM][A-Z]{5}[A-Z0-9]{2}/);
+    if (curpMatch) fields.curp = curpMatch[0];
+
+    if (tipo === 'INE') {
+      const nombreMatch =
+        text.match(/NOMBRE[S]?\s*\n([^\n]+)/i) ||
+        text.match(/NOMBRE[S]?[:\s]+([A-ZÁÉÍÓÚÑ ]{5,60})/i);
+      if (nombreMatch) fields.nombre = nombreMatch[1].trim();
+
+      const apPat = text.match(/APELLIDO\s*PATERNO[:\s]+([A-ZÁÉÍÓÚÑ ]{2,40})/i);
+      const apMat = text.match(/APELLIDO\s*MATERNO[:\s]+([A-ZÁÉÍÓÚÑ ]{2,40})/i);
+      if (apPat || apMat) {
+        fields.apellidos = [apPat?.[1], apMat?.[1]].filter(Boolean).join(' ').trim();
+      }
+
+      const ineMatch =
+        text.match(/CIC[:\s]*([0-9]{9,10})/i) ||
+        text.match(/\b([0-9]{13})\b/);
+      if (ineMatch) fields.numeroIne = ineMatch[1];
+
+      const domMatch = text.match(/DOMICILIO[:\s]+([^\n]{5,100})/i);
+      if (domMatch) fields.domicilio = domMatch[1].trim();
+
+      const coloniaMatch = text.match(/COLONIA[:\s]+([^\n]{3,50})/i);
+      if (coloniaMatch) fields.colonia = coloniaMatch[1].trim();
+
+      const cpMatch =
+        text.match(/C\.?P\.?\s*[:\s]?([0-9]{5})\b/i) ||
+        text.match(/\b([0-9]{5})\b/);
+      if (cpMatch) fields.codigoPostal = cpMatch[1];
+
+      const ciudadMatch = text.match(/MUNICIPIO[:\s]+([^\n]{3,50})/i) || text.match(/CIUDAD[:\s]+([^\n]{3,50})/i);
+      if (ciudadMatch) fields.ciudad = ciudadMatch[1].trim();
+
+      const estadoMatch = text.match(/ESTADO[:\s]+([^\n]{3,40})/i);
+      if (estadoMatch) fields.estado = estadoMatch[1].trim();
+    }
+
+    if (tipo === 'CURP') {
+      const nombreMatch = text.match(/NOMBRE[S]?[:\s]+([A-ZÁÉÍÓÚÑ ]{5,60})/i);
+      if (nombreMatch) fields.nombre = nombreMatch[1].trim();
+
+      const apPat = text.match(/PRIMER\s*APELLIDO[:\s]+([A-ZÁÉÍÓÚÑ ]{2,40})/i);
+      const apMat = text.match(/SEGUNDO\s*APELLIDO[:\s]+([A-ZÁÉÍÓÚÑ ]{2,40})/i);
+      if (apPat || apMat) {
+        fields.apellidos = [apPat?.[1], apMat?.[1]].filter(Boolean).join(' ').trim();
+      }
+    }
+
+    if (tipo === 'COMPROBANTE_DOMICILIO' || tipo === 'RFC') {
+      const rfcMatch = text.match(/[A-ZÑ&]{3,4}[0-9]{6}[A-Z0-9]{3}/i);
+      if (rfcMatch) fields.rfc = rfcMatch[0].toUpperCase();
+
+      const cpMatch = text.match(/C\.?P\.?\s*[:\s]?([0-9]{5})\b/i);
+      if (cpMatch) fields.codigoPostal = cpMatch[1];
+
+      const coloniaMatch = text.match(/COLONIA[:\s]+([^\n]{3,50})/i);
+      if (coloniaMatch) fields.colonia = coloniaMatch[1].trim();
+
+      const ciudadMatch = text.match(/(?:MUNICIPIO|CIUDAD)[:\s]+([^\n]{3,50})/i);
+      if (ciudadMatch) fields.ciudad = ciudadMatch[1].trim();
+
+      const estadoMatch = text.match(/ESTADO[:\s]+([^\n]{3,40})/i);
+      if (estadoMatch) fields.estado = estadoMatch[1].trim();
+    }
+
+    if (tipo === 'NSS') {
+      const nssMatch = text.match(/\b([0-9]{11})\b/);
+      if (nssMatch) fields.nss = nssMatch[1];
+    }
+
+    return fields;
+  }
 }

@@ -9,6 +9,7 @@ import { HrShift } from './entities/hr-shift.entity';
 import { Attendance } from './entities/attendance.entity';
 import { BiometricCredential } from './entities/biometric-credential.entity';
 import { Branch } from '../branches/entities/branch.entity';
+import { OcrService } from '../ocr/ocr.service';
 
 function haversineMeters(lat1: number, lon1: number, lat2: number, lon2: number): number {
   const R = 6371000;
@@ -40,6 +41,7 @@ export class HrService {
     private readonly bioRepo: Repository<BiometricCredential>,
     @InjectRepository(Branch)
     private readonly branchRepo: Repository<Branch>,
+    private readonly ocrService: OcrService,
   ) {}
 
   // --- Employees ---
@@ -86,6 +88,63 @@ export class HrService {
 
   async removeDocument(id: string): Promise<void> {
     await this.docRepo.delete(id);
+  }
+
+  async ocrDocument(
+    employeeId: string,
+    fileData: string,
+    tipo: string,
+  ): Promise<{ documentId: string; extractedFields: Record<string, string> }> {
+    const emp = await this.empRepo.findOne({ where: { id: employeeId } });
+    if (!emp) throw new NotFoundException('Empleado no encontrado');
+
+    const matches = fileData.match(/^data:([^;]+);base64,(.+)$/s);
+    if (!matches) throw new BadRequestException('Formato de archivo inválido');
+    const mimetype = matches[1];
+    const buffer = Buffer.from(matches[2], 'base64');
+
+    const rawText = await this.ocrService.extractTextFromBuffer(buffer, mimetype);
+    const extractedFields = this.ocrService.extractHrFields(rawText, tipo);
+
+    const doc = await this.docRepo.save(
+      this.docRepo.create({
+        employeeId,
+        tipo,
+        nombre: tipo,
+        fileData,
+        ocrExtracted: extractedFields,
+        ocrConfirmed: false,
+      }),
+    );
+
+    return { documentId: doc.id, extractedFields };
+  }
+
+  async confirmOcr(
+    employeeId: string,
+    documentId: string,
+    fields: Record<string, string>,
+  ): Promise<Employee> {
+    await this.docRepo.update(documentId, { ocrConfirmed: true });
+
+    const allowed: (keyof Employee)[] = [
+      'nombre', 'apellidos', 'curp', 'rfc', 'nss', 'numeroIne',
+      'domicilio', 'colonia', 'ciudad', 'estado', 'codigoPostal',
+      'banco', 'clabe',
+    ];
+
+    const update: Partial<Employee> = {};
+    for (const key of allowed) {
+      if (fields[key] !== undefined && fields[key] !== '') {
+        (update as any)[key] = fields[key];
+      }
+    }
+
+    if (Object.keys(update).length > 0) {
+      await this.empRepo.update(employeeId, update);
+    }
+
+    return this.empRepo.findOne({ where: { id: employeeId } }) as Promise<Employee>;
   }
 
   // --- Portal: get employee by userId ---

@@ -8,6 +8,7 @@ import { HrShift } from './entities/hr-shift.entity';
 import { Attendance } from './entities/attendance.entity';
 import { BiometricCredential } from './entities/biometric-credential.entity';
 import { Branch } from '../branches/entities/branch.entity';
+import { OcrModule } from '../ocr/ocr.module';
 import { HrService } from './hr.service';
 import { HrController } from './hr.controller';
 
@@ -23,6 +24,7 @@ import { HrController } from './hr.controller';
       BiometricCredential,
       Branch,
     ]),
+    OcrModule,
   ],
   providers: [HrService],
   controllers: [HrController],
