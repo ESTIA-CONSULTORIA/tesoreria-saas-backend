@@ -98,6 +98,9 @@ export class Employee {
   @Column({ nullable: true })
   clabe: string;
 
+  @Column({ nullable: true })
+  periodoPago: string; // QUINCENAL | SEMANAL | CATORCENAL
+
   @CreateDateColumn()
   createdAt: Date;
 }

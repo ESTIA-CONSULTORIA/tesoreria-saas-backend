@@ -1,6 +1,6 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { Employee } from './entities/employee.entity';
 import { HrDocument } from './entities/hr-document.entity';
 import { VacationRequest } from './entities/vacation-request.entity';
@@ -88,6 +88,21 @@ export class HrService {
 
   async removeDocument(id: string): Promise<void> {
     await this.docRepo.delete(id);
+  }
+
+  async getEmployeePhotos(employeeIds: string[]): Promise<Record<string, string>> {
+    if (!employeeIds.length) return {};
+    const docs = await this.docRepo.find({
+      where: { employeeId: In(employeeIds), tipo: 'FOTO' },
+      order: { uploadedAt: 'DESC' },
+    });
+    const result: Record<string, string> = {};
+    for (const doc of docs) {
+      if (!result[doc.employeeId] && doc.fileData) {
+        result[doc.employeeId] = doc.fileData;
+      }
+    }
+    return result;
   }
 
   async ocrDocument(

@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Headers, Param, Post, Put, Request, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Headers, Param, Post, Put, Query, Request } from '@nestjs/common';
 import { HrService } from './hr.service';
 
 @Controller('hr')
@@ -39,6 +39,13 @@ export class HrController {
   remove(@Param('id') id: string, @Request() req?: any) {
     const tenantId = req?.user?.tenantId;
     return this.service.removeEmployee(id, tenantId);
+  }
+
+  // Photos bulk endpoint — must be before :employeeId routes
+  @Get('employees/photos')
+  getPhotos(@Query('employeeIds') employeeIds: string) {
+    const ids = employeeIds ? employeeIds.split(',').filter(Boolean) : [];
+    return this.service.getEmployeePhotos(ids);
   }
 
   // Documents
