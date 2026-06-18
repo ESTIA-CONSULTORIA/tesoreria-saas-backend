@@ -105,6 +105,32 @@ export class HrService {
     return result;
   }
 
+  async getBirthdaysThisMonth(tenantId: string): Promise<Partial<Employee>[]> {
+    const currentMonth = new Date().getMonth() + 1;
+    const employees = await this.empRepo.find({
+      where: { tenantId, status: 'ACTIVO' },
+    });
+    return employees
+      .filter((e) => {
+        if (!e.fechaNacimiento) return false;
+        const d = new Date(e.fechaNacimiento);
+        return d.getUTCMonth() + 1 === currentMonth;
+      })
+      .sort((a, b) => {
+        const da = new Date(a.fechaNacimiento!).getUTCDate();
+        const db = new Date(b.fechaNacimiento!).getUTCDate();
+        return da - db;
+      })
+      .map((e) => ({
+        id: e.id,
+        nombre: e.nombre,
+        apellidos: e.apellidos,
+        fechaNacimiento: e.fechaNacimiento,
+        puesto: e.puesto,
+        departamento: e.departamento,
+      }));
+  }
+
   async ocrDocument(
     employeeId: string,
     fileData: string,
@@ -145,7 +171,7 @@ export class HrService {
     const allowed: (keyof Employee)[] = [
       'nombre', 'apellidos', 'curp', 'rfc', 'nss', 'numeroIne',
       'domicilio', 'colonia', 'ciudad', 'estado', 'codigoPostal',
-      'banco', 'clabe',
+      'banco', 'clabe', 'fechaNacimiento', 'genero',
     ];
 
     const update: Partial<Employee> = {};

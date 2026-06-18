@@ -170,7 +170,21 @@ export class OcrService {
 
     // CURP — patrón universal presente en varios documentos
     const curpMatch = text.match(/[A-Z]{4}[0-9]{6}[HM][A-Z]{5}[A-Z0-9]{2}/);
-    if (curpMatch) fields.curp = curpMatch[0];
+    if (curpMatch) {
+      fields.curp = curpMatch[0];
+      // Parsear fecha de nacimiento del CURP (posiciones 4-9: AAMMDD)
+      const curp = curpMatch[0];
+      const yy = curp.slice(4, 6);
+      const mm = curp.slice(6, 8);
+      const dd = curp.slice(8, 10);
+      const year = parseInt(yy) <= new Date().getFullYear() % 100
+        ? 2000 + parseInt(yy)
+        : 1900 + parseInt(yy);
+      fields.fechaNacimiento = `${year}-${mm}-${dd}`;
+      // Parsear género (posición 10: H=Masculino, M=Femenino)
+      const sexChar = curp[10];
+      fields.genero = sexChar === 'H' ? 'M' : sexChar === 'M' ? 'F' : 'OTRO';
+    }
 
     if (tipo === 'INE') {
       const nombreMatch =

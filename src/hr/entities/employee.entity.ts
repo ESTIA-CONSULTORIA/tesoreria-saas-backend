@@ -75,6 +75,12 @@ export class Employee {
   @Column({ nullable: true })
   numeroIne: string;
 
+  @Column({ type: 'date', nullable: true })
+  fechaNacimiento: Date;
+
+  @Column({ nullable: true })
+  genero: string; // M | F | OTRO
+
   // Relación laboral
   @Column({ nullable: true })
   tipoJornada: string;

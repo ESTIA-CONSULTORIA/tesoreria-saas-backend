@@ -41,11 +41,17 @@ export class HrController {
     return this.service.removeEmployee(id, tenantId);
   }
 
-  // Photos bulk endpoint — must be before :employeeId routes
+  // Static sub-routes — must be before :employeeId routes
   @Get('employees/photos')
   getPhotos(@Query('employeeIds') employeeIds: string) {
     const ids = employeeIds ? employeeIds.split(',').filter(Boolean) : [];
     return this.service.getEmployeePhotos(ids);
+  }
+
+  @Get('employees/birthdays')
+  getBirthdays(@Request() req?: any, @Headers('x-tenant-id') headerTenantId?: string) {
+    const tenantId = req?.user?.tenantId ?? headerTenantId ?? '';
+    return this.service.getBirthdaysThisMonth(tenantId);
   }
 
   // Documents
