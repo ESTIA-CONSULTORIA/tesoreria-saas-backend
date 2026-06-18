@@ -1935,7 +1935,6 @@ export async function seedDatabase(dataSource: DataSource) {
 
     const sazonMatriz = await branchesRepository.findOne({
       where: { companyId: sazonCompany.id },
-      order: { createdAt: 'ASC' },
     }) || await branchesRepository.save({
       tenantId: demoTenant.id,
       companyId: sazonCompany.id,
