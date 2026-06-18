@@ -231,6 +231,22 @@ export async function seedDatabase(dataSource: DataSource) {
     }
   }
 
+  // Buscar o crear empresa El Sazón dinámicamente para usarla en usuarios y HR
+  const sazonCompany = await companiesRepository.findOne({
+    where: [
+      { tenantId: demoTenant.id, tradeName: 'El Sazón' },
+      { tenantId: demoTenant.id, legalName: 'El Sazón' },
+      { tenantId: demoTenant.id, tradeName: 'El Sazon' },
+    ],
+  }) || await companiesRepository.save({
+    tenantId: demoTenant.id,
+    legalName: 'El Sazón SA de CV',
+    tradeName: 'El Sazón',
+    rfc: 'SAZO123456789',
+    giro: 'Restaurante',
+    isActive: true,
+  });
+
   // Crear usuarios con restricción de empresa/sucursal
   const restrictedUsers = [
     {
@@ -239,7 +255,7 @@ export async function seedDatabase(dataSource: DataSource) {
       name: 'Gerente El Sazón',
       role: gerenteRole,
       roleCode: 'GERENTE',
-      companyId: '602512f6-496f-4d15-bd0f-ca3c0b61a8ee',
+      companyId: sazonCompany.id,
       branchId: null,
       executivePin: '1234',
     },
@@ -1916,21 +1932,6 @@ export async function seedDatabase(dataSource: DataSource) {
     const attendanceRepo = dataSource.getRepository('Attendance');
     const vacationRepo = dataSource.getRepository('VacationRequest');
     const permissionRepo = dataSource.getRepository('PermissionRequest');
-
-    const sazonCompany = await companiesRepository.findOne({
-      where: [
-        { tenantId: demoTenant.id, tradeName: 'El Sazón' },
-        { tenantId: demoTenant.id, legalName: 'El Sazón' },
-        { tenantId: demoTenant.id, tradeName: 'El Sazon' },
-      ],
-    }) || await companiesRepository.save({
-      tenantId: demoTenant.id,
-      legalName: 'El Sazón SA de CV',
-      tradeName: 'El Sazón',
-      rfc: 'SAZO123456789',
-      giro: 'Restaurante',
-      isActive: true,
-    });
 
     const sazonMatriz = await branchesRepository.findOne({
       where: { companyId: sazonCompany.id },
