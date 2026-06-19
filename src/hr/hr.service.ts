@@ -145,6 +145,9 @@ export class HrService {
     const buffer = Buffer.from(matches[2], 'base64');
 
     const rawText = await this.ocrService.extractTextFromBuffer(buffer, mimetype);
+    console.log('=== OCR RAW TEXT START ===');
+    console.log(rawText);
+    console.log('=== OCR RAW TEXT END ===');
     const extractedFields = this.ocrService.extractHrFields(rawText, tipo);
 
     const doc = await this.docRepo.save(
