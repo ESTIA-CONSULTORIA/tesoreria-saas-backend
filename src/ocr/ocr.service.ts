@@ -156,11 +156,52 @@ export class OcrService {
 
   async extractTextFromBuffer(buffer: Buffer, mimetype: string): Promise<string> {
     try {
-      return mimetype === 'application/pdf'
-        ? await this.extractPdfText(buffer)
-        : await this.extractImageText(buffer);
+      if (mimetype === 'application/pdf') {
+        const text = await this.extractPdfText(buffer);
+        // Fewer than 50 chars means the PDF is a scanned image with no embedded text
+        if (text.trim().length >= 50) return text;
+        return await this.extractPdfPageViaOcr(buffer);
+      }
+      return await this.extractImageText(buffer);
     } catch (err: any) {
       return `[OCR no disponible: ${err?.message || 'error desconocido'}]`;
+    }
+  }
+
+  private async extractPdfPageViaOcr(buffer: Buffer): Promise<string> {
+    try {
+      // Resolve legacy build by absolute path so TypeScript's exports-map check
+      // doesn't block the import (pdfjs-dist v6 legacy path is not in exports).
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const nodePath = require('path') as typeof import('path');
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { pathToFileURL } = require('url') as typeof import('url');
+      const pkgRoot = nodePath.dirname(require.resolve('pdfjs-dist/package.json'));
+      const pdfJsUrl  = pathToFileURL(nodePath.join(pkgRoot, 'legacy', 'build', 'pdf.mjs')).href;
+      const workerUrl = pathToFileURL(nodePath.join(pkgRoot, 'legacy', 'build', 'pdf.worker.mjs')).href;
+
+      // Dynamic import via file URL — TypeScript resolves to Promise<any> for non-literal paths
+      const pdfjsModule: any = await import(pdfJsUrl);
+      const pdfjs: any = pdfjsModule.default ?? pdfjsModule;
+      pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
+
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { createCanvas } = require('canvas') as typeof import('canvas');
+
+      const data = new Uint8Array(buffer);
+      const pdfDoc: any = await pdfjs.getDocument({ data }).promise;
+      const page: any  = await pdfDoc.getPage(1);
+      const viewport: any = page.getViewport({ scale: 2.0 });
+
+      const canvas = createCanvas(Math.ceil(viewport.width), Math.ceil(viewport.height));
+      const ctx = canvas.getContext('2d') as any;
+
+      await page.render({ canvasContext: ctx, viewport }).promise;
+      await pdfDoc.destroy();
+
+      return await this.extractImageText(canvas.toBuffer('image/png'));
+    } catch (err: any) {
+      return `[OCR: no se pudo renderizar PDF — ${err?.message ?? 'error'}]`;
     }
   }
 
