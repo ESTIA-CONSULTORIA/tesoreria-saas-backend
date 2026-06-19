@@ -228,38 +228,61 @@ export class OcrService {
     }
 
     if (tipo === 'INE') {
-      const nombreMatch =
-        text.match(/NOMBRE[S]?\s*\n([^\n]+)/i) ||
-        text.match(/NOMBRE[S]?[:\s]+([A-ZÁÉÍÓÚÑ ]{5,60})/i);
-      if (nombreMatch) fields.nombre = nombreMatch[1].trim();
-
-      const apPat = text.match(/APELLIDO\s*PATERNO[:\s]+([A-ZÁÉÍÓÚÑ ]{2,40})/i);
-      const apMat = text.match(/APELLIDO\s*MATERNO[:\s]+([A-ZÁÉÍÓÚÑ ]{2,40})/i);
-      if (apPat || apMat) {
-        fields.apellidos = [apPat?.[1], apMat?.[1]].filter(Boolean).join(' ').trim();
+      // 1 & 2: nombre y apellidos — bloque multilínea entre NOMBRE y DOMICILIO
+      // Formato INE: NOMBRE\n[APELLIDO PAT]\n[APELLIDO MAT]\n[NOMBRE(S)]\nDOMICILIO
+      const nombreBloqueMatch = text.match(/NOMBRE\s*\n([\s\S]*?)(?=DOMICILIO)/i);
+      if (nombreBloqueMatch) {
+        const lines = nombreBloqueMatch[1]
+          .split('\n')
+          .map((l) => l.trim())
+          .filter(Boolean);
+        if (lines.length >= 1) {
+          // Última línea no vacía = nombre(s) de pila
+          fields.nombre = lines[lines.length - 1];
+        }
+        if (lines.length >= 2) {
+          // Primeras líneas = apellido paterno [+ materno]
+          fields.apellidos = lines.slice(0, lines.length - 1).join(' ');
+        }
       }
 
+      // Número de credencial INE
       const ineMatch =
         text.match(/CIC[:\s]*([0-9]{9,10})/i) ||
         text.match(/\b([0-9]{13})\b/);
       if (ineMatch) fields.numeroIne = ineMatch[1];
 
-      const domMatch = text.match(/DOMICILIO[:\s]+([^\n]{5,100})/i);
+      // 3: domicilio — línea inmediata después de la etiqueta DOMICILIO
+      const domMatch = text.match(/DOMICILIO\s*\n([^\n]+)/i);
       if (domMatch) fields.domicilio = domMatch[1].trim();
 
-      const coloniaMatch = text.match(/COLONIA[:\s]+([^\n]{3,50})/i);
+      // 4: colonia — segunda línea después de DOMICILIO
+      const coloniaMatch = text.match(/DOMICILIO\s*\n[^\n]+\n([^\n]+)/i);
       if (coloniaMatch) fields.colonia = coloniaMatch[1].trim();
 
+      // 5: ciudad y estado — tercera línea después de DOMICILIO (ej. "TLALNEPANTLA, ESTADO DE MEXICO")
+      const ciudadLineMatch = text.match(/DOMICILIO\s*\n[^\n]+\n[^\n]+\n([^\n]+)/i);
+      if (ciudadLineMatch) {
+        const partes = ciudadLineMatch[1].trim().split(',');
+        fields.ciudad = partes[0].trim();
+        if (partes.length > 1) {
+          fields.estado = partes[partes.length - 1].trim();
+        }
+      }
+
+      // 6: codigoPostal — primer número de 5 dígitos en el bloque DOMICILIO → CLAVE DE ELECTOR
+      const domBloque = (text.match(/DOMICILIO[\s\S]*?(?=CLAVE\s*DE\s*ELECTOR|$)/i) ?? [''])[0];
       const cpMatch =
-        text.match(/C\.?P\.?\s*[:\s]?([0-9]{5})\b/i) ||
-        text.match(/\b([0-9]{5})\b/);
+        domBloque.match(/\b(\d{5})\b/) ||
+        text.match(/C\.?P\.?\s*[:\s]?([0-9]{5})\b/i);
       if (cpMatch) fields.codigoPostal = cpMatch[1];
 
-      const ciudadMatch = text.match(/MUNICIPIO[:\s]+([^\n]{3,50})/i) || text.match(/CIUDAD[:\s]+([^\n]{3,50})/i);
-      if (ciudadMatch) fields.ciudad = ciudadMatch[1].trim();
-
-      const estadoMatch = text.match(/ESTADO[:\s]+([^\n]{3,40})/i);
-      if (estadoMatch) fields.estado = estadoMatch[1].trim();
+      // 7: fechaNacimiento desde campo explícito del INE — tiene prioridad sobre el CURP parseado
+      // Formato en el documento: FECHA DE NACIMIENTO DD/MM/AAAA
+      const fechaNacMatch = text.match(/FECHA\s*DE\s*NACIMIENTO\s+(\d{2})\/(\d{2})\/(\d{4})/i);
+      if (fechaNacMatch) {
+        fields.fechaNacimiento = `${fechaNacMatch[3]}-${fechaNacMatch[2]}-${fechaNacMatch[1]}`;
+      }
     }
 
     if (tipo === 'CURP') {
