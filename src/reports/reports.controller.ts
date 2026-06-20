@@ -13,7 +13,7 @@ export class ReportsController {
     @Headers('x-company-id') headerCompanyId?: string,
   ) {
     const user = req.user;
-    const tenantId = req.tenantId || user?.tenantId;
+    const tenantId = user?.tenantId;
     const companyId = user?.companyId || headerCompanyId;
     return this.reportsService.cashFlow(startDate, endDate, tenantId, companyId);
   }
@@ -24,7 +24,7 @@ export class ReportsController {
     @Headers('x-company-id') headerCompanyId?: string,
   ) {
     const user = req.user;
-    const tenantId = req.tenantId || user?.tenantId;
+    const tenantId = user?.tenantId;
     const companyId = user?.companyId || headerCompanyId;
     return this.reportsService.balanceByAccount(tenantId, companyId);
   }
@@ -37,7 +37,7 @@ export class ReportsController {
     @Headers('x-company-id') headerCompanyId?: string,
   ) {
     const user = req.user;
-    const tenantId = req.tenantId || user?.tenantId;
+    const tenantId = user?.tenantId;
     const companyId = user?.companyId || headerCompanyId;
     return this.reportsService.categorySummary(startDate, endDate, tenantId, companyId);
   }
@@ -50,7 +50,7 @@ export class ReportsController {
     @Headers('x-company-id') headerCompanyId?: string,
   ) {
     const user = req.user;
-    const tenantId = req.tenantId || user?.tenantId;
+    const tenantId = user?.tenantId;
     const companyId = user?.companyId || headerCompanyId;
     return this.reportsService.incomeStatement(startDate, endDate, tenantId, companyId);
   }
@@ -63,7 +63,7 @@ export class ReportsController {
     @Headers('x-company-id') headerCompanyId?: string,
   ) {
     const user = req.user;
-    const tenantId = req.tenantId || user?.tenantId;
+    const tenantId = user?.tenantId;
     const companyId = user?.companyId || headerCompanyId;
     return this.reportsService.breakEvenPoint(startDate, endDate, tenantId, companyId);
   }

@@ -7,6 +7,7 @@ import { MovementsService } from '../movements/movements.service';
 import { CostsService } from '../costs/costs.service';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
+import { Branch } from '../branches/entities/branch.entity';
 
 @Injectable()
 export class PurchasesService {
@@ -28,7 +29,7 @@ export class PurchasesService {
     if (status) where.status = status;
     if (branchId) where.branchId = branchId;
     if (companyId) {
-      const branches = await this.dataSource.getRepository('Branch').find({
+      const branches = await this.dataSource.getRepository(Branch).find({
         where: { companyId },
         select: ['id'],
       });
@@ -148,7 +149,7 @@ export class PurchasesService {
     if (status) where.status = status;
     if (branchId) where.branchId = branchId;
     if (companyId) {
-      const branches = await this.dataSource.getRepository('Branch').find({
+      const branches = await this.dataSource.getRepository(Branch).find({
         where: { companyId },
         select: ['id'],
       });
@@ -250,7 +251,7 @@ export class PurchasesService {
     if (tenantId) where.tenantId = tenantId;
     if (branchId) where.branchId = branchId;
     if (companyId) {
-      const branches = await this.dataSource.getRepository('Branch').find({
+      const branches = await this.dataSource.getRepository(Branch).find({
         where: { companyId },
         select: ['id'],
       });

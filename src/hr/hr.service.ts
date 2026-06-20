@@ -197,6 +197,27 @@ export class HrService {
     return this.empRepo.findOne({ where: { userId } });
   }
 
+  async getPortalProfile(userId: string): Promise<any | null> {
+    const emp = await this.empRepo.findOne({ where: { userId } });
+    if (!emp) return null;
+    const result: any = { ...emp };
+    if (emp.shiftId) {
+      const shift = await this.shiftRepo.findOne({ where: { id: emp.shiftId } });
+      result.shiftName = shift?.name ?? null;
+    }
+    return result;
+  }
+
+  async getRecentAttendanceForUser(userId: string): Promise<Attendance[]> {
+    const emp = await this.empRepo.findOne({ where: { userId } });
+    if (!emp) return [];
+    return this.attendanceRepo.find({
+      where: { employeeId: emp.id },
+      order: { date: 'DESC' },
+      take: 5,
+    });
+  }
+
   // --- Shifts ---
 
   findAllShifts(tenantId: string): Promise<HrShift[]> {

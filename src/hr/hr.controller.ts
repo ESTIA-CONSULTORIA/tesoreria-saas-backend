@@ -213,7 +213,13 @@ export class HrController {
   @Get('portal/me')
   getPortalMe(@Request() req?: any) {
     const userId = req?.user?.id;
-    return this.service.findEmployeeByUserId(userId);
+    return this.service.getPortalProfile(userId);
+  }
+
+  @Get('portal/attendance-recent')
+  getPortalAttendanceRecent(@Request() req?: any) {
+    const userId = req?.user?.id;
+    return this.service.getRecentAttendanceForUser(userId);
   }
 
   @Get('portal/documents')
