@@ -14,7 +14,7 @@ export class ReportsController {
   ) {
     const user = req.user;
     const tenantId = user?.tenantId;
-    const companyId = user?.companyId || headerCompanyId;
+    const companyId = headerCompanyId || user?.companyId;
     return this.reportsService.cashFlow(startDate, endDate, tenantId, companyId);
   }
 
@@ -25,7 +25,7 @@ export class ReportsController {
   ) {
     const user = req.user;
     const tenantId = user?.tenantId;
-    const companyId = user?.companyId || headerCompanyId;
+    const companyId = headerCompanyId || user?.companyId;
     return this.reportsService.balanceByAccount(tenantId, companyId);
   }
 
@@ -38,7 +38,7 @@ export class ReportsController {
   ) {
     const user = req.user;
     const tenantId = user?.tenantId;
-    const companyId = user?.companyId || headerCompanyId;
+    const companyId = headerCompanyId || user?.companyId;
     return this.reportsService.categorySummary(startDate, endDate, tenantId, companyId);
   }
 
@@ -51,7 +51,7 @@ export class ReportsController {
   ) {
     const user = req.user;
     const tenantId = user?.tenantId;
-    const companyId = user?.companyId || headerCompanyId;
+    const companyId = headerCompanyId || user?.companyId;
     return this.reportsService.incomeStatement(startDate, endDate, tenantId, companyId);
   }
 
@@ -64,7 +64,7 @@ export class ReportsController {
   ) {
     const user = req.user;
     const tenantId = user?.tenantId;
-    const companyId = user?.companyId || headerCompanyId;
+    const companyId = headerCompanyId || user?.companyId;
     return this.reportsService.breakEvenPoint(startDate, endDate, tenantId, companyId);
   }
 }

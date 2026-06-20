@@ -27,19 +27,11 @@ export class DashboardController {
       || headerTenantId
       || (await this.companiesRepo.findOne({ where: {} }))?.tenantId;
     
-    let branchId = headerBranchId;
-    let companyId = headerCompanyId;
-
-    // If user has branchId in JWT, use it and ignore headers
-    if (userBranchId) {
-      branchId = userBranchId;
-      companyId = undefined;
-    }
-    // If user has companyId but no branchId in JWT, use it and ignore X-Branch-Id header
-    else if (userCompanyId) {
-      companyId = userCompanyId;
-      branchId = undefined;
-    }
+    // Header takes priority over JWT so Switch Context updates take effect immediately
+    let branchId = headerBranchId || userBranchId || undefined;
+    let companyId = headerCompanyId || userCompanyId || undefined;
+    // Branch is more specific than company — don't double-filter
+    if (branchId) companyId = undefined;
     
     return this.dashboardService.getKpis(period, branchId, companyId, tenantId);
   }
