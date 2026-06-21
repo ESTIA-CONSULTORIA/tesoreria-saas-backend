@@ -295,7 +295,10 @@ export class DashboardService {
       }> = [];
 
       if (companyId && !branchId) {
-        const companyBranches = await this.branchesRepo.find({ where: { companyId } });
+        const companyBranches = await this.branchesRepo
+          .createQueryBuilder('branch')
+          .where('branch.companyId::text = :companyId', { companyId })
+          .getMany();
         const branchIds = companyBranches.map(b => b.id);
 
         if (branchIds.length > 0) {
