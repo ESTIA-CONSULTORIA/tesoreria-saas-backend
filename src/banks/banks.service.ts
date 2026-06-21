@@ -63,16 +63,18 @@ export class BanksService {
   }
 
   async findByCompany(companyId: string) {
-    const branchIds = await this.dataSource
+    const branches = await this.dataSource
       .getRepository('Branch')
-      .find({ where: { companyId }, select: ['id'] });
-    
-    const ids = branchIds.map(b => b.id);
-    
+      .createQueryBuilder('branch')
+      .where('branch.companyId::text = :companyId', { companyId })
+      .getMany();
+
+    const ids = branches.map(b => b.id);
+
     if (ids.length === 0) {
       return [];
     }
-    
+
     return this.banksRepository.find({
       where: { branchId: In(ids) },
       order: { createdAt: 'DESC' },

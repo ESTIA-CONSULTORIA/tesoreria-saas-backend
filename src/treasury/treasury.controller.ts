@@ -103,6 +103,12 @@ export class TreasuryController {
   }
 
   // Transfers
+  @Get('transfers')
+  getTransferHistory(@Request() req, @Query('limit') limit?: string) {
+    const tenantId = req.user?.tenantId || req.tenantId;
+    return this.treasuryService.getTransferHistory(tenantId, limit ? parseInt(limit) : 20);
+  }
+
   @Post('transfers')
   createTransfer(@Body() data: any, @Request() req) {
     const tenantId = req.user?.tenantId || req.tenantId;

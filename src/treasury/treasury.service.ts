@@ -8,6 +8,7 @@ import { Purchase } from '../purchases/entities/purchase.entity';
 import { Company } from '../companies/entities/company.entity';
 import { Branch } from '../branches/entities/branch.entity';
 import { Shift } from '../pos/entities/shift.entity';
+import { Transfer } from '../transfers/entities/transfer.entity';
 
 @Injectable()
 export class TreasuryService {
@@ -22,6 +23,8 @@ export class TreasuryService {
     private purchasesRepo: Repository<Purchase>,
     @InjectRepository(Shift)
     private shiftsRepo: Repository<Shift>,
+    @InjectRepository(Transfer)
+    private transfersRepo: Repository<Transfer>,
   ) {}
 
   private async getAccountIdsByTenant(tenantId?: string): Promise<string[]> {
@@ -471,22 +474,21 @@ export class TreasuryService {
         };
       });
 
-      // Transferencias pendientes de autorización (simulado)
-      const pendingTransfersQuery = this.movementsRepo
-        .createQueryBuilder('movement')
-        .where('movement.type = :type', { type: 'EXPENSE' })
-        .orderBy('movement.createdAt', 'DESC')
-        .limit(5);
-      if (accountIds.length > 0) pendingTransfersQuery.andWhere('movement.accountId IN (:...accountIds)', { accountIds });
-      const pendingTransfers = await pendingTransfersQuery.getMany();
+      // Transferencias pendientes de autorización (Transfer entity con status PENDIENTE)
+      const pendingTransfersQuery = this.transfersRepo
+        .createQueryBuilder('transfer')
+        .where('transfer.status = :status', { status: 'PENDIENTE' })
+        .orderBy('transfer.createdAt', 'DESC')
+        .limit(10);
+      const pendingTransfersRaw = await pendingTransfersQuery.getMany();
 
-      const pendingAlerts = pendingTransfers.map((m) => ({
+      const pendingAlerts = pendingTransfersRaw.map((t) => ({
         type: 'PENDING',
-        message: `Transferencia pendiente: ${m.concept}`,
-        concept: m.concept,
-        amount: Number(m.amount),
-        date: m.createdAt,
-        severity: 'INFO',
+        message: `Traslado pendiente de autorización: ${t.concept || 'Sin concepto'}`,
+        concept: t.concept,
+        amount: Number(t.amount),
+        date: t.createdAt,
+        severity: 'WARNING',
       }));
 
       return {
@@ -853,6 +855,20 @@ export class TreasuryService {
     } catch (error) {
       console.error('TreasuryService.getPendingDeposits error:', error);
       throw new Error(`Error al obtener depósitos pendientes: ${error.message}`);
+    }
+  }
+
+  async getTransferHistory(tenantId?: string, limit = 20) {
+    try {
+      const query = this.transfersRepo
+        .createQueryBuilder('transfer')
+        .orderBy('transfer.createdAt', 'DESC')
+        .take(limit);
+      if (tenantId) query.andWhere('transfer.tenantId = :tenantId', { tenantId });
+      return query.getMany();
+    } catch (error) {
+      console.error('TreasuryService.getTransferHistory error:', error);
+      return [];
     }
   }
 

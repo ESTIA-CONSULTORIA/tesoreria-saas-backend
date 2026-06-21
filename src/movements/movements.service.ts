@@ -106,11 +106,11 @@ export class MovementsService {
     }
 
     if (startDate) {
-      query.andWhere('movement.createdAt >= :startDate', { startDate });
+      query.andWhere('movement.date >= :startDate', { startDate });
     }
 
     if (endDate) {
-      query.andWhere('movement.createdAt <= :endDate', {
+      query.andWhere('movement.date <= :endDate', {
         endDate: `${endDate} 23:59:59`,
       });
     }
