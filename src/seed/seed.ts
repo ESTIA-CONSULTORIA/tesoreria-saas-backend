@@ -35,20 +35,24 @@ export async function seedDatabase(dataSource: DataSource) {
   const tablesRepository = dataSource.getRepository('Table');
 
   // Limpiar testTenant y todos sus datos
-  const testTenantId = '7ac7af3a-2df1-44b6-a844-e87113db73f5';
-  await dataSource.query(`
-    DELETE FROM movement WHERE "accountId" IN (
-      SELECT bk.id FROM bank bk
-      JOIN branch br ON bk."branchId" = br.id
-      JOIN company c ON br."companyId" = c.id
-      WHERE c."tenantId" = '${testTenantId}'
-    )
-  `);
-  await dataSource.query(`DELETE FROM bank WHERE "branchId" IN (SELECT br.id FROM branch br JOIN company c ON br."companyId" = c.id WHERE c."tenantId" = '${testTenantId}')`);
-  await dataSource.query(`DELETE FROM branch WHERE "companyId" IN (SELECT id FROM company WHERE "tenantId" = '${testTenantId}')`);
-  await dataSource.query(`DELETE FROM company WHERE "tenantId" = '${testTenantId}'`);
-  await dataSource.query(`DELETE FROM tenant WHERE id = '${testTenantId}'`);
-  console.log('🧹 testTenant y sus datos eliminados');
+  try {
+    const testTenantId = '7ac7af3a-2df1-44b6-a844-e87113db73f5';
+    await dataSource.query(`
+      DELETE FROM movement WHERE "accountId" IN (
+        SELECT bk.id FROM bank bk
+        JOIN branch br ON bk."branchId" = br.id
+        JOIN company c ON br."companyId" = c.id
+        WHERE c."tenantId" = '${testTenantId}'
+      )
+    `);
+    await dataSource.query(`DELETE FROM bank WHERE "branchId" IN (SELECT br.id FROM branch br JOIN company c ON br."companyId" = c.id WHERE c."tenantId" = '${testTenantId}')`);
+    await dataSource.query(`DELETE FROM branch WHERE "companyId" IN (SELECT id FROM company WHERE "tenantId" = '${testTenantId}')`);
+    await dataSource.query(`DELETE FROM company WHERE "tenantId" = '${testTenantId}'`);
+    await dataSource.query(`DELETE FROM tenant WHERE id = '${testTenantId}'`);
+    console.log('🧹 testTenant y sus datos eliminados');
+  } catch (cleanupError) {
+    console.log('⚠️ Cleanup testTenant omitido:', cleanupError.message);
+  }
 
   // Verificar si el usuario admin ya existe
   const existingAdmin = await usersRepository.findOne({ where: { email: 'admin@estia.com' } });
