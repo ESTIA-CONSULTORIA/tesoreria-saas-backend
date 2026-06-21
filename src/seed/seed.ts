@@ -231,6 +231,7 @@ export async function seedDatabase(dataSource: DataSource) {
     const existingUser = await usersRepository.findOne({ where: { email: userData.email } });
     if (!existingUser) {
       const hashedPassword = await bcrypt.hash(userData.password, 10);
+      const hashedPin = userData.executivePin ? await bcrypt.hash(userData.executivePin, 10) : null;
       const savedUser = await usersRepository.save({
         email: userData.email,
         password: hashedPassword,
@@ -239,7 +240,7 @@ export async function seedDatabase(dataSource: DataSource) {
         roleCode: userData.roleCode,
         tenantId: demoTenant.id,
         isActive: true,
-        executivePin: userData.executivePin,
+        executivePin: hashedPin,
       });
       if (userData.email === 'cajero@demo.com') {
         console.log('✅ Usuario cajero@demo.com creado');
@@ -295,6 +296,7 @@ export async function seedDatabase(dataSource: DataSource) {
     const existingUser = await usersRepository.findOne({ where: { email: userData.email } });
     if (!existingUser) {
       const hashedPassword = await bcrypt.hash(userData.password, 10);
+      const hashedPin = userData.executivePin ? await bcrypt.hash(userData.executivePin, 10) : null;
       await usersRepository.save({
         email: userData.email,
         password: hashedPassword,
@@ -305,7 +307,7 @@ export async function seedDatabase(dataSource: DataSource) {
         companyId: userData.companyId,
         branchId: userData.branchId,
         isActive: true,
-        executivePin: userData.executivePin,
+        executivePin: hashedPin,
       });
       console.log(`✅ Usuario ${userData.email} (${userData.roleCode}) con restricción creado`);
     }
@@ -1666,6 +1668,31 @@ export async function seedDatabase(dataSource: DataSource) {
     console.log(`✅ ${movimientosOp} movimientos con category OPERATIONAL actualizados a GASTOS_VARIABLES`);
   }
 
+  // BUG-06: Migración defensiva — corregir tipos INGRESO/EGRESO si existen en BD
+  const movimientosIngreso = await movementsRepository.count({ where: { type: 'INGRESO' as any } });
+  if (movimientosIngreso > 0) {
+    await movementsRepository.createQueryBuilder().update().set({ type: 'INCOME' }).where('type = :t', { t: 'INGRESO' }).execute();
+    console.log(`✅ ${movimientosIngreso} movimientos type=INGRESO corregidos a INCOME`);
+  }
+  const movimientosEgreso = await movementsRepository.count({ where: { type: 'EGRESO' as any } });
+  if (movimientosEgreso > 0) {
+    await movementsRepository.createQueryBuilder().update().set({ type: 'EXPENSE' }).where('type = :t', { t: 'EGRESO' }).execute();
+    console.log(`✅ ${movimientosEgreso} movimientos type=EGRESO corregidos a EXPENSE`);
+  }
+
+  // BUG-16: Migración — hashear executivePin en texto plano (longitud < 20 = no es bcrypt)
+  const usersWithPlainPin = await usersRepository
+    .createQueryBuilder('user')
+    .where('user.executivePin IS NOT NULL')
+    .andWhere('LENGTH(user.executivePin) < 20')
+    .getMany();
+  for (const u of usersWithPlainPin) {
+    await usersRepository.update(u.id, { executivePin: await bcrypt.hash(u.executivePin, 10) });
+  }
+  if (usersWithPlainPin.length > 0) {
+    console.log(`✅ ${usersWithPlainPin.length} executivePin hasheados (migración BUG-16)`);
+  }
+
   // P4-01: Asegurar mínimo 30 ingresos y 20 egresos por cuenta bancaria
   {
     const TARGET_INCOME = 30;
@@ -2124,10 +2151,11 @@ export async function seedDatabase(dataSource: DataSource) {
       const cajero2Exists = await usersRepository.findOne({ where: { email: 'cajero2@demo.com' } });
       if (!cajero2Exists) {
         const hp = await bcrypt.hash('Admin123', 10);
+        const ep = await bcrypt.hash('1234', 10);
         await usersRepository.save({
           email: 'cajero2@demo.com', password: hp, name: 'Cajero 2 Demo',
           roleId: cajeroRole!.id, roleCode: 'CAJERO', tenantId: demoTenant.id,
-          isActive: true, executivePin: '1234',
+          isActive: true, executivePin: ep,
         });
         console.log('✅ Usuario cajero2@demo.com creado');
       }
@@ -2135,10 +2163,11 @@ export async function seedDatabase(dataSource: DataSource) {
       const meseroUserExists = await usersRepository.findOne({ where: { email: 'mesero@demo.com' } });
       if (!meseroUserExists) {
         const hp = await bcrypt.hash('Admin123', 10);
+        const ep = await bcrypt.hash('1234', 10);
         await usersRepository.save({
           email: 'mesero@demo.com', password: hp, name: 'Mesero Demo',
           roleId: cajeroRole!.id, roleCode: 'CAJERO', tenantId: demoTenant.id,
-          isActive: true, executivePin: '1234',
+          isActive: true, executivePin: ep,
         });
         console.log('✅ Usuario mesero@demo.com creado');
       }

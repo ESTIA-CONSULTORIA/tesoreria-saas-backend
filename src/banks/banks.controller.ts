@@ -42,10 +42,11 @@ export class BanksController {
     const userBranchId = req?.user?.branchId;
     const userCompanyId = req?.user?.companyId;
 
-    if (userBranchId) return this.banksService.findByBranch(userBranchId);
-    if (userCompanyId) return this.banksService.findByCompany(userCompanyId);
-    if (headerBranchId) return this.banksService.findByBranch(headerBranchId);
-    if (headerCompanyId) return this.banksService.findByCompany(headerCompanyId);
+    // Header (Switch Context) has priority over JWT claims
+    const branchId = headerBranchId || userBranchId;
+    const companyId = headerCompanyId || userCompanyId;
+    if (branchId) return this.banksService.findByBranch(branchId);
+    if (companyId) return this.banksService.findByCompany(companyId);
 
     const tenantId = req?.user?.tenantId;
     if (tenantId) return this.banksService.findByTenant(tenantId);

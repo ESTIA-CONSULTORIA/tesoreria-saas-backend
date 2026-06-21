@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { User } from './entities/user.entity';
 import { Repository } from 'typeorm';
+import * as bcrypt from 'bcrypt';
 
 @Injectable()
 export class UsersService {
@@ -10,7 +11,7 @@ export class UsersService {
     private usersRepository: Repository<User>,
   ) {}
 
-  create(
+  async create(
     email: string,
     password: string,
     name?: string,
@@ -21,6 +22,7 @@ export class UsersService {
     branchId?: string,
     executivePin?: string,
   ) {
+    const hashedPin = executivePin ? await bcrypt.hash(executivePin, 10) : undefined;
     const user = this.usersRepository.create({
       email,
       password,
@@ -31,7 +33,7 @@ export class UsersService {
       tenantId,
       companyId,
       branchId,
-      executivePin,
+      executivePin: hashedPin,
     });
     return this.usersRepository.save(user);
   }
@@ -59,7 +61,11 @@ export class UsersService {
   }
 
   async update(id: string, data: { name?: string; roleId?: string; roleCode?: string; isActive?: boolean; executivePin?: string }) {
-    await this.usersRepository.update(id, data);
+    const toSave = { ...data };
+    if (toSave.executivePin) {
+      toSave.executivePin = await bcrypt.hash(toSave.executivePin, 10);
+    }
+    await this.usersRepository.update(id, toSave);
     return this.usersRepository.findOne({ where: { id } });
   }
 

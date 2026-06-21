@@ -1,9 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, In } from 'typeorm';
 import { Invoice, InvoiceStatus, ReconciliationStatus, InvoiceType } from './entities/invoice.entity';
 import { Movement } from '../movements/entities/movement.entity';
 import { Bank } from '../banks/entities/bank.entity';
+import { Branch } from '../branches/entities/branch.entity';
+import { Company } from '../companies/entities/company.entity';
 
 @Injectable()
 export class ReconciliationService {
@@ -14,6 +16,10 @@ export class ReconciliationService {
     private movementsRepo: Repository<Movement>,
     @InjectRepository(Bank)
     private banksRepo: Repository<Bank>,
+    @InjectRepository(Branch)
+    private branchesRepo: Repository<Branch>,
+    @InjectRepository(Company)
+    private companiesRepo: Repository<Company>,
   ) {}
 
   async getAllInvoices(tenantId?: string) {
@@ -80,14 +86,35 @@ export class ReconciliationService {
   }) {
     // Obtener movimientos bancarios
     const movementsQuery = this.movementsRepo.createQueryBuilder('movement');
+    if (filters?.tenantId) {
+      const companies = await this.companiesRepo.find({ where: { tenantId: filters.tenantId }, select: ['id'] });
+      const companyIds = companies.map((c) => c.id);
+      if (companyIds.length > 0) {
+        const branches = await this.branchesRepo.find({ where: { companyId: In(companyIds) }, select: ['id'] });
+        const branchIds = branches.map((b) => b.id);
+        if (branchIds.length > 0) {
+          const tenantBanks = await this.banksRepo.find({ where: { branchId: In(branchIds) }, select: ['id'] });
+          const tenantAccountIds = tenantBanks.map((b) => b.id);
+          if (tenantAccountIds.length > 0) {
+            movementsQuery.andWhere('movement.accountId IN (:...tenantAccountIds)', { tenantAccountIds });
+          } else {
+            movementsQuery.andWhere('1=0');
+          }
+        } else {
+          movementsQuery.andWhere('1=0');
+        }
+      } else {
+        movementsQuery.andWhere('1=0');
+      }
+    }
     if (filters?.bankAccountId) {
       movementsQuery.andWhere('movement.accountId = :accountId', { accountId: filters.bankAccountId });
     }
     if (filters?.startDate) {
-      movementsQuery.andWhere('movement.createdAt >= :startDate', { startDate: filters.startDate });
+      movementsQuery.andWhere('movement.date >= :startDate', { startDate: filters.startDate });
     }
     if (filters?.endDate) {
-      movementsQuery.andWhere('movement.createdAt <= :endDate', { endDate: `${filters.endDate} 23:59:59` });
+      movementsQuery.andWhere('movement.date <= :endDate', { endDate: `${filters.endDate} 23:59:59` });
     }
     const movements = await movementsQuery.getMany();
 
