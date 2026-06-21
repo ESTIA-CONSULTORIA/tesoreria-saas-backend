@@ -72,17 +72,26 @@ export class DashboardService {
         // Vista de empresa específica: obtener cuentas de todas las sucursales de esa empresa
         const branches = await this.branchesRepo.find({ where: { companyId } });
         const branchIds = branches.map(b => b.id);
+        console.log('[Dashboard getKpis] companyId:', companyId, '| branchIds encontrados:', branchIds);
         if (branchIds.length > 0) {
           bankQuery = bankQuery.where('bank.branchId IN (:...branchIds)', { branchIds });
+        } else {
+          bankQuery = bankQuery.where('1=0');
         }
       } else if (tenantId) {
         // Vista consolidada: obtener cuentas de todas las sucursales del tenant
         const companies = await this.companiesRepo.find({ where: { tenantId } });
         const companyIds = companies.map(c => c.id);
-        const branches = await this.branchesRepo.find({ where: { companyId: In(companyIds) } });
-        const branchIds = branches.map(b => b.id);
-        if (branchIds.length > 0) {
-          bankQuery = bankQuery.where('bank.branchId IN (:...branchIds)', { branchIds });
+        if (companyIds.length > 0) {
+          const branches = await this.branchesRepo.find({ where: { companyId: In(companyIds) } });
+          const branchIds = branches.map(b => b.id);
+          if (branchIds.length > 0) {
+            bankQuery = bankQuery.where('bank.branchId IN (:...branchIds)', { branchIds });
+          } else {
+            bankQuery = bankQuery.where('1=0');
+          }
+        } else {
+          bankQuery = bankQuery.where('1=0');
         }
       }
 
@@ -107,10 +116,14 @@ export class DashboardService {
         // Vista de empresa específica: filtrar por companyId a través de las cuentas
         const branches = await this.branchesRepo.find({ where: { companyId } });
         const branchIds = branches.map(b => b.id);
-        const banks = await this.banksRepo.find({ where: { branchId: In(branchIds) } });
-        const accountIds = banks.map(b => b.id);
-        if (accountIds.length > 0) {
-          movementQuery = movementQuery.where('movement.accountId IN (:...accountIds)', { accountIds });
+        if (branchIds.length > 0) {
+          const banks = await this.banksRepo.find({ where: { branchId: In(branchIds) } });
+          const accountIds = banks.map(b => b.id);
+          if (accountIds.length > 0) {
+            movementQuery = movementQuery.where('movement.accountId IN (:...accountIds)', { accountIds });
+          } else {
+            movementQuery = movementQuery.where('1=0');
+          }
         } else {
           movementQuery = movementQuery.where('1=0');
         }
@@ -118,12 +131,20 @@ export class DashboardService {
         // Vista consolidada: filtrar por tenant a través de las cuentas
         const companies = await this.companiesRepo.find({ where: { tenantId } });
         const companyIds = companies.map(c => c.id);
-        const branches = await this.branchesRepo.find({ where: { companyId: In(companyIds) } });
-        const branchIds = branches.map(b => b.id);
-        const banks = await this.banksRepo.find({ where: { branchId: In(branchIds) } });
-        const accountIds = banks.map(b => b.id);
-        if (accountIds.length > 0) {
-          movementQuery = movementQuery.where('movement.accountId IN (:...accountIds)', { accountIds });
+        if (companyIds.length > 0) {
+          const branches = await this.branchesRepo.find({ where: { companyId: In(companyIds) } });
+          const branchIds = branches.map(b => b.id);
+          if (branchIds.length > 0) {
+            const banks = await this.banksRepo.find({ where: { branchId: In(branchIds) } });
+            const accountIds = banks.map(b => b.id);
+            if (accountIds.length > 0) {
+              movementQuery = movementQuery.where('movement.accountId IN (:...accountIds)', { accountIds });
+            } else {
+              movementQuery = movementQuery.where('1=0');
+            }
+          } else {
+            movementQuery = movementQuery.where('1=0');
+          }
         } else {
           movementQuery = movementQuery.where('1=0');
         }
@@ -289,6 +310,7 @@ export class DashboardService {
         companiesBreakdown,
       };
     } catch (error) {
+      console.error('[Dashboard getKpis] Error capturado:', error?.message || error);
       // Devolver datos en cero como fallback en lugar de error 500
       return {
         totalBalance: 0,
