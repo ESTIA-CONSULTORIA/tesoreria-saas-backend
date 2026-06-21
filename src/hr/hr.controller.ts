@@ -157,6 +157,12 @@ export class HrController {
   }
 
   // Attendance
+  @Post('attendance')
+  createManualAttendance(@Body() body: any, @Request() req?: any) {
+    const tenantId = req?.user?.tenantId;
+    return this.service.createManualAttendance({ ...body, tenantId });
+  }
+
   @Get('attendance/today')
   getAttendanceToday(@Headers('x-branch-id') branchId?: string, @Request() req?: any) {
     const bid = req?.user?.branchId || branchId;

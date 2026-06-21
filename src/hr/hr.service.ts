@@ -373,6 +373,37 @@ export class HrService {
     return this.attendanceRepo.findOne({ where: { id: rec.id } });
   }
 
+  async createManualAttendance(data: {
+    employeeId: string;
+    date: string;
+    checkIn?: string;
+    checkOut?: string;
+    tenantId?: string;
+  }): Promise<Attendance | null> {
+    const { employeeId, date, checkIn, checkOut, tenantId } = data;
+    if (!employeeId || !date) throw new BadRequestException('employeeId y date son requeridos');
+
+    const existing = await this.attendanceRepo.findOne({ where: { employeeId, date: date as any } });
+    if (existing) {
+      const updates: any = {};
+      if (checkIn) updates.checkIn = new Date(`${date}T${checkIn}:00`);
+      if (checkOut) updates.checkOut = new Date(`${date}T${checkOut}:00`);
+      await this.attendanceRepo.update(existing.id, updates);
+      return this.attendanceRepo.findOne({ where: { id: existing.id } });
+    }
+
+    const rec = this.attendanceRepo.create({
+      employeeId,
+      tenantId,
+      date: date as any,
+      checkIn: checkIn ? new Date(`${date}T${checkIn}:00`) : new Date(`${date}T08:00:00`),
+      checkOut: checkOut ? new Date(`${date}T${checkOut}:00`) : undefined,
+      method: 'MANUAL',
+      status: 'PRESENTE',
+    });
+    return this.attendanceRepo.save(rec);
+  }
+
   async findTodayAttendanceByEmployee(employeeId: string): Promise<Attendance | null> {
     const today = new Date().toISOString().slice(0, 10);
     return this.attendanceRepo.findOne({ where: { employeeId, date: today as any } });

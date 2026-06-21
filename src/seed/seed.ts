@@ -17,6 +17,21 @@ function randomDateDistributed(): Date {
 export async function seedDatabase(dataSource: DataSource) {
   const usersRepository = dataSource.getRepository('User');
   const rolesRepository = dataSource.getRepository('Role');
+
+  // ── Diagnóstico inicial ──────────────────────────────────────────
+  try {
+    const movRepo = dataSource.getRepository('Movement');
+    const [ventas, sale, income, expense] = await Promise.all([
+      movRepo.count({ where: { category: 'VENTAS' } }),
+      movRepo.count({ where: { category: 'SALE' } }),
+      movRepo.count({ where: { type: 'INCOME' } }),
+      movRepo.count({ where: { type: 'EXPENSE' } }),
+    ]);
+    console.log(`📊 Diagnóstico BD: VENTAS=${ventas} | SALE(legacy)=${sale} | INCOME=${income} | EXPENSE=${expense} | total=${income + expense}`);
+  } catch (diagErr) {
+    console.log('⚠️ Diagnóstico omitido:', diagErr.message);
+  }
+  // ────────────────────────────────────────────────────────────────
   const companiesRepository = dataSource.getRepository('Company');
   const branchesRepository = dataSource.getRepository('Branch');
   const banksRepository = dataSource.getRepository('Bank');
