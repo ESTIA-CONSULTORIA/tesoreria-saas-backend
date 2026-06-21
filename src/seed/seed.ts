@@ -1,5 +1,6 @@
 import { DataSource, IsNull, In } from 'typeorm';
 import * as bcrypt from 'bcrypt';
+import { Transfer } from '../transfers/entities/transfer.entity';
 
 function randomDateDistributed(): Date {
   const rand = Math.random();
@@ -1781,7 +1782,7 @@ export async function seedDatabase(dataSource: DataSource) {
 
   // Seed transfers de demo
   try {
-    const transfersRepository = dataSource.getRepository('Transfer');
+    const transfersRepository = dataSource.getRepository(Transfer);
     const existingTransfers = await transfersRepository.count({ where: { tenantId: demoTenant.id } });
     if (existingTransfers === 0) {
       const [bbvaBank, cajaChicaBank, hsbcNorteBank, banorteBank, hsbcCorpBank] = await Promise.all([
@@ -1795,7 +1796,17 @@ export async function seedDatabase(dataSource: DataSource) {
         || await companiesRepository.findOne({ where: { tenantId: demoTenant.id, tradeName: 'El Sazon' } });
       const comercComp  = await companiesRepository.findOne({ where: { tenantId: demoTenant.id, tradeName: 'Comercializadora Demo' } });
 
-      const transferDefs = [
+      const transferDefs: Array<{
+        fromAccountId: string | undefined;
+        toAccountId: string | undefined;
+        amount: number;
+        concept: string;
+        tipo: 'INTERNA' | 'INTERCOMPAÑIA';
+        status: 'PENDIENTE' | 'AUTORIZADA' | 'RECHAZADA';
+        daysAgo: number;
+        empresaOrigenId?: string;
+        empresaDestinoId?: string;
+      }> = [
         {
           fromAccountId: bbvaBank?.id, toAccountId: cajaChicaBank?.id,
           amount: 15000, concept: 'Fondeo caja chica',
@@ -1824,14 +1835,14 @@ export async function seedDatabase(dataSource: DataSource) {
         if (!td.fromAccountId) continue;
         const saved = await transfersRepository.save({
           tenantId: demoTenant.id,
-          fromAccountId: td.fromAccountId,
-          toAccountId: td.toAccountId || null,
+          fromAccountId: td.fromAccountId!,
+          toAccountId: td.toAccountId ?? undefined,
           amount: td.amount,
           concept: td.concept,
           tipo: td.tipo,
           status: td.status,
-          empresaOrigenId: (td as any).empresaOrigenId || null,
-          empresaDestinoId: (td as any).empresaDestinoId || null,
+          empresaOrigenId: td.empresaOrigenId ?? undefined,
+          empresaDestinoId: td.empresaDestinoId ?? undefined,
         });
         const d = new Date();
         d.setDate(d.getDate() - td.daysAgo);
@@ -1841,7 +1852,7 @@ export async function seedDatabase(dataSource: DataSource) {
       console.log(`✅ ${createdCount} transfers de demo creados`);
     }
   } catch (transferErr: any) {
-    console.log('⚠️ Seed transfers omitido:', transferErr?.message ?? transferErr);
+    console.error('⚠️ Seed transfers fallido:', transferErr?.message ?? transferErr, transferErr?.stack ?? '');
   }
 
   // ═══════════════════════════════════════════════════════════════
