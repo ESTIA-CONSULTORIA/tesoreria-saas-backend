@@ -19,8 +19,8 @@ export class PurchasesController {
     const userBranchId = req?.user?.branchId;
     const userCompanyId = req?.user?.companyId;
 
-    const branchId = userBranchId || headerBranchId;
-    const companyId = userCompanyId || headerCompanyId;
+    const branchId = headerBranchId || userBranchId;
+    const companyId = headerCompanyId || userCompanyId;
 
     return this.purchasesService.findAllOrders(tenantId, status, branchId, companyId);
   }
@@ -84,8 +84,8 @@ export class PurchasesController {
     const userBranchId = req?.user?.branchId;
     const userCompanyId = req?.user?.companyId;
 
-    const branchId = userBranchId || headerBranchId;
-    const companyId = userCompanyId || headerCompanyId;
+    const branchId = headerBranchId || userBranchId;
+    const companyId = headerCompanyId || userCompanyId;
 
     return this.purchasesService.findAllPurchases(tenantId, status, branchId, companyId);
   }
@@ -137,8 +137,8 @@ export class PurchasesController {
     const userBranchId = req?.user?.branchId;
     const userCompanyId = req?.user?.companyId;
 
-    const branchId = userBranchId || headerBranchId;
-    const companyId = userCompanyId || headerCompanyId;
+    const branchId = headerBranchId || userBranchId;
+    const companyId = headerCompanyId || userCompanyId;
 
     return this.purchasesService.getAccountsPayable(tenantId, branchId, companyId);
   }
