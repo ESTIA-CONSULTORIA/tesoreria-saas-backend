@@ -291,14 +291,34 @@ export async function seedDatabase(dataSource: DataSource) {
     }
   }
 
-  // Crear empresas de prueba
-  const existingCompanies = await companiesRepository.find({ where: { tenantId: testTenant.id } });
+  // ═══════════════════════════════════════════════════════════════
+  // CLEANUP: Eliminar duplicados bajo testTenant de deploys anteriores
+  // Comercializadora Demo y Servicios Demo deben vivir bajo demoTenant
+  // ═══════════════════════════════════════════════════════════════
+  for (const name of ['Comercializadora Demo', 'Servicios Demo']) {
+    const dupes = await companiesRepository.find({ where: { tenantId: testTenant.id, tradeName: name } });
+    for (const dupe of dupes) {
+      const dupeBranches = await branchesRepository.find({ where: { companyId: dupe.id } });
+      for (const branch of dupeBranches) {
+        const dupeBanks = await banksRepository.find({ where: { branchId: branch.id } });
+        for (const bank of dupeBanks) {
+          await movementsRepository.delete({ accountId: bank.id });
+          await banksRepository.delete({ id: bank.id });
+        }
+        await branchesRepository.delete({ id: branch.id });
+      }
+      await companiesRepository.delete({ id: dupe.id });
+    }
+    if (dupes.length > 0) {
+      console.log(`🧹 Eliminados ${dupes.length} duplicado(s) de "${name}" bajo testTenant`);
+    }
+  }
 
-  // Crear Comercializadora Demo si no existe
-  let company1 = await companiesRepository.findOne({ where: { tenantId: testTenant.id, tradeName: 'Comercializadora Demo' } });
+  // Crear empresas bajo demoTenant (Grupo Empresarial Demo)
+  let company1 = await companiesRepository.findOne({ where: { tenantId: demoTenant.id, tradeName: 'Comercializadora Demo' } });
   if (!company1) {
     company1 = await companiesRepository.save({
-      tenantId: testTenant.id,
+      tenantId: demoTenant.id,
       legalName: 'Comercializadora Demo S.A. de C.V.',
       tradeName: 'Comercializadora Demo',
       taxId: 'COM987654XYZ',
@@ -308,11 +328,10 @@ export async function seedDatabase(dataSource: DataSource) {
     console.log('✅ Empresa Comercializadora Demo creada');
   }
 
-  // Crear Servicios Demo si no existe
-  let company2 = await companiesRepository.findOne({ where: { tenantId: testTenant.id, tradeName: 'Servicios Demo' } });
+  let company2 = await companiesRepository.findOne({ where: { tenantId: demoTenant.id, tradeName: 'Servicios Demo' } });
   if (!company2) {
     company2 = await companiesRepository.save({
-      tenantId: testTenant.id,
+      tenantId: demoTenant.id,
       legalName: 'Servicios Profesionales Demo S. de R.L.',
       tradeName: 'Servicios Demo',
       taxId: 'SER456789XYZ',

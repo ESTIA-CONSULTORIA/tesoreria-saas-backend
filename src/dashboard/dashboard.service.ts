@@ -72,7 +72,6 @@ export class DashboardService {
         // Vista de empresa específica: obtener cuentas de todas las sucursales de esa empresa
         const branches = await this.branchesRepo.find({ where: { companyId } });
         const branchIds = branches.map(b => b.id);
-        console.log('[Dashboard getKpis] companyId:', companyId, '| branchIds encontrados:', branchIds);
         if (branchIds.length > 0) {
           bankQuery = bankQuery.where('bank.branchId IN (:...branchIds)', { branchIds });
         } else {
