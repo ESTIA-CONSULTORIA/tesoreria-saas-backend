@@ -1666,6 +1666,77 @@ export async function seedDatabase(dataSource: DataSource) {
     console.log(`✅ ${movimientosOp} movimientos con category OPERATIONAL actualizados a GASTOS_VARIABLES`);
   }
 
+  // P4-01: Asegurar mínimo 30 ingresos y 20 egresos por cuenta bancaria
+  {
+    const TARGET_INCOME = 30;
+    const TARGET_EXPENSE = 20;
+    const p4IncomeConcepts = [
+      'Venta del día', 'Cobro de factura', 'Depósito de cliente', 'Venta de mercancía',
+      'Prestación de servicios', 'Cobro anticipo', 'Venta contado', 'Ingreso por comisión',
+    ];
+    const p4ExpenseData = [
+      { concept: 'Pago de nómina',       category: 'GASTOS_FIJOS' },
+      { concept: 'Renta de local',        category: 'GASTOS_FIJOS' },
+      { concept: 'Compra de insumos',     category: 'COSTO_VENTA' },
+      { concept: 'Servicios básicos',     category: 'GASTOS_FIJOS' },
+      { concept: 'Mantenimiento',         category: 'GASTOS_VARIABLES' },
+      { concept: 'Publicidad digital',    category: 'GASTOS_VARIABLES' },
+      { concept: 'Compra materias primas',category: 'COSTO_VENTA' },
+      { concept: 'Asesoría contable',     category: 'GASTOS_VARIABLES' },
+      { concept: 'Impuesto predial',      category: 'IMPUESTOS' },
+      { concept: 'Transporte y logística',category: 'GASTOS_VARIABLES' },
+    ];
+
+    const allDemoTenantBanks = await banksRepository
+      .createQueryBuilder('bank')
+      .innerJoin('Branch', 'branch', 'branch.id::text = bank.branchId::text')
+      .innerJoin('Company', 'company', 'company.id::text = branch.companyId::text')
+      .where('company.tenantId::text = :tid', { tid: demoTenant.id })
+      .getMany();
+
+    for (const bank of allDemoTenantBanks) {
+      const incomeCount = await movementsRepository.count({ where: { accountId: bank.id, type: 'INCOME' } });
+      const expenseCount = await movementsRepository.count({ where: { accountId: bank.id, type: 'EXPENSE' } });
+      let added = 0;
+
+      for (let i = incomeCount; i < TARGET_INCOME; i++) {
+        const d = new Date();
+        d.setDate(d.getDate() - Math.floor(Math.random() * 180));
+        await movementsRepository.save({
+          accountId: bank.id,
+          type: 'INCOME',
+          category: 'VENTAS',
+          concept: p4IncomeConcepts[i % p4IncomeConcepts.length],
+          reference: `P4-ING-${String(i).padStart(3, '0')}`,
+          amount: Math.floor(Math.random() * 20000) + 5000,
+          date: d,
+        });
+        added++;
+      }
+
+      for (let i = expenseCount; i < TARGET_EXPENSE; i++) {
+        const d = new Date();
+        d.setDate(d.getDate() - Math.floor(Math.random() * 180));
+        const ed = p4ExpenseData[i % p4ExpenseData.length];
+        await movementsRepository.save({
+          accountId: bank.id,
+          type: 'EXPENSE',
+          category: ed.category,
+          concept: ed.concept,
+          reference: `P4-EGR-${String(i).padStart(3, '0')}`,
+          amount: Math.floor(Math.random() * 10000) + 1000,
+          date: d,
+        });
+        added++;
+      }
+
+      if (added > 0) {
+        console.log(`✅ Cuenta "${bank.name}": +${added} movimientos añadidos (topup 30/20)`);
+      }
+    }
+    console.log('✅ P4-01 topup completado para todas las empresas demo');
+  }
+
   // ═══════════════════════════════════════════════════════════════
   // PARTE 5: AGREGAR ÓRDENES DE COMPRA, FACTURAS E INVENTARIO
   // ═══════════════════════════════════════════════════════════════
@@ -2124,11 +2195,17 @@ export async function seedDatabase(dataSource: DataSource) {
           console.log(`✅ Empleado "${ed.nombre}" creado`);
         } else {
           // Migración: actualizar SDI si está en cero
+          const needsUpdate: any = {};
           if (!Number(existingEmp.salarioDiarioIntegrado) && sdiMap[ed.nombre]) {
-            await empRepo.update(existingEmp.id, {
-              salarioDiarioIntegrado: sdiMap[ed.nombre],
-              periodoPago: existingEmp.periodoPago || 'QUINCENAL',
-            });
+            needsUpdate.salarioDiarioIntegrado = sdiMap[ed.nombre];
+            needsUpdate.periodoPago = existingEmp.periodoPago || 'QUINCENAL';
+          }
+          // Migración P4-04: vincular userId si falta (para portal empleado)
+          if (!existingEmp.userId && ed.userId) {
+            needsUpdate.userId = ed.userId;
+          }
+          if (Object.keys(needsUpdate).length > 0) {
+            await empRepo.update(existingEmp.id, needsUpdate);
           }
           savedEmps.push(existingEmp);
           console.log(`ℹ️ Empleado "${ed.nombre}" ya existe`);
