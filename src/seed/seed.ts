@@ -295,7 +295,7 @@ export async function seedDatabase(dataSource: DataSource) {
   const existingCompanies = await companiesRepository.find({ where: { tenantId: testTenant.id } });
 
   // Crear Comercializadora Demo si no existe
-  let company1 = await companiesRepository.findOne({ where: { id: 'e7f801da-6fb6-48e6-9464-7706903c4854' } });
+  let company1 = await companiesRepository.findOne({ where: { tenantId: testTenant.id, tradeName: 'Comercializadora Demo' } });
   if (!company1) {
     company1 = await companiesRepository.save({
       tenantId: testTenant.id,
@@ -309,7 +309,7 @@ export async function seedDatabase(dataSource: DataSource) {
   }
 
   // Crear Servicios Demo si no existe
-  let company2 = await companiesRepository.findOne({ where: { id: 'b3270c6b-4e4e-45b6-aff3-ab4a70e5284f' } });
+  let company2 = await companiesRepository.findOne({ where: { tenantId: testTenant.id, tradeName: 'Servicios Demo' } });
   if (!company2) {
     company2 = await companiesRepository.save({
       tenantId: testTenant.id,
@@ -549,11 +549,20 @@ export async function seedDatabase(dataSource: DataSource) {
   // PARTE: EMPRESAS DEL TENANT DEMO CON CUENTAS Y MOVIMIENTOS
   // ═══════════════════════════════════════════════════════════════
 
-  // Buscar empresas existentes por sus IDs conocidos
-  const sazon = await companiesRepository.findOne({ where: { id: '602512f6-496f-4d15-bd0f-ca3c0b61a8ee' } });
-  const sonorense = await companiesRepository.findOne({ where: { id: '338dc37a-7371-4c42-ad7b-739daa8d2a40' } });
-  const comercializadora = await companiesRepository.findOne({ where: { id: 'e7f801da-6fb6-48e6-9464-7706903c4854' } });
-  const servicios = await companiesRepository.findOne({ where: { id: 'b3270c6b-4e4e-45b6-aff3-ab4a70e5284f' } });
+  // Buscar empresas por nombre (no por UUID hardcodeado)
+  const sazon = await companiesRepository.findOne({ where: { tenantId: demoTenant.id, tradeName: 'El Sazón' } })
+    || await companiesRepository.findOne({ where: { tenantId: demoTenant.id, tradeName: 'El Sazon' } });
+  const sonorense = await companiesRepository.findOne({ where: { tenantId: demoTenant.id, tradeName: 'El Sonorense' } })
+    || await companiesRepository.save({
+      tenantId: demoTenant.id,
+      legalName: 'El Sonorense SA de CV',
+      tradeName: 'El Sonorense',
+      rfc: 'SNOR123456789',
+      giro: 'Restaurante',
+      isActive: true,
+    });
+  const comercializadora = company1;
+  const servicios = company2;
 
   // Actualizar nombre de "El Sazón Matriz" a "El Sazón"
   if (sazon && sazon.tradeName === 'El Sazón Matriz') {
@@ -665,7 +674,22 @@ export async function seedDatabase(dataSource: DataSource) {
     }
   }
 
-  // Sucursal SON-HER eliminada de BD - no recrear
+  // Crear sucursal para El Sonorense: Matriz
+  if (sonorense) {
+    let sonorenseBranch = await branchesRepository.findOne({ where: { companyId: sonorense.id, code: 'SON-MAT' } });
+    if (!sonorenseBranch) {
+      sonorenseBranch = await branchesRepository.save({
+        companyId: sonorense.id,
+        code: 'SON-MAT',
+        name: 'Matriz',
+        address: 'Blvd. Principal #200, Centro',
+        city: 'Hermosillo',
+        state: 'Sonora',
+        isActive: true,
+      });
+      console.log('✅ Sucursal Matriz de El Sonorense creada');
+    }
+  }
 
   // Crear sucursal para Servicios Demo: Corporativo
   if (servicios) {
