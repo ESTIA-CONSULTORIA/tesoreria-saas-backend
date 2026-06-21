@@ -1566,7 +1566,7 @@ export async function seedDatabase(dataSource: DataSource) {
       await movementsRepository.save({
         accountId: bankBBVA?.id,
         type: 'INCOME',
-        category: 'SALE',
+        category: 'VENTAS',
         concept: incomeConcepts[Math.floor(Math.random() * incomeConcepts.length)],
         reference: `FAC-${String(i + 100).padStart(4, '0')}`,
         amount: amount,
@@ -1574,23 +1574,40 @@ export async function seedDatabase(dataSource: DataSource) {
       });
     }
 
-    // 20 egresos por gastos operativos
-    const expenseConcepts = [
-      'Pago de nómina', 'Renta de local', 'Servicios de luz', 'Servicios de agua',
-      'Servicios de gas', 'Servicios de internet', 'Compra de insumos', 'Mantenimiento',
-      'Limpieza', 'Seguros', 'Publicidad', 'Transporte', 'Equipo de cocina',
-      'Vajilla', 'Uniformes', 'Licencias', 'Impuestos', 'Asesoría', 'Reparaciones', 'Otros'
+    // 20 egresos por gastos operativos (con categorías correctas para reportes)
+    const expenseData = [
+      { concept: 'Pago de nómina',      category: 'GASTOS_FIJOS',    minAmt: 15000, maxAmt: 25000 },
+      { concept: 'Renta de local',       category: 'GASTOS_FIJOS',    minAmt: 8000,  maxAmt: 12000 },
+      { concept: 'Servicios de luz',     category: 'GASTOS_FIJOS',    minAmt: 2000,  maxAmt: 4000  },
+      { concept: 'Servicios de agua',    category: 'GASTOS_FIJOS',    minAmt: 500,   maxAmt: 1500  },
+      { concept: 'Servicios de gas',     category: 'GASTOS_FIJOS',    minAmt: 1000,  maxAmt: 3000  },
+      { concept: 'Servicios de internet',category: 'GASTOS_FIJOS',    minAmt: 500,   maxAmt: 1200  },
+      { concept: 'Compra de insumos',    category: 'COSTO_VENTA',     minAmt: 5000,  maxAmt: 15000 },
+      { concept: 'Compra de materias primas', category: 'COSTO_VENTA', minAmt: 3000, maxAmt: 10000 },
+      { concept: 'Mantenimiento',        category: 'GASTOS_VARIABLES', minAmt: 1000, maxAmt: 5000  },
+      { concept: 'Limpieza',             category: 'GASTOS_VARIABLES', minAmt: 500,  maxAmt: 2000  },
+      { concept: 'Seguros',              category: 'GASTOS_FIJOS',    minAmt: 2000,  maxAmt: 4000  },
+      { concept: 'Publicidad',           category: 'GASTOS_VARIABLES', minAmt: 1000, maxAmt: 5000  },
+      { concept: 'Transporte',           category: 'GASTOS_VARIABLES', minAmt: 500,  maxAmt: 2000  },
+      { concept: 'Equipo de cocina',     category: 'COSTO_VENTA',     minAmt: 2000,  maxAmt: 8000  },
+      { concept: 'Vajilla',              category: 'COSTO_VENTA',     minAmt: 1000,  maxAmt: 3000  },
+      { concept: 'Uniformes',            category: 'GASTOS_FIJOS',    minAmt: 1000,  maxAmt: 3000  },
+      { concept: 'Impuestos',            category: 'IMPUESTOS',        minAmt: 3000, maxAmt: 8000  },
+      { concept: 'Asesoría contable',    category: 'GASTOS_VARIABLES', minAmt: 2000, maxAmt: 5000  },
+      { concept: 'Reparaciones',         category: 'GASTOS_VARIABLES', minAmt: 500,  maxAmt: 3000  },
+      { concept: 'Gastos misceláneos',   category: 'GASTOS_VARIABLES', minAmt: 200,  maxAmt: 1500  },
     ];
 
     for (let i = 0; i < 20; i++) {
-      const amount = Math.floor(Math.random() * 5000) + 1000;
+      const ed = expenseData[i];
+      const amount = Math.floor(Math.random() * (ed.maxAmt - ed.minAmt)) + ed.minAmt;
       const date = randomDateDistributed();
 
       await movementsRepository.save({
         accountId: bankBanorte?.id || bankBBVA?.id,
         type: 'EXPENSE',
-        category: 'OPERATIONAL',
-        concept: expenseConcepts[i],
+        category: ed.category,
+        concept: ed.concept,
         reference: `GAS-${String(i + 100).padStart(4, '0')}`,
         amount: amount,
         date: date,
@@ -1624,6 +1641,29 @@ export async function seedDatabase(dataSource: DataSource) {
     }
 
     console.log('✅ 65 movimientos históricos creados (40 ingresos, 20 egresos, 5 transferencias)');
+  }
+
+  // Migración: corregir categorías de movimientos existentes para que reportes funcionen
+  const movimientosSale = await movementsRepository.count({ where: { category: 'SALE' } });
+  if (movimientosSale > 0) {
+    await movementsRepository
+      .createQueryBuilder()
+      .update()
+      .set({ category: 'VENTAS' })
+      .where('category = :cat', { cat: 'SALE' })
+      .execute();
+    console.log(`✅ ${movimientosSale} movimientos con category SALE actualizados a VENTAS`);
+  }
+
+  const movimientosOp = await movementsRepository.count({ where: { category: 'OPERATIONAL' } });
+  if (movimientosOp > 0) {
+    await movementsRepository
+      .createQueryBuilder()
+      .update()
+      .set({ category: 'GASTOS_VARIABLES' })
+      .where('category = :cat', { cat: 'OPERATIONAL' })
+      .execute();
+    console.log(`✅ ${movimientosOp} movimientos con category OPERATIONAL actualizados a GASTOS_VARIABLES`);
   }
 
   // ═══════════════════════════════════════════════════════════════
@@ -2052,6 +2092,15 @@ export async function seedDatabase(dataSource: DataSource) {
         { nombre: 'Laura Torres', apellidos: '', puesto: 'Hostess', departamento: 'Servicio', salarioQuincenal: 5000, userId: undefined },
       ];
 
+      const sdiMap: Record<string, number> = {
+        'Juan López': 1200,
+        'María García': 433.33,
+        'Carlos Mendoza': 366.67,
+        'Ana Martínez': 466.67,
+        'Roberto Sánchez': 800,
+        'Laura Torres': 333.33,
+      };
+
       const savedEmps: any[] = [];
       for (const ed of empDataList) {
         const existingEmp = await empRepo.findOne({ where: { tenantId: demoTenant.id, nombre: ed.nombre } });
@@ -2065,6 +2114,8 @@ export async function seedDatabase(dataSource: DataSource) {
             puesto: ed.puesto,
             departamento: ed.departamento,
             salarioQuincenal: ed.salarioQuincenal,
+            salarioDiarioIntegrado: sdiMap[ed.nombre] || 0,
+            periodoPago: 'QUINCENAL',
             userId: ed.userId || undefined,
             status: 'ACTIVO',
             fechaIngreso: fechaIngresoStr,
@@ -2072,6 +2123,13 @@ export async function seedDatabase(dataSource: DataSource) {
           savedEmps.push(emp);
           console.log(`✅ Empleado "${ed.nombre}" creado`);
         } else {
+          // Migración: actualizar SDI si está en cero
+          if (!Number(existingEmp.salarioDiarioIntegrado) && sdiMap[ed.nombre]) {
+            await empRepo.update(existingEmp.id, {
+              salarioDiarioIntegrado: sdiMap[ed.nombre],
+              periodoPago: existingEmp.periodoPago || 'QUINCENAL',
+            });
+          }
           savedEmps.push(existingEmp);
           console.log(`ℹ️ Empleado "${ed.nombre}" ya existe`);
         }
