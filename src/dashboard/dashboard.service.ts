@@ -295,45 +295,56 @@ export class DashboardService {
       }> = [];
 
       if (companyId && !branchId) {
-        const companyBranches = await this.branchesRepo
-          .createQueryBuilder('branch')
-          .where('branch.companyId::text = :companyId', { companyId })
-          .getMany();
-        const branchIds = companyBranches.map(b => b.id);
+        try {
+          await Promise.race([
+            (async () => {
+              const companyBranches = await this.branchesRepo
+                .createQueryBuilder('branch')
+                .where('branch.companyId::text = :companyId', { companyId })
+                .getMany();
+              const branchIds = companyBranches.map(b => b.id);
 
-        if (branchIds.length > 0) {
-          const balanceRows = await this.banksRepo
-            .createQueryBuilder('bank')
-            .select('bank.branchId', 'branchId')
-            .addSelect('COALESCE(SUM(bank.balance), 0)', 'balance')
-            .where('bank.branchId IN (:...branchIds)', { branchIds })
-            .groupBy('bank.branchId')
-            .getRawMany();
+              if (branchIds.length > 0) {
+                const balanceRows = await this.banksRepo
+                  .createQueryBuilder('bank')
+                  .select('bank.branchId', 'branchId')
+                  .addSelect('COALESCE(SUM(bank.balance), 0)', 'balance')
+                  .where('bank.branchId IN (:...branchIds)', { branchIds })
+                  .groupBy('bank.branchId')
+                  .getRawMany();
 
-          const movRows = await this.movementsRepo
-            .createQueryBuilder('m')
-            .innerJoin('bank', 'bank', 'bank.id = m.accountId')
-            .select('bank.branchId', 'branchId')
-            .addSelect('m.type', 'type')
-            .addSelect('COALESCE(SUM(m.amount), 0)', 'total')
-            .where('bank.branchId IN (:...branchIds)', { branchIds })
-            .andWhere('m.date >= :startDate', { startDate })
-            .andWhere('m.date <= :endDate', { endDate: now })
-            .groupBy('bank.branchId, m.type')
-            .getRawMany();
+                const movRows = await this.movementsRepo
+                  .createQueryBuilder('m')
+                  .innerJoin('bank', 'bank', 'bank.id = m.accountId')
+                  .select('bank.branchId', 'branchId')
+                  .addSelect('m.type', 'type')
+                  .addSelect('COALESCE(SUM(m.amount), 0)', 'total')
+                  .where('bank.branchId IN (:...branchIds)', { branchIds })
+                  .andWhere('m.date >= :startDate', { startDate })
+                  .andWhere('m.date <= :endDate', { endDate: now })
+                  .groupBy('bank.branchId, m.type')
+                  .getRawMany();
 
-          for (const branch of companyBranches) {
-            const bal = balanceRows.find(r => r.branchId === branch.id);
-            const inc = movRows.find(r => r.branchId === branch.id && r.type === 'INCOME');
-            const exp = movRows.find(r => r.branchId === branch.id && r.type === 'EXPENSE');
-            branchesBreakdown.push({
-              branchId: branch.id,
-              branchName: branch.name,
-              balance: Number(bal?.balance || 0),
-              income: Number(inc?.total || 0),
-              expense: Number(exp?.total || 0),
-            });
-          }
+                for (const branch of companyBranches) {
+                  const bal = balanceRows.find(r => r.branchId === branch.id);
+                  const inc = movRows.find(r => r.branchId === branch.id && r.type === 'INCOME');
+                  const exp = movRows.find(r => r.branchId === branch.id && r.type === 'EXPENSE');
+                  branchesBreakdown.push({
+                    branchId: branch.id,
+                    branchName: branch.name,
+                    balance: Number(bal?.balance || 0),
+                    income: Number(inc?.total || 0),
+                    expense: Number(exp?.total || 0),
+                  });
+                }
+              }
+            })(),
+            new Promise<void>((_, reject) =>
+              setTimeout(() => reject(new Error('branchesBreakdown timeout')), 3000)
+            ),
+          ]);
+        } catch {
+          // branchesBreakdown stays []
         }
       }
 

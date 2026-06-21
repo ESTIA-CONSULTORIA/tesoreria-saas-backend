@@ -1,15 +1,18 @@
 import { Body, Controller, Get, Param, Post, Put } from '@nestjs/common';
 import { TenantSettingsService } from './tenant-settings.service';
+import { Public } from '../auth/public.decorator';
 
 @Controller('tenant-settings')
 export class TenantSettingsController {
   constructor(private service: TenantSettingsService) {}
 
+  @Public()
   @Get('defaults')
   getDefaults() {
     return this.service.getDefaults();
   }
 
+  @Public()
   @Get(':tenantId')
   findByTenant(@Param('tenantId') tenantId: string) {
     return this.service.findByTenant(tenantId);
