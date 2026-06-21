@@ -1779,6 +1779,69 @@ export async function seedDatabase(dataSource: DataSource) {
     console.log('✅ P4-01 topup completado para todas las empresas demo');
   }
 
+  // Seed transfers de demo
+  {
+    const transfersRepository = dataSource.getRepository('Transfer');
+    const existingTransfers = await transfersRepository.count({ where: { tenantId: demoTenant.id } });
+    if (existingTransfers === 0) {
+      const [bbvaBank, cajaChicaBank, hsbcNorteBank, banorteBank, hsbcCorpBank] = await Promise.all([
+        banksRepository.findOne({ where: { name: 'BBVA Cuenta Operativa' } }),
+        banksRepository.findOne({ where: { name: 'Caja Chica' } }),
+        banksRepository.findOne({ where: { name: 'HSBC Cuenta Norte' } }),
+        banksRepository.findOne({ where: { name: 'Banorte Cuenta Principal' } }),
+        banksRepository.findOne({ where: { name: 'HSBC Cuenta Corporativa' } }),
+      ]);
+      const sazonComp   = await companiesRepository.findOne({ where: { tenantId: demoTenant.id, tradeName: 'El Sazón' } })
+        || await companiesRepository.findOne({ where: { tenantId: demoTenant.id, tradeName: 'El Sazon' } });
+      const comercComp  = await companiesRepository.findOne({ where: { tenantId: demoTenant.id, tradeName: 'Comercializadora Demo' } });
+
+      const transferDefs = [
+        {
+          fromAccountId: bbvaBank?.id, toAccountId: cajaChicaBank?.id,
+          amount: 15000, concept: 'Fondeo caja chica',
+          tipo: 'INTERNA', status: 'AUTORIZADA', daysAgo: 20,
+        },
+        {
+          fromAccountId: hsbcNorteBank?.id, toAccountId: banorteBank?.id,
+          amount: 8500, concept: 'Traslado operativo',
+          tipo: 'INTERNA', status: 'AUTORIZADA', daysAgo: 10,
+        },
+        {
+          fromAccountId: bbvaBank?.id, toAccountId: hsbcCorpBank?.id,
+          amount: 25000, concept: 'Préstamo intercompañía',
+          tipo: 'INTERCOMPAÑIA', status: 'PENDIENTE', daysAgo: 3,
+          empresaOrigenId: sazonComp?.id, empresaDestinoId: comercComp?.id,
+        },
+        {
+          fromAccountId: banorteBank?.id, toAccountId: cajaChicaBank?.id,
+          amount: 5000, concept: 'Traslado rechazado por saldo insuficiente',
+          tipo: 'INTERNA', status: 'RECHAZADA', daysAgo: 30,
+        },
+      ];
+
+      let createdCount = 0;
+      for (const td of transferDefs) {
+        if (!td.fromAccountId) continue;
+        const saved = await transfersRepository.save({
+          tenantId: demoTenant.id,
+          fromAccountId: td.fromAccountId,
+          toAccountId: td.toAccountId || null,
+          amount: td.amount,
+          concept: td.concept,
+          tipo: td.tipo,
+          status: td.status,
+          empresaOrigenId: (td as any).empresaOrigenId || null,
+          empresaDestinoId: (td as any).empresaDestinoId || null,
+        });
+        const d = new Date();
+        d.setDate(d.getDate() - td.daysAgo);
+        await dataSource.query(`UPDATE transfer SET "createdAt" = $1 WHERE id = $2`, [d.toISOString(), saved.id]);
+        createdCount++;
+      }
+      console.log(`✅ ${createdCount} transfers de demo creados`);
+    }
+  }
+
   // ═══════════════════════════════════════════════════════════════
   // PARTE 5: AGREGAR ÓRDENES DE COMPRA, FACTURAS E INVENTARIO
   // ═══════════════════════════════════════════════════════════════
@@ -2193,18 +2256,18 @@ export async function seedDatabase(dataSource: DataSource) {
       const uMesero = await usersRepository.findOne({ where: { email: 'mesero@demo.com' } });
       const uContador = await usersRepository.findOne({ where: { email: 'contador@demo.com' } });
 
-      const fechaIngresoHR = new Date();
-      fechaIngresoHR.setFullYear(fechaIngresoHR.getFullYear() - 1);
-      const fechaIngresoStr = fechaIngresoHR.toISOString().split('T')[0];
+      function daysBack(days: number): string {
+        const d = new Date(); d.setDate(d.getDate() - days); return d.toISOString().split('T')[0];
+      }
 
       // ─── 6 Empleados ─────────────────────────────────────────────
       const empDataList = [
-        { nombre: 'Juan López', apellidos: 'Gerente', puesto: 'Gerente Operaciones', departamento: 'Dirección', salarioQuincenal: 18000, userId: uGerenteSazon?.id },
-        { nombre: 'María García', apellidos: '', puesto: 'Cajera', departamento: 'Operaciones', salarioQuincenal: 6500, userId: uCajero?.id },
-        { nombre: 'Carlos Mendoza', apellidos: '', puesto: 'Mesero', departamento: 'Servicio', salarioQuincenal: 5500, userId: uMesero?.id },
-        { nombre: 'Ana Martínez', apellidos: '', puesto: 'Cocinera', departamento: 'Cocina', salarioQuincenal: 7000, userId: undefined },
-        { nombre: 'Roberto Sánchez', apellidos: '', puesto: 'Contador', departamento: 'Administración', salarioQuincenal: 12000, userId: uContador?.id },
-        { nombre: 'Laura Torres', apellidos: '', puesto: 'Hostess', departamento: 'Servicio', salarioQuincenal: 5000, userId: undefined },
+        { nombre: 'Juan López',     apellidos: 'Gerente', puesto: 'Gerente Operaciones', departamento: 'Dirección',     salarioQuincenal: 18000, userId: uGerenteSazon?.id, fechaIngreso: daysBack(900) },
+        { nombre: 'María García',   apellidos: '',        puesto: 'Cajera',              departamento: 'Operaciones',   salarioQuincenal: 6500,  userId: uCajero?.id,        fechaIngreso: daysBack(540) },
+        { nombre: 'Carlos Mendoza', apellidos: '',        puesto: 'Mesero',              departamento: 'Servicio',      salarioQuincenal: 5500,  userId: uMesero?.id,        fechaIngreso: daysBack(240) },
+        { nombre: 'Ana Martínez',   apellidos: '',        puesto: 'Cocinera',            departamento: 'Cocina',        salarioQuincenal: 7000,  userId: undefined,          fechaIngreso: daysBack(730) },
+        { nombre: 'Roberto Sánchez',apellidos: '',        puesto: 'Contador',            departamento: 'Administración',salarioQuincenal: 12000, userId: uContador?.id,      fechaIngreso: daysBack(1095) },
+        { nombre: 'Laura Torres',   apellidos: '',        puesto: 'Hostess',             departamento: 'Servicio',      salarioQuincenal: 5000,  userId: undefined,          fechaIngreso: daysBack(120) },
       ];
 
       const sdiMap: Record<string, number> = {
@@ -2233,7 +2296,7 @@ export async function seedDatabase(dataSource: DataSource) {
             periodoPago: 'QUINCENAL',
             userId: ed.userId || undefined,
             status: 'ACTIVO',
-            fechaIngreso: fechaIngresoStr,
+            fechaIngreso: (ed as any).fechaIngreso,
           });
           savedEmps.push(emp);
           console.log(`✅ Empleado "${ed.nombre}" creado`);
@@ -2247,6 +2310,16 @@ export async function seedDatabase(dataSource: DataSource) {
           // Migración P4-04: vincular userId si falta (para portal empleado)
           if (!existingEmp.userId && ed.userId) {
             needsUpdate.userId = ed.userId;
+          }
+          // Migración: individualizar fechaIngreso si todos tienen la misma fecha genérica
+          if ((ed as any).fechaIngreso && existingEmp.fechaIngreso) {
+            const existing = new Date(existingEmp.fechaIngreso).toISOString().split('T')[0];
+            const oneYearAgo = new Date();
+            oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+            const genericDate = oneYearAgo.toISOString().split('T')[0];
+            if (existing === genericDate) {
+              needsUpdate.fechaIngreso = (ed as any).fechaIngreso;
+            }
           }
           if (Object.keys(needsUpdate).length > 0) {
             await empRepo.update(existingEmp.id, needsUpdate);
