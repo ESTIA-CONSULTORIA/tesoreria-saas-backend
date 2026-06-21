@@ -43,9 +43,13 @@ async function bootstrap() {
   const jwtMiddleware = app.get(JwtMiddleware);
   app.use((req, res, next) => jwtMiddleware.use(req, res, next));
 
-  // Ejecutar seed después de iniciar la aplicación
+  // Ejecutar seed — errores no deben bloquear el arranque del servidor
   const dataSource = app.get(getDataSourceToken());
-  await seedDatabase(dataSource);
+  try {
+    await seedDatabase(dataSource);
+  } catch (seedErr: any) {
+    console.error('⚠️ Seed falló pero el servidor continuará:', seedErr?.message ?? seedErr);
+  }
 
   const port = process.env.PORT ?? 3000;
   const host = '0.0.0.0';

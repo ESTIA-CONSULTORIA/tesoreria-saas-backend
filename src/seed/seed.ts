@@ -1780,7 +1780,7 @@ export async function seedDatabase(dataSource: DataSource) {
   }
 
   // Seed transfers de demo
-  {
+  try {
     const transfersRepository = dataSource.getRepository('Transfer');
     const existingTransfers = await transfersRepository.count({ where: { tenantId: demoTenant.id } });
     if (existingTransfers === 0) {
@@ -1840,6 +1840,8 @@ export async function seedDatabase(dataSource: DataSource) {
       }
       console.log(`✅ ${createdCount} transfers de demo creados`);
     }
+  } catch (transferErr: any) {
+    console.log('⚠️ Seed transfers omitido:', transferErr?.message ?? transferErr);
   }
 
   // ═══════════════════════════════════════════════════════════════
