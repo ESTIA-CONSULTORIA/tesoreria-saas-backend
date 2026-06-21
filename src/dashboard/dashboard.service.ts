@@ -296,37 +296,39 @@ export class DashboardService {
 
       if (companyId && !branchId) {
         const companyBranches = await this.branchesRepo.find({ where: { companyId } });
-        for (const branch of companyBranches) {
-          const branchBanks = await this.banksRepo.find({ where: { branchId: branch.id } });
-          const accountIds = branchBanks.map(b => b.id);
-          if (accountIds.length > 0) {
-            const branchBalanceRaw = await this.banksRepo
-              .createQueryBuilder('bank')
-              .select('COALESCE(SUM(bank.balance), 0)', 'total')
-              .where('bank.id IN (:...accountIds)', { accountIds })
-              .getRawOne();
-            const branchIncomeRaw = await this.movementsRepo
-              .createQueryBuilder('movement')
-              .select('COALESCE(SUM(movement.amount), 0)', 'total')
-              .where('movement.accountId IN (:...accountIds)', { accountIds })
-              .andWhere('movement.type = :type', { type: 'INCOME' })
-              .andWhere('movement.date >= :startDate', { startDate })
-              .andWhere('movement.date <= :endDate', { endDate: now })
-              .getRawOne();
-            const branchExpenseRaw = await this.movementsRepo
-              .createQueryBuilder('movement')
-              .select('COALESCE(SUM(movement.amount), 0)', 'total')
-              .where('movement.accountId IN (:...accountIds)', { accountIds })
-              .andWhere('movement.type = :type', { type: 'EXPENSE' })
-              .andWhere('movement.date >= :startDate', { startDate })
-              .andWhere('movement.date <= :endDate', { endDate: now })
-              .getRawOne();
+        const branchIds = companyBranches.map(b => b.id);
+
+        if (branchIds.length > 0) {
+          const balanceRows = await this.banksRepo
+            .createQueryBuilder('bank')
+            .select('bank.branchId', 'branchId')
+            .addSelect('COALESCE(SUM(bank.balance), 0)', 'balance')
+            .where('bank.branchId IN (:...branchIds)', { branchIds })
+            .groupBy('bank.branchId')
+            .getRawMany();
+
+          const movRows = await this.movementsRepo
+            .createQueryBuilder('m')
+            .innerJoin('bank', 'bank', 'bank.id = m.accountId')
+            .select('bank.branchId', 'branchId')
+            .addSelect('m.type', 'type')
+            .addSelect('COALESCE(SUM(m.amount), 0)', 'total')
+            .where('bank.branchId IN (:...branchIds)', { branchIds })
+            .andWhere('m.date >= :startDate', { startDate })
+            .andWhere('m.date <= :endDate', { endDate: now })
+            .groupBy('bank.branchId, m.type')
+            .getRawMany();
+
+          for (const branch of companyBranches) {
+            const bal = balanceRows.find(r => r.branchId === branch.id);
+            const inc = movRows.find(r => r.branchId === branch.id && r.type === 'INCOME');
+            const exp = movRows.find(r => r.branchId === branch.id && r.type === 'EXPENSE');
             branchesBreakdown.push({
               branchId: branch.id,
               branchName: branch.name,
-              balance: Number(branchBalanceRaw?.total || 0),
-              income: Number(branchIncomeRaw?.total || 0),
-              expense: Number(branchExpenseRaw?.total || 0),
+              balance: Number(bal?.balance || 0),
+              income: Number(inc?.total || 0),
+              expense: Number(exp?.total || 0),
             });
           }
         }
