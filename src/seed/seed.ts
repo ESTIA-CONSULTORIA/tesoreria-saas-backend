@@ -1,6 +1,5 @@
 import { DataSource, IsNull, In } from 'typeorm';
 import * as bcrypt from 'bcrypt';
-import { Transfer } from '../transfers/entities/transfer.entity';
 
 function randomDateDistributed(): Date {
   const rand = Math.random();
@@ -1780,11 +1779,12 @@ export async function seedDatabase(dataSource: DataSource) {
     console.log('✅ P4-01 topup completado para todas las empresas demo');
   }
 
-  // Seed transfers de demo
+  // Seed transfers de demo (raw SQL para evitar problemas con entity metadata)
   try {
-    const transfersRepository = dataSource.getRepository(Transfer);
-    const existingTransfers = await transfersRepository.count({ where: { tenantId: demoTenant.id } });
-    if (existingTransfers === 0) {
+    const existingTransfersRaw = await dataSource.query(
+      `SELECT COUNT(*) FROM transfer WHERE "tenantId" = $1`, [demoTenant.id]
+    );
+    if (Number(existingTransfersRaw[0].count) === 0) {
       const [bbvaBank, cajaChicaBank, hsbcNorteBank, banorteBank, hsbcCorpBank] = await Promise.all([
         banksRepository.findOne({ where: { name: 'BBVA Cuenta Operativa' } }),
         banksRepository.findOne({ where: { name: 'Caja Chica' } }),
@@ -1792,64 +1792,33 @@ export async function seedDatabase(dataSource: DataSource) {
         banksRepository.findOne({ where: { name: 'Banorte Cuenta Principal' } }),
         banksRepository.findOne({ where: { name: 'HSBC Cuenta Corporativa' } }),
       ]);
-      const sazonComp   = await companiesRepository.findOne({ where: { tenantId: demoTenant.id, tradeName: 'El Sazón' } })
+      const sazonComp  = await companiesRepository.findOne({ where: { tenantId: demoTenant.id, tradeName: 'El Sazón' } })
         || await companiesRepository.findOne({ where: { tenantId: demoTenant.id, tradeName: 'El Sazon' } });
-      const comercComp  = await companiesRepository.findOne({ where: { tenantId: demoTenant.id, tradeName: 'Comercializadora Demo' } });
+      const comercComp = await companiesRepository.findOne({ where: { tenantId: demoTenant.id, tradeName: 'Comercializadora Demo' } });
 
-      const transferDefs: Array<{
-        fromAccountId: string | undefined;
-        toAccountId: string | undefined;
-        amount: number;
-        concept: string;
-        tipo: 'INTERNA' | 'INTERCOMPAÑIA';
-        status: 'PENDIENTE' | 'AUTORIZADA' | 'RECHAZADA';
-        daysAgo: number;
-        empresaOrigenId?: string;
-        empresaDestinoId?: string;
-      }> = [
-        {
-          fromAccountId: bbvaBank?.id, toAccountId: cajaChicaBank?.id,
-          amount: 15000, concept: 'Fondeo caja chica',
-          tipo: 'INTERNA', status: 'AUTORIZADA', daysAgo: 20,
-        },
-        {
-          fromAccountId: hsbcNorteBank?.id, toAccountId: banorteBank?.id,
-          amount: 8500, concept: 'Traslado operativo',
-          tipo: 'INTERNA', status: 'AUTORIZADA', daysAgo: 10,
-        },
-        {
-          fromAccountId: bbvaBank?.id, toAccountId: hsbcCorpBank?.id,
-          amount: 25000, concept: 'Préstamo intercompañía',
-          tipo: 'INTERCOMPAÑIA', status: 'PENDIENTE', daysAgo: 3,
-          empresaOrigenId: sazonComp?.id, empresaDestinoId: comercComp?.id,
-        },
-        {
-          fromAccountId: banorteBank?.id, toAccountId: cajaChicaBank?.id,
-          amount: 5000, concept: 'Traslado rechazado por saldo insuficiente',
-          tipo: 'INTERNA', status: 'RECHAZADA', daysAgo: 30,
-        },
+      console.log(`🔍 Transfer seed: BBVA=${bbvaBank?.id?.slice(0,8)}, Caja=${cajaChicaBank?.id?.slice(0,8)}, HSBC_N=${hsbcNorteBank?.id?.slice(0,8)}, Banorte=${banorteBank?.id?.slice(0,8)}, HSBC_C=${hsbcCorpBank?.id?.slice(0,8)}`);
+
+      const tDefs = [
+        { from: bbvaBank?.id,      to: cajaChicaBank?.id,  amount: 15000, concept: 'Fondeo caja chica',                              tipo: 'INTERNA',        status: 'AUTORIZADA', daysAgo: 20, origen: null,          destino: null },
+        { from: hsbcNorteBank?.id, to: banorteBank?.id,    amount: 8500,  concept: 'Traslado operativo',                             tipo: 'INTERNA',        status: 'AUTORIZADA', daysAgo: 10, origen: null,          destino: null },
+        { from: bbvaBank?.id,      to: hsbcCorpBank?.id,   amount: 25000, concept: 'Préstamo intercompañía',                         tipo: 'INTERCOMPAÑIA', status: 'PENDIENTE',  daysAgo: 3,  origen: sazonComp?.id, destino: comercComp?.id },
+        { from: banorteBank?.id,   to: cajaChicaBank?.id,  amount: 5000,  concept: 'Traslado rechazado por saldo insuficiente',      tipo: 'INTERNA',        status: 'RECHAZADA',  daysAgo: 30, origen: null,          destino: null },
       ];
 
       let createdCount = 0;
-      for (const td of transferDefs) {
-        if (!td.fromAccountId) continue;
-        const saved = await transfersRepository.save({
-          tenantId: demoTenant.id,
-          fromAccountId: td.fromAccountId!,
-          toAccountId: td.toAccountId ?? undefined,
-          amount: td.amount,
-          concept: td.concept,
-          tipo: td.tipo,
-          status: td.status,
-          empresaOrigenId: td.empresaOrigenId ?? undefined,
-          empresaDestinoId: td.empresaDestinoId ?? undefined,
-        });
+      for (const td of tDefs) {
+        if (!td.from) continue;
+        const id = require('crypto').randomUUID();
         const d = new Date();
         d.setDate(d.getDate() - td.daysAgo);
-        await dataSource.query(`UPDATE transfer SET "createdAt" = $1 WHERE id = $2`, [d.toISOString(), saved.id]);
+        await dataSource.query(
+          `INSERT INTO transfer (id, "tenantId", "fromAccountId", "toAccountId", amount, concept, tipo, status, "empresaOrigenId", "empresaDestinoId", "createdAt")
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+          [id, demoTenant.id, td.from, td.to ?? null, td.amount, td.concept, td.tipo, td.status, td.origen ?? null, td.destino ?? null, d.toISOString()]
+        );
         createdCount++;
       }
-      console.log(`✅ ${createdCount} transfers de demo creados`);
+      console.log(`✅ ${createdCount} transfers de demo creados (raw SQL)`);
     }
   } catch (transferErr: any) {
     console.error('⚠️ Seed transfers fallido:', transferErr?.message ?? transferErr, transferErr?.stack ?? '');
