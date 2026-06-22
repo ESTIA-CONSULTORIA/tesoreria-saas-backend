@@ -337,7 +337,7 @@ export async function seedDatabase(dataSource: DataSource) {
     for (const dupe of dupes) {
       const dupeBranches = await branchesRepository.find({ where: { companyId: dupe.id } });
       for (const branch of dupeBranches) {
-        const dupeBanks = await banksRepository.find({ where: { branchId: branch.id } });
+        const dupeBanks: any[] = await dataSource.query(`SELECT * FROM bank WHERE "branchId" = $1::text`, [branch.id]);
         for (const bank of dupeBanks) {
           await movementsRepository.delete({ accountId: bank.id });
           await banksRepository.delete({ id: bank.id });
@@ -408,7 +408,7 @@ export async function seedDatabase(dataSource: DataSource) {
   }
 
   // Check if banks already exist for branch1
-  const existingBanksBranch1 = await banksRepository.count({ where: { branchId: branch1.id } });
+  const existingBanksBranch1 = parseInt((await dataSource.query(`SELECT COUNT(*) FROM bank WHERE "branchId" = $1::text`, [branch1.id]))[0].count);
 
   if (existingBanksBranch1 === 0) {
     // Crear cuentas bancarias
@@ -536,7 +536,7 @@ export async function seedDatabase(dataSource: DataSource) {
   }
 
   // Check if banks already exist for branch2 (Comercializadora Demo - Sucursal Norte)
-  const existingBanksBranch2 = await banksRepository.count({ where: { branchId: branch2.id } });
+  const existingBanksBranch2 = parseInt((await dataSource.query(`SELECT COUNT(*) FROM bank WHERE "branchId" = $1::text`, [branch2.id]))[0].count);
 
   if (existingBanksBranch2 === 0) {
     // Crear cuentas bancarias para Sucursal Norte
@@ -657,7 +657,7 @@ export async function seedDatabase(dataSource: DataSource) {
     }
 
     // Check if banks already exist for sazonNorte
-    const existingBanksSazonNorte = await banksRepository.count({ where: { branchId: sazonNorte.id } });
+    const existingBanksSazonNorte = parseInt((await dataSource.query(`SELECT COUNT(*) FROM bank WHERE "branchId" = $1::text`, [sazonNorte.id]))[0].count);
 
     if (existingBanksSazonNorte === 0) {
       // Crear cuentas bancarias para El Sazón - Norte
@@ -773,8 +773,12 @@ export async function seedDatabase(dataSource: DataSource) {
   const serviciosBranchFinal = demoBranches.find(b => b.companyId === servicios?.id);
 
   // El Sazón - BBVA Cuenta Operativa
-  const existingBanksSazonMatriz = await banksRepository.count({ where: { branchId: sazonBranchFinal?.id } });
-  let sazonBBVA = await banksRepository.findOne({ where: { branchId: sazonBranchFinal?.id, name: 'BBVA Cuenta Operativa' } });
+  const existingBanksSazonMatriz = sazonBranchFinal
+    ? parseInt((await dataSource.query(`SELECT COUNT(*) FROM bank WHERE "branchId" = $1::text`, [sazonBranchFinal.id]))[0].count)
+    : 0;
+  let sazonBBVA: any = sazonBranchFinal
+    ? ((await dataSource.query(`SELECT * FROM bank WHERE "branchId" = $1::text AND name = $2 LIMIT 1`, [sazonBranchFinal.id, 'BBVA Cuenta Operativa']))[0] || null)
+    : null;
   if (!sazonBBVA && sazonBranchFinal && existingBanksSazonMatriz === 0) {
     sazonBBVA = await banksRepository.save({
       branchId: sazonBranchFinal.id,
@@ -791,7 +795,9 @@ export async function seedDatabase(dataSource: DataSource) {
   }
 
   // El Sazón - Caja Chica
-  let sazonCaja = await banksRepository.findOne({ where: { branchId: sazonBranchFinal?.id, name: 'Caja Chica' } });
+  let sazonCaja: any = sazonBranchFinal
+    ? ((await dataSource.query(`SELECT * FROM bank WHERE "branchId" = $1::text AND name = $2 LIMIT 1`, [sazonBranchFinal.id, 'Caja Chica']))[0] || null)
+    : null;
   if (!sazonCaja && sazonBranchFinal) {
     sazonCaja = await banksRepository.save({
       branchId: sazonBranchFinal.id,
@@ -808,8 +814,12 @@ export async function seedDatabase(dataSource: DataSource) {
   }
 
   // El Sonorense - Banorte Cuenta Principal
-  const existingBanksSonorense = await banksRepository.count({ where: { branchId: sonorenseBranchFinal?.id } });
-  let sonorenseBanorte = await banksRepository.findOne({ where: { branchId: sonorenseBranchFinal?.id, name: 'Banorte Cuenta Principal' } });
+  const existingBanksSonorense = sonorenseBranchFinal
+    ? parseInt((await dataSource.query(`SELECT COUNT(*) FROM bank WHERE "branchId" = $1::text`, [sonorenseBranchFinal.id]))[0].count)
+    : 0;
+  let sonorenseBanorte: any = sonorenseBranchFinal
+    ? ((await dataSource.query(`SELECT * FROM bank WHERE "branchId" = $1::text AND name = $2 LIMIT 1`, [sonorenseBranchFinal.id, 'Banorte Cuenta Principal']))[0] || null)
+    : null;
   if (!sonorenseBanorte && sonorenseBranchFinal && existingBanksSonorense === 0) {
     sonorenseBanorte = await banksRepository.save({
       branchId: sonorenseBranchFinal.id,
@@ -826,7 +836,9 @@ export async function seedDatabase(dataSource: DataSource) {
   }
 
   // EL SONORENSE - Caja Chica
-  let elSonorenseCaja = await banksRepository.findOne({ where: { branchId: sonorenseBranchFinal?.id, name: 'Caja Chica' } });
+  let elSonorenseCaja: any = sonorenseBranchFinal
+    ? ((await dataSource.query(`SELECT * FROM bank WHERE "branchId" = $1::text AND name = $2 LIMIT 1`, [sonorenseBranchFinal.id, 'Caja Chica']))[0] || null)
+    : null;
   if (!elSonorenseCaja && sonorenseBranchFinal) {
     elSonorenseCaja = await banksRepository.save({
       branchId: sonorenseBranchFinal.id,
@@ -843,8 +855,12 @@ export async function seedDatabase(dataSource: DataSource) {
   }
 
   // SERVICIOS DEMO - HSBC Cuenta Corporativa
-  const existingBanksServicios = await banksRepository.count({ where: { branchId: serviciosBranchFinal?.id } });
-  let serviciosHSBC = await banksRepository.findOne({ where: { branchId: serviciosBranchFinal?.id, name: 'HSBC Cuenta Corporativa' } });
+  const existingBanksServicios = serviciosBranchFinal
+    ? parseInt((await dataSource.query(`SELECT COUNT(*) FROM bank WHERE "branchId" = $1::text`, [serviciosBranchFinal.id]))[0].count)
+    : 0;
+  let serviciosHSBC: any = serviciosBranchFinal
+    ? ((await dataSource.query(`SELECT * FROM bank WHERE "branchId" = $1::text AND name = $2 LIMIT 1`, [serviciosBranchFinal.id, 'HSBC Cuenta Corporativa']))[0] || null)
+    : null;
   if (!serviciosHSBC && serviciosBranchFinal && existingBanksServicios === 0) {
     serviciosHSBC = await banksRepository.save({
       branchId: serviciosBranchFinal.id,
@@ -861,7 +877,9 @@ export async function seedDatabase(dataSource: DataSource) {
   }
 
   // SERVICIOS DEMO - Scotiabank Nómina
-  let serviciosScotiabank = await banksRepository.findOne({ where: { branchId: serviciosBranchFinal?.id, name: 'Scotiabank Nómina' } });
+  let serviciosScotiabank: any = serviciosBranchFinal
+    ? ((await dataSource.query(`SELECT * FROM bank WHERE "branchId" = $1::text AND name = $2 LIMIT 1`, [serviciosBranchFinal.id, 'Scotiabank Nómina']))[0] || null)
+    : null;
   if (!serviciosScotiabank && serviciosBranchFinal) {
     serviciosScotiabank = await banksRepository.save({
       branchId: serviciosBranchFinal.id,

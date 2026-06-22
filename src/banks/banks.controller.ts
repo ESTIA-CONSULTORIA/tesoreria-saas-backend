@@ -54,11 +54,6 @@ export class BanksController {
     return [];
   }
 
-  @Get('debug/columns')
-  async debugColumns() {
-    return this.banksService.debugColumns();
-  }
-
   @Get('branch/:branchId')
   findByBranch(@Param('branchId') branchId: string) {
     return this.banksService.findByBranch(branchId);

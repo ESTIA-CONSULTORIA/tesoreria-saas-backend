@@ -122,12 +122,4 @@ export class BanksService {
     return { deleted: true };
   }
 
-  async debugColumns() {
-    return this.dataSource.query(`
-      SELECT column_name, data_type, is_nullable
-      FROM information_schema.columns
-      WHERE table_name = 'bank'
-      ORDER BY ordinal_position
-    `);
-  }
 }
