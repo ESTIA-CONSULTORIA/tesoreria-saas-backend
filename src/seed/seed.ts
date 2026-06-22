@@ -1747,12 +1747,12 @@ export async function seedDatabase(dataSource: DataSource) {
       { concept: 'Transporte y logística',category: 'GASTOS_VARIABLES' },
     ];
 
-    const allDemoTenantBanks = await banksRepository
-      .createQueryBuilder('bank')
-      .innerJoin('Branch', 'branch', 'branch.id::text = bank.branchId::text')
-      .innerJoin('Company', 'company', 'company.id::text = branch.companyId::text')
-      .where('company.tenantId::text = :tid', { tid: demoTenant.id })
-      .getMany();
+    const allDemoTenantBanks: any[] = await dataSource.query(`
+      SELECT bank.* FROM bank
+      INNER JOIN branch ON branch.id::text = bank."branchId"
+      INNER JOIN company ON company.id::text = branch."companyId"
+      WHERE company."tenantId"::text = $1
+    `, [demoTenant.id]);
 
     for (const bank of allDemoTenantBanks) {
       const incomeCount = await movementsRepository.count({ where: { accountId: bank.id, type: 'INCOME' } });
