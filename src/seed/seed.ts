@@ -2461,12 +2461,332 @@ export async function seedDatabase(dataSource: DataSource) {
     console.log('⚠️ Error en HR demo data (entidades pueden no existir aún):', hrError.message);
   }
 
+  // ═══════════════════════════════════════════════════════════════
+  // P5-01: PROVEEDORES BAJO demoTenant
+  // ═══════════════════════════════════════════════════════════════
+  try {
+    // 3 nuevos proveedores específicos de demoTenant
+    const newDemoSuppliers = [
+      {
+        nombre: 'Proveedor Alimentario SA de CV',
+        razonSocial: 'Proveedor Alimentario SA de CV',
+        rfc: 'PAL789012XYZ',
+        email: 'contacto@provalimentario.com',
+        telefono: '555-3456',
+        contacto: 'Luis Rodríguez',
+        ciudad: 'Hermosillo',
+        estado: 'Sonora',
+        pais: 'México',
+        condicionesPago: '15dias',
+        limiteCredito: 80000,
+        saldoPendiente: 0,
+        moneda: 'MXN',
+        isActive: true,
+        tenantId: demoTenant.id,
+      },
+      {
+        nombre: 'Bebidas y Refrescos del Norte',
+        razonSocial: 'Bebidas y Refrescos del Norte S.A. de C.V.',
+        rfc: 'BRN456789XYZ',
+        email: 'ventas@bebidasnorte.com',
+        telefono: '555-7890',
+        contacto: 'Patricia Morales',
+        ciudad: 'Hermosillo',
+        estado: 'Sonora',
+        pais: 'México',
+        condicionesPago: 'CONTADO',
+        limiteCredito: 30000,
+        saldoPendiente: 0,
+        moneda: 'MXN',
+        isActive: true,
+        tenantId: demoTenant.id,
+      },
+      {
+        nombre: 'Distribuidora de Insumos Generales',
+        razonSocial: 'Distribuidora de Insumos Generales S. de R.L.',
+        rfc: 'DIG123456XYZ',
+        email: 'pedidos@insumosgen.com',
+        telefono: '555-2345',
+        contacto: 'Roberto Díaz',
+        ciudad: 'Hermosillo',
+        estado: 'Sonora',
+        pais: 'México',
+        condicionesPago: '30dias',
+        limiteCredito: 50000,
+        saldoPendiente: 0,
+        moneda: 'MXN',
+        isActive: true,
+        tenantId: demoTenant.id,
+      },
+    ];
+
+    for (const sd of newDemoSuppliers) {
+      const existing = await suppliersRepository.findOne({ where: { nombre: sd.nombre, tenantId: demoTenant.id } });
+      if (!existing) {
+        await suppliersRepository.save(sd);
+        console.log(`✅ Proveedor "${sd.nombre}" creado bajo demoTenant`);
+      }
+    }
+
+    // Copias de los 3 proveedores legacy (originalmente bajo testTenant) hacia demoTenant
+    const legacyDemoSuppliers = [
+      {
+        nombre: 'Papelería Central',
+        razonSocial: 'Papelería Central S.A. de C.V.',
+        rfc: 'PAC123456XYZ',
+        email: 'contacto@papeleriacentral.com',
+        telefono: '555-1234',
+        contacto: 'Juan Pérez',
+        direccion: 'Calle Papel #123',
+        ciudad: 'Ciudad de México',
+        estado: 'CDMX',
+        pais: 'México',
+        condicionesPago: 'CONTADO',
+        limiteCredito: 0,
+        saldoPendiente: 0,
+        moneda: 'MXN',
+        isActive: true,
+      },
+      {
+        nombre: 'Tech Solutions',
+        razonSocial: 'Tech Solutions S. de R.L.',
+        rfc: 'TES987654XYZ',
+        email: 'ventas@techsolutions.com',
+        telefono: '555-5678',
+        contacto: 'María García',
+        direccion: 'Av. Tecnología #456',
+        ciudad: 'Ciudad de México',
+        estado: 'CDMX',
+        pais: 'México',
+        condicionesPago: '30dias',
+        limiteCredito: 50000,
+        saldoPendiente: 0,
+        moneda: 'MXN',
+        isActive: true,
+      },
+      {
+        nombre: 'Distribuidora Nacional',
+        razonSocial: 'Distribuidora Nacional S.A. de C.V.',
+        rfc: 'DIS456789XYZ',
+        email: 'pedidos@distribuidoranacional.com',
+        telefono: '555-9012',
+        contacto: 'Carlos López',
+        direccion: 'Blvd. Comercial #789',
+        ciudad: 'Ciudad de México',
+        estado: 'CDMX',
+        pais: 'México',
+        condicionesPago: '15dias',
+        limiteCredito: 100000,
+        saldoPendiente: 0,
+        moneda: 'MXN',
+        isActive: true,
+      },
+    ];
+
+    for (const sd of legacyDemoSuppliers) {
+      const existing = await suppliersRepository.findOne({ where: { nombre: sd.nombre, tenantId: demoTenant.id } });
+      if (!existing) {
+        await suppliersRepository.save({ ...sd, tenantId: demoTenant.id });
+        console.log(`✅ Proveedor legacy "${sd.nombre}" copiado a demoTenant`);
+      }
+    }
+
+    console.log('✅ P5-01: Proveedores bajo demoTenant completado');
+  } catch (p501Err: any) {
+    console.log('⚠️ Error en P5-01 proveedores:', p501Err.message);
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // P5-02: ALMACENES PARA EL SAZÓN MATRIZ
+  // ═══════════════════════════════════════════════════════════════
+  try {
+    const almacenRepo = dataSource.getRepository('Almacen');
+    const sazonMatrizBranch = await branchesRepository.findOne({ where: { companyId: sazonCompany.id, code: 'SAZ-MAT' } });
+
+    if (sazonMatrizBranch) {
+      const almacenesData = [
+        {
+          nombre: 'Almacén Principal',
+          codigo: 'ALM-001',
+          descripcion: 'Almacén de productos secos',
+          sucursalId: sazonMatrizBranch.id,
+          tipo: 'SECO',
+          isActive: true,
+          tenantId: demoTenant.id,
+        },
+        {
+          nombre: 'Cámara Fría',
+          codigo: 'ALM-002',
+          descripcion: 'Cámara de refrigeración para perecederos',
+          sucursalId: sazonMatrizBranch.id,
+          tipo: 'REFRIGERADO',
+          isActive: true,
+          tenantId: demoTenant.id,
+        },
+      ];
+
+      for (const almData of almacenesData) {
+        const existing = await almacenRepo.findOne({ where: { nombre: almData.nombre, tenantId: demoTenant.id } });
+        if (!existing) {
+          await almacenRepo.save(almData);
+          console.log(`✅ Almacén "${almData.nombre}" creado`);
+        }
+      }
+      console.log('✅ P5-02: Almacenes para El Sazón Matriz completado');
+    } else {
+      console.log('⚠️ P5-02: No se encontró sucursal SAZ-MAT, omitiendo almacenes');
+    }
+  } catch (p502Err: any) {
+    console.log('⚠️ Error en P5-02 almacenes:', p502Err.message);
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // P5-03: PAGOS PROGRAMADOS (PaymentSchedule)
+  // ═══════════════════════════════════════════════════════════════
+  try {
+    const paymentScheduleRepo = dataSource.getRepository('PaymentSchedule');
+    const sazonMatrizBranch = await branchesRepository.findOne({ where: { companyId: sazonCompany.id, code: 'SAZ-MAT' } });
+    const sazonBBVAAccount = sazonMatrizBranch
+      ? await banksRepository.findOne({ where: { branchId: sazonMatrizBranch.id, name: 'BBVA Cuenta Operativa' } })
+      : null;
+
+    if (sazonBBVAAccount) {
+      // Devuelve fecha YYYY-MM-DD para el día `day` del mes actual + `monthOffset` meses
+      const nextDateWithDay = (day: number, monthOffset: number = 0): string => {
+        const d = new Date();
+        d.setDate(1);
+        d.setMonth(d.getMonth() + monthOffset);
+        d.setDate(day);
+        return d.toISOString().split('T')[0];
+      };
+
+      const scheduledPayments = [
+        // Renta local — día 1 de cada mes, próximos 2 meses
+        { concepto: 'Renta local', monto: 18500, fechaProgramada: nextDateWithDay(1, 1) },
+        { concepto: 'Renta local', monto: 18500, fechaProgramada: nextDateWithDay(1, 2) },
+        // Internet — día 5, próximos 2 meses
+        { concepto: 'Servicio de internet', monto: 899, fechaProgramada: nextDateWithDay(5, 1) },
+        { concepto: 'Servicio de internet', monto: 899, fechaProgramada: nextDateWithDay(5, 2) },
+        // Nómina quincenal — días 15 y 30, próximos 2 meses
+        { concepto: 'Nómina quincenal', monto: 45000, fechaProgramada: nextDateWithDay(15, 1) },
+        { concepto: 'Nómina quincenal', monto: 45000, fechaProgramada: nextDateWithDay(30, 1) },
+        { concepto: 'Nómina quincenal', monto: 45000, fechaProgramada: nextDateWithDay(15, 2) },
+        { concepto: 'Nómina quincenal', monto: 45000, fechaProgramada: nextDateWithDay(30, 2) },
+      ];
+
+      for (const payment of scheduledPayments) {
+        const existing = await paymentScheduleRepo.findOne({
+          where: { concepto: payment.concepto, fechaProgramada: payment.fechaProgramada as any, tenantId: demoTenant.id },
+        });
+        if (!existing) {
+          await paymentScheduleRepo.save({
+            ...payment,
+            cuentaOrigenId: sazonBBVAAccount.id,
+            status: 'PENDIENTE',
+            tipo: 'EGRESO',
+            tenantId: demoTenant.id,
+          });
+        }
+      }
+      console.log('✅ P5-03: Pagos programados creados para El Sazón Matriz');
+    } else {
+      console.log('⚠️ P5-03: No se encontró cuenta BBVA Cuenta Operativa, omitiendo pagos programados');
+    }
+  } catch (p503Err: any) {
+    console.log('⚠️ Error en P5-03 pagos programados:', p503Err.message);
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // P5-04: VENTAS POS DEMO — 10 ventas últimos 7 días, El Sazón Matriz
+  // ═══════════════════════════════════════════════════════════════
+  try {
+    const saleRepo = dataSource.getRepository('Sale');
+    const allProducts = await productsRepository.find({ where: { tenantId: demoTenant.id } });
+    const cajeroUser = await usersRepository.findOne({ where: { email: 'cajero@demo.com' } });
+    const sazonMatrizBranch = await branchesRepository.findOne({ where: { companyId: sazonCompany.id, code: 'SAZ-MAT' } });
+
+    if (allProducts.length > 0 && sazonMatrizBranch) {
+      const existingSalesCount = await saleRepo.count({ where: { sucursalId: sazonMatrizBranch.id } });
+
+      if (existingSalesCount === 0) {
+        const saleTemplates: Array<{ folioSuffix: string; daysAgo: number; hora: string; items: Array<{ idx: number; qty: number }>; formaPago: string }> = [
+          { folioSuffix: '001', daysAgo: 1, hora: '12:30', items: [{ idx: 0, qty: 2 }, { idx: 2, qty: 1 }], formaPago: 'EFECTIVO' },
+          { folioSuffix: '002', daysAgo: 1, hora: '14:45', items: [{ idx: 1, qty: 3 }], formaPago: 'TARJETA' },
+          { folioSuffix: '003', daysAgo: 2, hora: '13:00', items: [{ idx: 0, qty: 1 }, { idx: 3, qty: 2 }], formaPago: 'EFECTIVO' },
+          { folioSuffix: '004', daysAgo: 2, hora: '19:30', items: [{ idx: 2, qty: 2 }, { idx: 1, qty: 1 }], formaPago: 'TARJETA' },
+          { folioSuffix: '005', daysAgo: 3, hora: '11:15', items: [{ idx: 1, qty: 2 }, { idx: 4, qty: 1 }], formaPago: 'EFECTIVO' },
+          { folioSuffix: '006', daysAgo: 3, hora: '20:00', items: [{ idx: 0, qty: 3 }], formaPago: 'TARJETA' },
+          { folioSuffix: '007', daysAgo: 4, hora: '12:00', items: [{ idx: 3, qty: 1 }, { idx: 2, qty: 2 }], formaPago: 'EFECTIVO' },
+          { folioSuffix: '008', daysAgo: 5, hora: '18:45', items: [{ idx: 1, qty: 1 }, { idx: 0, qty: 2 }], formaPago: 'TARJETA' },
+          { folioSuffix: '009', daysAgo: 6, hora: '13:30', items: [{ idx: 4, qty: 2 }, { idx: 2, qty: 1 }], formaPago: 'EFECTIVO' },
+          { folioSuffix: '010', daysAgo: 7, hora: '20:15', items: [{ idx: 0, qty: 2 }, { idx: 1, qty: 1 }, { idx: 3, qty: 1 }], formaPago: 'TARJETA' },
+        ];
+
+        for (const tpl of saleTemplates) {
+          const saleDate = new Date();
+          saleDate.setDate(saleDate.getDate() - tpl.daysAgo);
+          const saleDateStr = saleDate.toISOString().split('T')[0];
+          const folio = `VTA-${saleDateStr.replace(/-/g, '')}-${tpl.folioSuffix}`;
+
+          const existingSale = await saleRepo.findOne({ where: { folio } });
+          if (existingSale) continue;
+
+          const items = tpl.items.map(({ idx, qty }) => {
+            const p = allProducts[idx % allProducts.length];
+            const precio = Number(p.price) || 150;
+            return {
+              productoId: p.id,
+              nombre: p.name,
+              cantidad: qty,
+              precioUnitario: precio,
+              descuento: 0,
+              subtotal: Math.round(precio * qty * 100) / 100,
+            };
+          });
+
+          const subtotal = Math.round(items.reduce((sum, i) => sum + i.subtotal, 0) * 100) / 100;
+          const impuestos = Math.round(subtotal * 0.16 * 100) / 100;
+          const total = Math.round((subtotal + impuestos) * 100) / 100;
+          const montoRecibido = tpl.formaPago === 'EFECTIVO' ? Math.ceil(total / 100) * 100 : total;
+          const cambio = Math.round((montoRecibido - total) * 100) / 100;
+
+          await saleRepo.save({
+            folio,
+            fecha: saleDateStr as any,
+            hora: tpl.hora,
+            items,
+            subtotal,
+            descuento: 0,
+            impuestos,
+            total,
+            formaPago: tpl.formaPago as any,
+            status: 'PAGADA',
+            cajero: cajeroUser?.id || null,
+            turnoId: null,
+            sucursalId: sazonMatrizBranch.id,
+            tenantId: demoTenant.id,
+            montoRecibido,
+            cambio,
+            costoReal: 0,
+          });
+        }
+        console.log('✅ P5-04: 10 ventas POS demo creadas para El Sazón Matriz');
+      } else {
+        console.log(`ℹ️ P5-04: Ventas POS ya existen (${existingSalesCount}), omitiendo creación`);
+      }
+    } else {
+      console.log('⚠️ P5-04: Sin productos POS o sucursal SAZ-MAT, omitiendo ventas demo');
+    }
+  } catch (p504Err: any) {
+    console.log('⚠️ Error en P5-04 ventas POS:', p504Err.message);
+  }
+
   // Resumen final del seed
-  const totalCompanies = await companiesRepository.count({ where: { tenantId: testTenant.id } });
+  const totalCompanies = await companiesRepository.count({ where: { tenantId: demoTenant.id } });
   const totalBranches = await branchesRepository.count();
   const totalBanks = await banksRepository.count();
   const totalMovements = await movementsRepository.count();
-  const totalSuppliers = await suppliersRepository.count({ where: { tenantId: testTenant.id } });
+  const totalSuppliers = await suppliersRepository.count({ where: { tenantId: demoTenant.id } });
   const totalFamilias = await familiasRepository.count();
   const totalInsumos = await insumosRepository.count();
   const totalRecipes = await recipesRepository.count();
@@ -2474,6 +2794,9 @@ export async function seedDatabase(dataSource: DataSource) {
   const totalPurchaseOrders = await purchaseOrdersRepository.count();
   const totalInvoices = await purchaseInvoicesRepository.count();
   const totalInventoryRecords = await inventoryRecordsRepository.count();
+  const totalAlmacenes = await dataSource.getRepository('Almacen').count({ where: { tenantId: demoTenant.id } });
+  const totalPaymentSchedules = await dataSource.getRepository('PaymentSchedule').count({ where: { tenantId: demoTenant.id } });
+  const totalSales = await dataSource.getRepository('Sale').count({ where: { tenantId: demoTenant.id } });
 
   console.log('═══════════════════════════════════════');
   console.log('✅ SEED COMPLETADO');
@@ -2485,7 +2808,10 @@ export async function seedDatabase(dataSource: DataSource) {
   console.log(`   - Sucursales: ${totalBranches}`);
   console.log(`   - Cuentas bancarias: ${totalBanks}`);
   console.log(`   - Movimientos: ${totalMovements}`);
-  console.log(`   - Proveedores: ${totalSuppliers}`);
+  console.log(`   - Proveedores (demoTenant): ${totalSuppliers}`);
+  console.log(`   - Almacenes: ${totalAlmacenes}`);
+  console.log(`   - Pagos programados: ${totalPaymentSchedules}`);
+  console.log(`   - Ventas POS: ${totalSales}`);
   console.log(`   - Familias de insumos: ${totalFamilias}`);
   console.log(`   - Insumos: ${totalInsumos}`);
   console.log(`   - Recetas: ${totalRecipes}`);
