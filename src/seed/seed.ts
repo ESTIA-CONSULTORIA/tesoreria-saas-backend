@@ -55,12 +55,12 @@ export async function seedDatabase(dataSource: DataSource) {
     await dataSource.query(`
       DELETE FROM movement WHERE "accountId" IN (
         SELECT bk.id FROM bank bk
-        JOIN branch br ON bk."branchId" = br.id
-        JOIN company c ON br."companyId" = c.id
+        JOIN branch br ON bk."branchId" = br.id::text
+        JOIN company c ON br."companyId" = c.id::text
         WHERE c."tenantId" = '${testTenantId}'
       )
     `);
-    await dataSource.query(`DELETE FROM bank WHERE "branchId" IN (SELECT br.id FROM branch br JOIN company c ON br."companyId" = c.id WHERE c."tenantId" = '${testTenantId}')`);
+    await dataSource.query(`DELETE FROM bank WHERE "branchId" IN (SELECT br.id::text FROM branch br JOIN company c ON br."companyId" = c.id::text WHERE c."tenantId" = '${testTenantId}')`);
     await dataSource.query(`DELETE FROM branch WHERE "companyId" IN (SELECT id FROM company WHERE "tenantId" = '${testTenantId}')`);
     await dataSource.query(`DELETE FROM company WHERE "tenantId" = '${testTenantId}'`);
     await dataSource.query(`DELETE FROM tenant WHERE id = '${testTenantId}'`);
@@ -2645,10 +2645,7 @@ export async function seedDatabase(dataSource: DataSource) {
   // ═══════════════════════════════════════════════════════════════
   try {
     const paymentScheduleRepo = dataSource.getRepository('PaymentSchedule');
-    const sazonMatrizBranch = await branchesRepository.findOne({ where: { companyId: sazonCompany.id, code: 'SAZ-MAT' } });
-    const sazonBBVAAccount = sazonMatrizBranch
-      ? await banksRepository.findOne({ where: { branchId: sazonMatrizBranch.id, name: 'BBVA Cuenta Operativa' } })
-      : null;
+    const sazonBBVAAccount = await banksRepository.findOne({ where: { tenantId: demoTenant.id, name: 'BBVA Cuenta Operativa' } });
 
     if (sazonBBVAAccount) {
       // Devuelve fecha YYYY-MM-DD para el día `day` del mes actual + `monthOffset` meses
