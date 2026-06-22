@@ -2663,7 +2663,8 @@ export async function seedDatabase(dataSource: DataSource) {
   // ═══════════════════════════════════════════════════════════════
   try {
     const paymentScheduleRepo = dataSource.getRepository('PaymentSchedule');
-    const sazonBBVAAccount = await banksRepository.findOne({ where: { tenantId: demoTenant.id, name: 'BBVA Cuenta Operativa' } });
+    const sazonBBVARows = await dataSource.query(`SELECT * FROM bank WHERE name = 'BBVA Cuenta Operativa' LIMIT 1`);
+    const sazonBBVAAccount = sazonBBVARows[0] || null;
 
     if (sazonBBVAAccount) {
       // Devuelve fecha YYYY-MM-DD para el día `day` del mes actual + `monthOffset` meses
