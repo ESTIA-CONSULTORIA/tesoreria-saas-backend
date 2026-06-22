@@ -99,6 +99,9 @@ export class Employee {
 
   // Nómina
   @Column({ nullable: true })
+  imssNumber: string;
+
+  @Column({ nullable: true })
   banco: string;
 
   @Column({ nullable: true })

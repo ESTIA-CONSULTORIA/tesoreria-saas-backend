@@ -38,6 +38,15 @@ export class Attendance {
   @Column({ type: 'text', nullable: true })
   notes: string;
 
+  @Column({ nullable: true })
+  incidenceType: string; // TIEMPO_EXTRA | DIA_FESTIVO | SUSPENSION | INCAPACIDAD_CON_RIESGO | INCAPACIDAD_SIN_RIESGO
+
+  @Column({ type: 'decimal', precision: 5, scale: 2, nullable: true })
+  overtimeHours: number;
+
+  @Column({ nullable: true })
+  incidenceNote: string;
+
   @CreateDateColumn()
   createdAt: Date;
 }

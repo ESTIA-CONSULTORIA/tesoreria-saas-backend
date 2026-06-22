@@ -261,7 +261,29 @@ export class HrService {
   }
 
   async approveVacation(id: string, approvedBy: string, responseNote?: string): Promise<VacationRequest> {
+    const vacation = await this.vacRepo.findOne({ where: { id } });
+    if (!vacation) throw new NotFoundException('Solicitud de vacaciones no encontrada');
     await this.vacRepo.update(id, { status: 'APROBADA', approvedBy, approvedAt: new Date(), responseNote: responseNote || '' });
+
+    const start = new Date(vacation.startDate);
+    const end = new Date(vacation.endDate);
+    for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+      const dateStr = d.toISOString().split('T')[0];
+      const existing = await this.attendanceRepo.findOne({
+        where: { employeeId: vacation.employeeId, date: dateStr as any },
+      });
+      if (!existing) {
+        await this.attendanceRepo.save({
+          employeeId: vacation.employeeId,
+          tenantId: vacation.tenantId,
+          date: dateStr,
+          status: 'JUSTIFICADO',
+          method: 'WEB',
+          notes: 'Vacaciones aprobadas',
+        });
+      }
+    }
+
     return this.vacRepo.findOne({ where: { id } }) as Promise<VacationRequest>;
   }
 
@@ -281,7 +303,25 @@ export class HrService {
   }
 
   async approvePermission(id: string, approvedBy: string, responseNote?: string): Promise<PermissionRequest> {
+    const permission = await this.permRepo.findOne({ where: { id } });
+    if (!permission) throw new NotFoundException('Solicitud de permiso no encontrada');
     await this.permRepo.update(id, { status: 'APROBADA', approvedBy, responseNote: responseNote || '' });
+
+    const dateStr = new Date(permission.date).toISOString().split('T')[0];
+    const existing = await this.attendanceRepo.findOne({
+      where: { employeeId: permission.employeeId, date: dateStr as any },
+    });
+    if (!existing) {
+      await this.attendanceRepo.save({
+        employeeId: permission.employeeId,
+        tenantId: permission.tenantId,
+        date: dateStr,
+        status: 'JUSTIFICADO',
+        method: 'WEB',
+        notes: `Permiso aprobado: ${permission.type}`,
+      });
+    }
+
     return this.permRepo.findOne({ where: { id } }) as Promise<PermissionRequest>;
   }
 
