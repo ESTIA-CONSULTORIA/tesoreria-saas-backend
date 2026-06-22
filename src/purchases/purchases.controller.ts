@@ -77,17 +77,12 @@ export class PurchasesController {
   findAllPurchases(
     @Query('tenantId') tenantId?: string,
     @Query('status') status?: string,
-    @Headers('x-branch-id') headerBranchId?: string,
     @Headers('x-company-id') headerCompanyId?: string,
     @Request() req?: any,
   ) {
-    const userBranchId = req?.user?.branchId;
-    const userCompanyId = req?.user?.companyId;
+    const companyId = headerCompanyId || req?.user?.companyId;
 
-    const branchId = headerBranchId || userBranchId;
-    const companyId = headerCompanyId || userCompanyId;
-
-    return this.purchasesService.findAllPurchases(tenantId, status, branchId, companyId);
+    return this.purchasesService.findAllPurchases(tenantId, status, companyId);
   }
 
   @Get('invoices/:id')
@@ -130,16 +125,11 @@ export class PurchasesController {
   @Get('accounts-payable')
   async getAccountsPayable(
     @Query('tenantId') tenantId?: string,
-    @Headers('x-branch-id') headerBranchId?: string,
     @Headers('x-company-id') headerCompanyId?: string,
     @Request() req?: any,
   ) {
-    const userBranchId = req?.user?.branchId;
-    const userCompanyId = req?.user?.companyId;
+    const companyId = headerCompanyId || req?.user?.companyId;
 
-    const branchId = headerBranchId || userBranchId;
-    const companyId = headerCompanyId || userCompanyId;
-
-    return this.purchasesService.getAccountsPayable(tenantId, branchId, companyId);
+    return this.purchasesService.getAccountsPayable(tenantId, companyId);
   }
 }

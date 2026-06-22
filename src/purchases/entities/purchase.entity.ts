@@ -52,6 +52,9 @@ export class Purchase {
   @Column({ nullable: true })
   tenantId: string;
 
+  @Column({ nullable: true })
+  companyId: string;
+
   @CreateDateColumn()
   createdAt: Date;
 }

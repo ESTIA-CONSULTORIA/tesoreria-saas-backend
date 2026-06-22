@@ -143,23 +143,11 @@ export class PurchasesService {
   }
 
   // Purchases (Facturas)
-  async findAllPurchases(tenantId?: string, status?: string, branchId?: string, companyId?: string) {
+  async findAllPurchases(tenantId?: string, status?: string, companyId?: string) {
     const where: any = {};
     if (tenantId) where.tenantId = tenantId;
     if (status) where.status = status;
-    if (branchId) where.branchId = branchId;
-    if (companyId) {
-      const branches = await this.dataSource.getRepository(Branch).find({
-        where: { companyId },
-        select: ['id'],
-      });
-      const branchIds = branches.map((b) => b.id);
-      if (branchIds.length > 0) {
-        where.branchId = In(branchIds);
-      } else {
-        return [];
-      }
-    }
+    if (companyId) where.companyId = companyId;
 
     return this.purchasesRepo.find({
       where,
@@ -246,22 +234,10 @@ export class PurchasesService {
   }
 
   // Cuentas por Pagar (agrupadas por proveedor)
-  async getAccountsPayable(tenantId?: string, branchId?: string, companyId?: string) {
+  async getAccountsPayable(tenantId?: string, companyId?: string) {
     const where: any = { status: In(['PENDIENTE', 'PARCIAL']) };
     if (tenantId) where.tenantId = tenantId;
-    if (branchId) where.branchId = branchId;
-    if (companyId) {
-      const branches = await this.dataSource.getRepository(Branch).find({
-        where: { companyId },
-        select: ['id'],
-      });
-      const branchIds = branches.map((b) => b.id);
-      if (branchIds.length > 0) {
-        where.branchId = In(branchIds);
-      } else {
-        return [];
-      }
-    }
+    if (companyId) where.companyId = companyId;
 
     const purchases = await this.purchasesRepo.find({
       where,
