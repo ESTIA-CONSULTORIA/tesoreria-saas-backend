@@ -121,4 +121,13 @@ export class BanksService {
     await this.banksRepository.delete(id);
     return { deleted: true };
   }
+
+  async debugColumns() {
+    return this.dataSource.query(`
+      SELECT column_name, data_type, is_nullable
+      FROM information_schema.columns
+      WHERE table_name = 'bank'
+      ORDER BY ordinal_position
+    `);
+  }
 }
