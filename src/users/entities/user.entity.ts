@@ -8,7 +8,7 @@ export class User {
   @Column({ unique: true })
   email: string;
 
-  @Column({ default: '' })
+  @Column({ default: '', select: false })
   password: string;
 
   @Column({ nullable: true })
@@ -32,6 +32,6 @@ export class User {
   @Column({ default: true })
   isActive: boolean;
 
-  @Column({ nullable: true })
+  @Column({ nullable: true, select: false })
   executivePin: string;
 }

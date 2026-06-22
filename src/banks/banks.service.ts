@@ -4,6 +4,7 @@ import { Bank } from './entities/bank.entity';
 import { Repository, In } from 'typeorm';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 @Injectable()
 export class BanksService {
@@ -81,9 +82,12 @@ export class BanksService {
     });
   }
 
-  findOne(id: string) {
+  async findOne(id: string, tenantId?: string) {
+    if (!UUID_RE.test(id)) {
+      throw new NotFoundException(`Bank not found`);
+    }
     return this.banksRepository.findOne({
-      where: { id },
+      where: tenantId ? { id, tenantId } : { id },
     });
   }
 

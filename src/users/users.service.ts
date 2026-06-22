@@ -39,16 +39,54 @@ export class UsersService {
   }
 
   findByEmail(email: string) {
-    return this.usersRepository.findOne({ where: { email } });
+    return this.usersRepository
+      .createQueryBuilder('user')
+      .addSelect(['user.password'])
+      .where('user.email = :email', { email })
+      .getOne();
   }
 
   findAll(tenantId?: string) {
-    const where: any = {};
-    if (tenantId) where.tenantId = tenantId;
-    return this.usersRepository.find({
-      where,
-      order: { email: 'ASC' },
-    });
+    const qb = this.usersRepository
+      .createQueryBuilder('user')
+      .select([
+        'user.id',
+        'user.email',
+        'user.name',
+        'user.roleId',
+        'user.roleCode',
+        'user.tenantId',
+        'user.companyId',
+        'user.branchId',
+        'user.isActive',
+      ])
+      .orderBy('user.email', 'ASC');
+
+    if (tenantId) qb.where('user.tenantId = :tenantId', { tenantId });
+
+    return qb.getMany();
+  }
+
+  findAllWithPins(tenantId?: string) {
+    const qb = this.usersRepository
+      .createQueryBuilder('user')
+      .select([
+        'user.id',
+        'user.email',
+        'user.name',
+        'user.roleId',
+        'user.roleCode',
+        'user.tenantId',
+        'user.companyId',
+        'user.branchId',
+        'user.isActive',
+      ])
+      .addSelect(['user.executivePin'])
+      .orderBy('user.email', 'ASC');
+
+    if (tenantId) qb.where('user.tenantId = :tenantId', { tenantId });
+
+    return qb.getMany();
   }
 
   findByRole(roleCode: string, tenantId?: string) {

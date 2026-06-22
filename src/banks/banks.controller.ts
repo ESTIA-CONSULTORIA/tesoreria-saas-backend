@@ -60,8 +60,9 @@ export class BanksController {
   }
 
   @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.banksService.findOne(id);
+  findOne(@Param('id') id: string, @Request() req?: any) {
+    const tenantId = req?.user?.tenantId;
+    return this.banksService.findOne(id, tenantId);
   }
 
   @Patch(':id')

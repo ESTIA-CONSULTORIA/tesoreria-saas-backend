@@ -143,7 +143,7 @@ export class AuthService {
     if (!tenantId || !pin) {
       throw new UnauthorizedException('Credenciales inválidas');
     }
-    const users = await this.usersService.findAll(tenantId);
+    const users = await this.usersService.findAllWithPins(tenantId);
     const candidates = users.filter(
       (u) => ['ADMIN', 'GERENTE'].includes(u.roleCode || '') && u.isActive !== false,
     );
