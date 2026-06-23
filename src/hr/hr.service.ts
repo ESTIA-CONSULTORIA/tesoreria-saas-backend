@@ -413,6 +413,56 @@ export class HrService {
     return this.attendanceRepo.findOne({ where: { id: rec.id } });
   }
 
+  async updateAttendance(
+    id: string,
+    data: Partial<{
+      status: string;
+      incidenceType: string;
+      overtimeHours: number;
+      incidenceNote: string;
+      notes: string;
+    }>,
+  ) {
+    await this.attendanceRepo.update(id, data);
+    return this.attendanceRepo.findOne({ where: { id } });
+  }
+
+  async upsertAttendance(data: {
+    employeeId: string;
+    date: string;
+    status: string;
+    incidenceType?: string;
+    overtimeHours?: number;
+    incidenceNote?: string;
+    tenantId?: string;
+    branchId?: string;
+  }) {
+    const existing = await this.attendanceRepo.findOne({
+      where: { employeeId: data.employeeId, date: data.date as any },
+    });
+    if (existing) {
+      await this.attendanceRepo.update(existing.id, {
+        status: data.status,
+        incidenceType: data.incidenceType,
+        overtimeHours: data.overtimeHours,
+        incidenceNote: data.incidenceNote,
+      });
+      return this.attendanceRepo.findOne({ where: { id: existing.id } });
+    } else {
+      return this.attendanceRepo.save({
+        employeeId: data.employeeId,
+        date: data.date,
+        status: data.status,
+        incidenceType: data.incidenceType,
+        overtimeHours: data.overtimeHours,
+        incidenceNote: data.incidenceNote,
+        tenantId: data.tenantId,
+        branchId: data.branchId,
+        method: 'MANUAL',
+      });
+    }
+  }
+
   async createManualAttendance(data: {
     employeeId: string;
     date: string;

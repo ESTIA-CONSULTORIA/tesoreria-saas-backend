@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Headers, Param, Post, Put, Query, Request } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Headers, Param, Patch, Post, Put, Query, Request } from '@nestjs/common';
 import { HrService } from './hr.service';
 
 @Controller('hr')
@@ -194,6 +194,18 @@ export class HrController {
   checkOut(@Body() body: any, @Request() req?: any) {
     const employeeId = body.employeeId || req?.user?.employeeId;
     return this.service.checkOut(employeeId);
+  }
+
+  @Post('attendance/upsert')
+  upsertAttendance(@Body() body: any, @Request() req?: any) {
+    const tenantId = req?.user?.tenantId || req?.headers?.['x-tenant-id'];
+    const branchId = req?.user?.branchId || req?.headers?.['x-branch-id'];
+    return this.service.upsertAttendance({ ...body, tenantId, branchId });
+  }
+
+  @Patch('attendance/:id')
+  updateAttendance(@Param('id') id: string, @Body() body: any) {
+    return this.service.updateAttendance(id, body);
   }
 
   // Biometrics
