@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Bank } from './entities/bank.entity';
-import { Repository, In } from 'typeorm';
+import { Repository } from 'typeorm';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -64,22 +64,16 @@ export class BanksService {
   }
 
   async findByCompany(companyId: string) {
-    const branches = await this.dataSource
-      .getRepository('Branch')
-      .createQueryBuilder('branch')
-      .where('branch.companyId::text = :companyId', { companyId })
-      .getMany();
-
-    const ids = branches.map(b => b.id);
-
-    if (ids.length === 0) {
-      return [];
-    }
-
-    return this.banksRepository.find({
-      where: { branchId: In(ids) },
-      order: { createdAt: 'DESC' },
-    });
+    // Raw SQL avoids two bugs:
+    // 1) TypeORM query builder lowercases 'companyId' → 'companyid' (column not found)
+    // 2) In(uuid[]) vs bank."branchId" (character varying) type mismatch
+    return this.dataSource.query(
+      `SELECT bank.* FROM bank
+       INNER JOIN branch ON branch.id::text = bank."branchId"
+       WHERE branch."companyId"::text = $1::text
+       ORDER BY bank."createdAt" DESC`,
+      [companyId],
+    );
   }
 
   async findOne(id: string, tenantId?: string) {
