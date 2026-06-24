@@ -5,11 +5,17 @@ export class PayrollConceptTemplate {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column()
+  @Column({ nullable: true })
   tenantId: string;
 
-  @Column()
+  @Column({ nullable: true })
   employeeId: string;
+
+  @Column({ nullable: true })
+  companyId: string;
+
+  @Column({ default: false })
+  isGlobal: boolean;
 
   @Column()
   name: string;
@@ -22,6 +28,9 @@ export class PayrollConceptTemplate {
 
   @Column({ default: true })
   isActive: boolean;
+
+  @Column({ nullable: true })
+  category: string; // SALARIO | TIEMPO_EXTRA | SEPTIMO_DIA | BONO | DEDUCCION_FALTA | PRESTAMO | OTRO
 
   @CreateDateColumn()
   createdAt: Date;

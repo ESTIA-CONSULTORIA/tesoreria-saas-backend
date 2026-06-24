@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Headers, Param, Post, Put, Request } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Headers, Param, Post, Put, Query, Request } from '@nestjs/common';
 import { PayrollService } from './payroll.service';
 
 @Controller('payroll')
@@ -86,6 +86,42 @@ export class PayrollController {
   @Delete('concepts/:id')
   deleteConceptTemplate(@Param('id') id: string) {
     return this.payrollService.deleteConceptTemplate(id);
+  }
+
+  @Get('catalog')
+  getCatalog(
+    @Request() req: any,
+    @Headers('x-tenant-id') tenantId?: string,
+    @Headers('x-company-id') companyId?: string,
+  ) {
+    const tid = tenantId || req?.user?.tenantId;
+    const cid = companyId || req?.user?.companyId;
+    return this.payrollService.getCatalog(tid, cid);
+  }
+
+  @Post('catalog')
+  saveCatalogConcept(
+    @Body() body: any,
+    @Headers('x-tenant-id') tenantId?: string,
+    @Headers('x-company-id') companyId?: string,
+    @Request() req?: any,
+  ) {
+    const tid = tenantId || req?.user?.tenantId;
+    const cid = companyId || req?.user?.companyId;
+    return this.payrollService.saveCatalogConcept({ ...body, tenantId: tid, companyId: cid });
+  }
+
+  @Delete('catalog/:id')
+  deleteCatalogConcept(@Param('id') id: string) {
+    return this.payrollService.deleteCatalogConcept(id);
+  }
+
+  @Get('period-locked')
+  isPeriodLocked(
+    @Query('branchId') branchId: string,
+    @Query('date') date: string,
+  ) {
+    return this.payrollService.isPeriodLocked(branchId, date);
   }
 
   @Post('incapacities')

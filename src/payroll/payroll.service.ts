@@ -247,6 +247,66 @@ export class PayrollService {
     await this.conceptRepo.delete(id);
   }
 
+  async getCatalog(tenantId: string, companyId?: string) {
+    const global = await this.conceptRepo.find({
+      where: { isGlobal: true, isActive: true },
+      order: { type: 'ASC', name: 'ASC' },
+    });
+    const custom = companyId
+      ? await this.conceptRepo.find({
+          where: { tenantId, companyId, isGlobal: false, isActive: true },
+          order: { type: 'ASC', name: 'ASC' },
+        })
+      : [];
+    return [...global, ...custom];
+  }
+
+  async saveCatalogConcept(dto: {
+    id?: string;
+    tenantId: string;
+    companyId: string;
+    name: string;
+    type: string;
+    defaultAmount: number;
+    category?: string;
+  }) {
+    if (dto.id) {
+      const existing = await this.conceptRepo.findOne({ where: { id: dto.id } });
+      if (existing?.isGlobal) throw new Error('No se puede modificar un concepto global');
+      await this.conceptRepo.update(dto.id, {
+        name: dto.name,
+        type: dto.type,
+        defaultAmount: dto.defaultAmount,
+        category: dto.category,
+      });
+      return this.conceptRepo.findOne({ where: { id: dto.id } });
+    }
+    return this.conceptRepo.save({
+      tenantId: dto.tenantId,
+      companyId: dto.companyId,
+      name: dto.name,
+      type: dto.type,
+      defaultAmount: dto.defaultAmount,
+      category: dto.category,
+      isGlobal: false,
+      isActive: true,
+    });
+  }
+
+  async deleteCatalogConcept(id: string) {
+    const existing = await this.conceptRepo.findOne({ where: { id } });
+    if (existing?.isGlobal) throw new Error('No se puede eliminar un concepto global');
+    await this.conceptRepo.update(id, { isActive: false });
+    return { deleted: true };
+  }
+
+  async isPeriodLocked(branchId: string, date: string): Promise<boolean> {
+    const runs = await this.runRepo.find({
+      where: { branchId, status: 'PAGADA' },
+    });
+    return runs.some(run => date >= run.periodStart && date <= run.periodEnd);
+  }
+
   async createIncapacity(
     dto: {
       employeeId: string;

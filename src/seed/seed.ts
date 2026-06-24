@@ -2797,6 +2797,36 @@ export async function seedDatabase(dataSource: DataSource) {
     console.log('⚠️ Error en P5-04 ventas POS:', p504Err.message);
   }
 
+  // ── Conceptos globales de nómina ESTIA ──
+  try {
+    const conceptRepo = dataSource.getRepository('PayrollConceptTemplate');
+    const globalCount = await conceptRepo.count({ where: { isGlobal: true } });
+    if (globalCount === 0) {
+      const globalConcepts = [
+        { name: 'Salario',                type: 'P', defaultAmount: 0, isGlobal: true, isActive: true, category: 'SALARIO' },
+        { name: '7mo día',                type: 'P', defaultAmount: 0, isGlobal: true, isActive: true, category: 'SEPTIMO_DIA' },
+        { name: 'Tiempo extra',           type: 'P', defaultAmount: 0, isGlobal: true, isActive: true, category: 'TIEMPO_EXTRA' },
+        { name: 'Día festivo trabajado',  type: 'P', defaultAmount: 0, isGlobal: true, isActive: true, category: 'TIEMPO_EXTRA' },
+        { name: 'Bono de puntualidad',    type: 'P', defaultAmount: 0, isGlobal: true, isActive: true, category: 'BONO' },
+        { name: 'Bono de productividad',  type: 'P', defaultAmount: 0, isGlobal: true, isActive: true, category: 'BONO' },
+        { name: 'Vales de despensa',      type: 'P', defaultAmount: 0, isGlobal: true, isActive: true, category: 'BONO' },
+        { name: 'Falta injustificada',    type: 'D', defaultAmount: 0, isGlobal: true, isActive: true, category: 'DEDUCCION_FALTA' },
+        { name: 'Permiso sin goce',       type: 'D', defaultAmount: 0, isGlobal: true, isActive: true, category: 'DEDUCCION_FALTA' },
+        { name: 'Suspensión',             type: 'D', defaultAmount: 0, isGlobal: true, isActive: true, category: 'DEDUCCION_FALTA' },
+        { name: 'Préstamo empresa',       type: 'D', defaultAmount: 0, isGlobal: true, isActive: true, category: 'PRESTAMO' },
+        { name: 'Descuento uniforme',     type: 'D', defaultAmount: 0, isGlobal: true, isActive: true, category: 'OTRO' },
+      ];
+      for (const c of globalConcepts) {
+        await conceptRepo.save(c);
+      }
+      console.log('✅ Conceptos globales de nómina ESTIA creados');
+    } else {
+      console.log('ℹ️ Conceptos globales de nómina ya existen, omitiendo');
+    }
+  } catch (e: any) {
+    console.log('⚠️ Error sembrando conceptos globales:', e.message);
+  }
+
   // Resumen final del seed
   const totalCompanies = await companiesRepository.count({ where: { tenantId: demoTenant.id } });
   const totalBranches = await branchesRepository.count();
