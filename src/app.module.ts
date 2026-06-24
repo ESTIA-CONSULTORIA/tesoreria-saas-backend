@@ -39,6 +39,7 @@ import { OcrModule } from './ocr/ocr.module';
 import { PosChatModule } from './pos-chat/pos-chat.module';
 import { HrModule } from './hr/hr.module';
 import { PayrollModule } from './payroll/payroll.module';
+import { ContractsModule } from './contracts/contracts.module';
 
 @Module({
   imports: [
@@ -103,6 +104,7 @@ import { PayrollModule } from './payroll/payroll.module';
     PosChatModule,
     HrModule,
     PayrollModule,
+    ContractsModule,
   ],
 
   providers: [
