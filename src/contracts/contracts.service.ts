@@ -134,6 +134,7 @@ export class ContractsService {
       companyId: dto.companyId,
       employeeId: dto.employeeId,
       templateId: dto.templateId,
+      fileType: template.fileType,
       signatureLevel: dto.signatureLevel,
       status: 'PENDIENTE',
       contractPdfBase64: filledPdf,

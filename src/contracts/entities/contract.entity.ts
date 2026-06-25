@@ -17,6 +17,9 @@ export class Contract {
   @Column()
   templateId: string;
 
+  @Column({ nullable: true })
+  fileType: string;
+
   @Column()
   status: string;
 
