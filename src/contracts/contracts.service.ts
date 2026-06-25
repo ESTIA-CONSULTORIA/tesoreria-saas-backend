@@ -81,8 +81,8 @@ export class ContractsService {
   private detectFields(base64: string, _fileType: string): string[] {
     try {
       const content = Buffer.from(base64, 'base64').toString('utf-8');
-      const matches = content.match(/\{\{([a-z_]+)\}\}/g) || [];
-      return [...new Set(matches.map(m => m.replace(/\{\{|\}\}/g, '')))];
+      const matches = content.match(/\{([a-z_]+)\}/g) || [];
+      return [...new Set(matches.map(m => m.replace(/\{|\}/g, '')))];
     } catch {
       return [];
     }
@@ -154,12 +154,6 @@ export class ContractsService {
   }
 
   private async fillDocxTemplate(base64: string, employee: any, company: any): Promise<string> {
-    console.log('[fillDocx] employee keys:', Object.keys(employee || {}));
-    console.log('[fillDocx] data sample:', {
-      nombre_completo: FIELD_MAP.nombre_completo(employee, company),
-      puesto: FIELD_MAP.puesto(employee, company),
-      salario_diario: FIELD_MAP.salario_diario(employee, company),
-    });
     try {
       const PizZip = require('pizzip');
       const Docxtemplater = require('docxtemplater');
@@ -170,7 +164,11 @@ export class ContractsService {
       }
 
       const zip = new PizZip(Buffer.from(base64, 'base64'));
-      const doc = new Docxtemplater(zip, { paragraphLoop: true, linebreaks: true });
+      const doc = new Docxtemplater(zip, {
+        paragraphLoop: true,
+        linebreaks: true,
+        delimiters: { start: '{', end: '}' },
+      });
       doc.setData(data);
       doc.render();
       const buf = doc.getZip().generate({ type: 'nodebuffer' });
