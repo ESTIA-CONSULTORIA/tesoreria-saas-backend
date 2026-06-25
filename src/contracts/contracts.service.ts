@@ -5,7 +5,7 @@ import { ContractTemplate } from './entities/contract-template.entity';
 import { Contract } from './entities/contract.entity';
 import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
 
-const FIELD_MAP: Record<string, (emp: any, company?: any) => string> = {
+const FIELD_MAP: Record<string, (emp: any, company?: any, branch?: any) => string> = {
   nombre_completo: (e) => `${e.nombre || ''} ${e.apellidos || ''}`.trim(),
   nombre: (e) => e.nombre || '',
   apellidos: (e) => e.apellidos || '',
@@ -26,7 +26,7 @@ const FIELD_MAP: Record<string, (emp: any, company?: any) => string> = {
   salario_diario: (e) => e.salarioDiario || e.salarioDiarioIntegrado ? `$${Number(e.salarioDiario || e.salarioDiarioIntegrado).toFixed(2)}` : '',
   periodo_pago: (e) => e.periodoPago || '',
   empresa: (_e, company) => company?.tradeName || company?.legalName || '',
-  sucursal: (e) => e.sucursal || '',
+  sucursal: (_e, _company, branch) => branch?.name || '',
   fecha_contrato: () => new Date().toLocaleDateString('es-MX'),
 };
 
@@ -122,11 +122,19 @@ export class ContractsService {
     );
     const company = companyRows[0];
 
+    const branch = employee.branchId
+      ? await this.dataSource.query(
+          `SELECT * FROM branch WHERE id = $1 LIMIT 1`,
+          [employee.branchId],
+        ).then((rows: any[]) => rows[0])
+      : null;
+
     const filledPdf = await this.fillPdfTemplate(
       template.fileBase64,
       template.fileType,
       employee,
       company,
+      branch,
     );
 
     return this.contractRepo.save({
@@ -146,21 +154,22 @@ export class ContractsService {
     fileType: string,
     employee: any,
     company: any,
+    branch?: any,
   ): Promise<string> {
     if (fileType === 'DOCX') {
-      return this.fillDocxTemplate(base64, employee, company);
+      return this.fillDocxTemplate(base64, employee, company, branch);
     }
     return this.fillTextInPdf(base64, employee, company);
   }
 
-  private async fillDocxTemplate(base64: string, employee: any, company: any): Promise<string> {
+  private async fillDocxTemplate(base64: string, employee: any, company: any, branch?: any): Promise<string> {
     try {
       const PizZip = require('pizzip');
       const Docxtemplater = require('docxtemplater');
 
       const data: Record<string, string> = {};
       for (const [key, fn] of Object.entries(FIELD_MAP)) {
-        data[key] = fn(employee, company);
+        data[key] = fn(employee, company, branch);
       }
 
       const zip = new PizZip(Buffer.from(base64, 'base64'));
