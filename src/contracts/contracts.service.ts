@@ -154,6 +154,12 @@ export class ContractsService {
   }
 
   private async fillDocxTemplate(base64: string, employee: any, company: any): Promise<string> {
+    console.log('[fillDocx] employee keys:', Object.keys(employee || {}));
+    console.log('[fillDocx] data sample:', {
+      nombre_completo: FIELD_MAP.nombre_completo(employee, company),
+      puesto: FIELD_MAP.puesto(employee, company),
+      salario_diario: FIELD_MAP.salario_diario(employee, company),
+    });
     try {
       const PizZip = require('pizzip');
       const Docxtemplater = require('docxtemplater');
