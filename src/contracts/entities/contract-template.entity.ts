@@ -23,6 +23,12 @@ export class ContractTemplate {
   @Column({ type: 'jsonb', nullable: true })
   detectedFields: string[];
 
+  @Column({ nullable: true, default: 'INDETERMINADO' })
+  contractType: string;
+
+  @Column({ nullable: true, default: 'OPERATIVO' })
+  employeeLevel: string;
+
   @Column({ default: true })
   isActive: boolean;
 
