@@ -42,6 +42,7 @@ export class ContractsService {
   ) {}
 
   async getTemplates(tenantId: string, companyId?: string) {
+    console.log('[getTemplates] tenantId:', tenantId, 'companyId:', companyId);
     const global = await this.templateRepo.find({
       where: { isGlobal: true, isActive: true },
       select: ['id', 'name', 'fileType', 'detectedFields', 'isGlobal', 'createdAt'],
@@ -62,6 +63,7 @@ export class ContractsService {
     fileType: string;
     fileBase64: string;
   }) {
+    console.log('[uploadTemplate] dto:', { tenantId: dto.tenantId, companyId: dto.companyId, name: dto.name });
     const fields = this.detectFields(dto.fileBase64, dto.fileType);
     return this.templateRepo.save({
       ...dto,
