@@ -8,6 +8,7 @@ import { PermissionRequest } from './entities/permission-request.entity';
 import { HrShift } from './entities/hr-shift.entity';
 import { Attendance } from './entities/attendance.entity';
 import { BiometricCredential } from './entities/biometric-credential.entity';
+import { AttendanceAudit } from './entities/attendance-audit.entity';
 import { Branch } from '../branches/entities/branch.entity';
 import { OcrService } from '../ocr/ocr.service';
 
@@ -39,6 +40,8 @@ export class HrService {
     private readonly attendanceRepo: Repository<Attendance>,
     @InjectRepository(BiometricCredential)
     private readonly bioRepo: Repository<BiometricCredential>,
+    @InjectRepository(AttendanceAudit)
+    private readonly attendanceAuditRepo: Repository<AttendanceAudit>,
     @InjectRepository(Branch)
     private readonly branchRepo: Repository<Branch>,
     private readonly ocrService: OcrService,
@@ -436,10 +439,18 @@ export class HrService {
     incidenceNote?: string;
     tenantId?: string;
     branchId?: string;
+    changeReason?: string;
+    changedBy?: string;
+    approvedBy?: string;
   }) {
     const existing = await this.attendanceRepo.findOne({
       where: { employeeId: data.employeeId, date: data.date as any },
     });
+
+    const previousStatus = existing?.status || null;
+    const previousIncidenceType = existing?.incidenceType || null;
+
+    let result: Attendance;
     if (existing) {
       await this.attendanceRepo.update(existing.id, {
         status: data.status,
@@ -447,9 +458,9 @@ export class HrService {
         overtimeHours: data.overtimeHours,
         incidenceNote: data.incidenceNote,
       });
-      return this.attendanceRepo.findOne({ where: { id: existing.id } });
+      result = (await this.attendanceRepo.findOne({ where: { id: existing.id } }))!;
     } else {
-      return this.attendanceRepo.save({
+      result = await this.attendanceRepo.save({
         employeeId: data.employeeId,
         date: data.date,
         status: data.status,
@@ -461,6 +472,52 @@ export class HrService {
         method: 'MANUAL',
       });
     }
+
+    if (data.changedBy && (previousStatus !== data.status || previousIncidenceType !== (data.incidenceType ?? null))) {
+      const auditEntry = this.attendanceAuditRepo.create({
+        attendanceId: result.id,
+        employeeId: data.employeeId,
+        tenantId: data.tenantId || '',
+        date: data.date,
+        previousStatus: previousStatus ?? undefined,
+        previousIncidenceType: previousIncidenceType ?? undefined,
+        newStatus: data.status,
+        newIncidenceType: data.incidenceType,
+        changeReason: data.changeReason,
+        changedBy: data.changedBy,
+        approvedBy: data.approvedBy,
+        approvedAt: data.approvedBy ? new Date() : undefined,
+        reverted: false,
+      });
+      await this.attendanceAuditRepo.save(auditEntry);
+    }
+
+    return result;
+  }
+
+  async getAttendanceAudit(employeeId: string, tenantId: string) {
+    return this.attendanceAuditRepo.find({
+      where: { employeeId, tenantId },
+      order: { createdAt: 'DESC' },
+    });
+  }
+
+  async revertAttendanceChange(auditId: string, revertedBy: string) {
+    const audit = await this.attendanceAuditRepo.findOne({ where: { id: auditId } });
+    if (!audit || audit.reverted) throw new NotFoundException('Registro no encontrado o ya revertido');
+
+    await this.attendanceRepo.update(audit.attendanceId, {
+      status: audit.previousStatus || 'PRESENTE',
+      incidenceType: audit.previousIncidenceType || undefined,
+    });
+
+    await this.attendanceAuditRepo.update(auditId, {
+      reverted: true,
+      revertedBy,
+      revertedAt: new Date(),
+    });
+
+    return { reverted: true, auditId };
   }
 
   async createManualAttendance(data: {

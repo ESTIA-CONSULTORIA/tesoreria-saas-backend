@@ -7,6 +7,7 @@ import { PermissionRequest } from './entities/permission-request.entity';
 import { HrShift } from './entities/hr-shift.entity';
 import { Attendance } from './entities/attendance.entity';
 import { BiometricCredential } from './entities/biometric-credential.entity';
+import { AttendanceAudit } from './entities/attendance-audit.entity';
 import { Branch } from '../branches/entities/branch.entity';
 import { OcrModule } from '../ocr/ocr.module';
 import { HrService } from './hr.service';
@@ -21,6 +22,7 @@ import { HrController } from './hr.controller';
       PermissionRequest,
       HrShift,
       Attendance,
+      AttendanceAudit,
       BiometricCredential,
       Branch,
     ]),

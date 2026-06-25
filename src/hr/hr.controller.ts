@@ -208,6 +208,23 @@ export class HrController {
     return this.service.updateAttendance(id, body);
   }
 
+  @Get('attendance/:employeeId/audit')
+  getAttendanceAudit(
+    @Param('employeeId') employeeId: string,
+    @Request() req: any,
+  ) {
+    const tenantId = req?.user?.tenantId || req?.headers?.['x-tenant-id'];
+    return this.service.getAttendanceAudit(employeeId, tenantId);
+  }
+
+  @Post('attendance/audit/:auditId/revert')
+  revertAttendanceChange(
+    @Param('auditId') auditId: string,
+    @Body() body: { revertedBy: string },
+  ) {
+    return this.service.revertAttendanceChange(auditId, body.revertedBy);
+  }
+
   // Biometrics
   @Post('biometrics/face/register')
   registerFace(@Body() body: any, @Request() req?: any) {
