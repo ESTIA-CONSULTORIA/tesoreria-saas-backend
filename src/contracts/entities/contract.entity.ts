@@ -32,6 +32,9 @@ export class Contract {
   @Column({ type: 'text', nullable: true })
   signedPdfBase64: string;
 
+  @Column({ nullable: true })
+  signedPdfUrl: string;
+
   @Column({ type: 'text', nullable: true })
   signatureBase64: string;
 

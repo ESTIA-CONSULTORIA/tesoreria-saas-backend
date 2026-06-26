@@ -4,6 +4,7 @@ import { Repository, DataSource } from 'typeorm';
 import { ContractTemplate } from './entities/contract-template.entity';
 import { Contract } from './entities/contract.entity';
 import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
+import { StorageService } from '../storage/storage.service';
 
 const FIELD_MAP: Record<string, (emp: any, company?: any, branch?: any) => string> = {
   nombre_completo: (e) => `${e.nombre || ''} ${e.apellidos || ''}`.trim(),
@@ -39,6 +40,7 @@ export class ContractsService {
     private contractRepo: Repository<Contract>,
     @InjectDataSource()
     private dataSource: DataSource,
+    private readonly storageService: StorageService,
   ) {}
 
   async getTemplates(tenantId: string, companyId?: string) {
@@ -213,6 +215,20 @@ export class ContractsService {
 
     const signedPdf = await this.generateSignedPdf(contract, dto);
 
+    let signedPdfBase64: string | null = signedPdf;
+    let signedPdfUrl: string | undefined;
+
+    if (process.env.STORAGE_PROVIDER === 'cloudinary') {
+      try {
+        const folder = `estia/contracts/${dto.contractId}`;
+        const result = await this.storageService.uploadBase64(signedPdf, folder, `signed_${dto.contractId}`);
+        signedPdfUrl = result.url;
+        signedPdfBase64 = null;
+      } catch (e) {
+        console.error('Error uploading signed PDF to Cloudinary, falling back to base64:', e);
+      }
+    }
+
     await this.contractRepo.update(dto.contractId, {
       status: 'FIRMADO',
       signatureBase64: dto.signatureBase64,
@@ -223,7 +239,8 @@ export class ContractsService {
       signedIp: dto.ip,
       signedLat: dto.lat,
       signedLng: dto.lng,
-      signedPdfBase64: signedPdf,
+      signedPdfBase64: signedPdfBase64 ?? undefined,
+      signedPdfUrl,
     });
 
     return this.contractRepo.findOne({ where: { id: dto.contractId } });

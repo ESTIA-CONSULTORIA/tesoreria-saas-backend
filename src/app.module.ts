@@ -40,6 +40,7 @@ import { PosChatModule } from './pos-chat/pos-chat.module';
 import { HrModule } from './hr/hr.module';
 import { PayrollModule } from './payroll/payroll.module';
 import { ContractsModule } from './contracts/contracts.module';
+import { StorageModule } from './storage/storage.module';
 
 @Module({
   imports: [
@@ -105,6 +106,7 @@ import { ContractsModule } from './contracts/contracts.module';
     HrModule,
     PayrollModule,
     ContractsModule,
+    StorageModule,
   ],
 
   providers: [

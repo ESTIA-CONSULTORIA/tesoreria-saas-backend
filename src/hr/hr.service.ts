@@ -11,6 +11,7 @@ import { BiometricCredential } from './entities/biometric-credential.entity';
 import { AttendanceAudit } from './entities/attendance-audit.entity';
 import { Branch } from '../branches/entities/branch.entity';
 import { OcrService } from '../ocr/ocr.service';
+import { StorageService } from '../storage/storage.service';
 
 function haversineMeters(lat1: number, lon1: number, lat2: number, lon2: number): number {
   const R = 6371000;
@@ -45,6 +46,7 @@ export class HrService {
     @InjectRepository(Branch)
     private readonly branchRepo: Repository<Branch>,
     private readonly ocrService: OcrService,
+    private readonly storageService: StorageService,
   ) {}
 
   // --- Employees ---
@@ -85,11 +87,41 @@ export class HrService {
     return this.docRepo.find({ where: { employeeId }, order: { uploadedAt: 'DESC' } });
   }
 
-  async addDocument(employeeId: string, data: Partial<HrDocument>): Promise<HrDocument> {
-    return this.docRepo.save(this.docRepo.create({ ...data, employeeId }));
+  async addDocument(employeeId: string, data: any): Promise<HrDocument> {
+    let url = '';
+    let fileData = data.fileData ?? null;
+
+    if (data.fileData && process.env.STORAGE_PROVIDER === 'cloudinary') {
+      try {
+        const folder = `estia/employees/${employeeId}/documents`;
+        const publicId = `${data.tipo || 'doc'}_${Date.now()}`;
+        const result = await this.storageService.uploadBase64(data.fileData, folder, publicId);
+        url = result.url;
+        fileData = null;
+      } catch (e) {
+        console.error('Error uploading to Cloudinary, falling back to base64:', e);
+      }
+    }
+
+    const doc = this.docRepo.create({ ...data, employeeId, fileData: fileData ?? undefined, url });
+    return this.docRepo.save(doc) as unknown as Promise<HrDocument>;
   }
 
   async removeDocument(id: string): Promise<void> {
+    const doc = await this.docRepo.findOne({ where: { id } });
+    if (doc?.url && process.env.STORAGE_PROVIDER === 'cloudinary') {
+      try {
+        const urlParts = doc.url.split('/');
+        const uploadIndex = urlParts.indexOf('upload');
+        if (uploadIndex !== -1) {
+          const publicIdWithExt = urlParts.slice(uploadIndex + 2).join('/');
+          const publicId = publicIdWithExt.replace(/\.[^/.]+$/, '');
+          await this.storageService.deleteFile(publicId);
+        }
+      } catch (e) {
+        console.error('Error deleting from Cloudinary:', e);
+      }
+    }
     await this.docRepo.delete(id);
   }
 
@@ -153,16 +185,32 @@ export class HrService {
     console.log('=== OCR RAW TEXT END ===');
     const extractedFields = this.ocrService.extractHrFields(rawText, tipo);
 
-    const doc = await this.docRepo.save(
+    let storedFileData: string | null = fileData;
+    let url = '';
+
+    if (process.env.STORAGE_PROVIDER === 'cloudinary') {
+      try {
+        const folder = `estia/employees/${employeeId}/documents`;
+        const publicId = `${tipo}_${Date.now()}`;
+        const result = await this.storageService.uploadBase64(fileData, folder, publicId);
+        url = result.url;
+        storedFileData = null;
+      } catch (e) {
+        console.error('Error uploading to Cloudinary:', e);
+      }
+    }
+
+    const doc = await (this.docRepo.save(
       this.docRepo.create({
         employeeId,
         tipo,
         nombre: tipo,
-        fileData,
+        fileData: storedFileData ?? undefined,
+        url,
         ocrExtracted: extractedFields,
         ocrConfirmed: false,
       }),
-    );
+    ) as Promise<HrDocument>);
 
     return { documentId: doc.id, extractedFields };
   }
