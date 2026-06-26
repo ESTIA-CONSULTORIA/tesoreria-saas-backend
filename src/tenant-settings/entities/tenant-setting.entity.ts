@@ -63,6 +63,16 @@ export class TenantSetting {
   @Column({ nullable: true, type: 'text' })
   customCSS: string;
 
+  // Branding splash / apariencia
+  @Column({ nullable: true })
+  splashBg: string; // hex color o URL de imagen
+
+  @Column({ default: 'dark' })
+  theme: string; // 'dark' | 'light'
+
+  @Column({ nullable: true })
+  companyDisplayName: string; // nombre a mostrar en splash
+
   // Configuración global (JSON)
   @Column({ type: 'json', nullable: true })
   globalConfig: {

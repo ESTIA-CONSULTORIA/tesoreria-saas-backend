@@ -34,6 +34,9 @@ export class TenantSettingsService {
       secondaryButtonColor?: string;
       buttonBorderRadius?: 'square' | 'rounded' | 'pill';
       customCSS?: string;
+      splashBg?: string;
+      theme?: string;
+      companyDisplayName?: string;
     },
   ) {
     const existing = await this.findByTenant(tenantId);
