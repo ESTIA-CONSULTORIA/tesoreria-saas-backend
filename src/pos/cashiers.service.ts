@@ -18,7 +18,10 @@ export class CashiersService {
       where.tenantId = tenantId;
     }
 
-    const users = await this.usersRepo.find({ where });
+    const users = await this.usersRepo.find({
+      where,
+      select: ['id', 'email', 'name', 'password', 'roleCode', 'tenantId'],
+    });
     if (!users.length) {
       throw new HttpException('NIP incorrecto', HttpStatus.UNAUTHORIZED);
     }
