@@ -47,6 +47,7 @@ export async function seedDatabase(dataSource: DataSource) {
   const inventoryRecordsRepository = dataSource.getRepository('Inventory');
   const subscriptionRepository = dataSource.getRepository('Subscription');
   const areasRepository = dataSource.getRepository('Area');
+  const permissionsRepository = dataSource.getRepository('Permission');
   const tablesRepository = dataSource.getRepository('Table');
 
   // Limpiar testTenant y todos sus datos
@@ -264,6 +265,29 @@ export async function seedDatabase(dataSource: DataSource) {
       } else {
         console.log(`✅ Usuario ${userData.email} (${userData.roleCode}) creado`);
       }
+    }
+  }
+
+  // Sembrar 14 permisos por rol si aún no los tienen (idempotente)
+  const SEED_MODULES = [
+    'DASHBOARD', 'COMPANIES', 'BRANCHES', 'USERS', 'ROLES',
+    'BANKS', 'MOVEMENTS', 'TRANSFERS', 'REPORTS', 'POS',
+    'TREASURY', 'RECONCILIATION', 'ADMINISTRATION', 'SETTINGS',
+  ];
+  const allRolesForPerms = await rolesRepository.find();
+  for (const role of allRolesForPerms) {
+    const existingCount = await permissionsRepository.count({ where: { roleId: role.id } });
+    if (existingCount === 0) {
+      const perms = SEED_MODULES.map(module => ({
+        module,
+        canView: true,
+        canCreate: false,
+        canEdit: false,
+        canDelete: false,
+        roleId: role.id,
+      }));
+      await permissionsRepository.save(perms);
+      console.log(`✅ 14 permisos creados para rol ${role.code}`);
     }
   }
 
