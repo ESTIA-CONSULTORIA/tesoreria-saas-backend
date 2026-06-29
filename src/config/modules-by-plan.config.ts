@@ -1,4 +1,5 @@
 export enum Plan {
+  LITE = 'LITE',
   BASIC = 'BASIC',
   PRO = 'PRO',
   BUSINESS = 'BUSINESS',
@@ -6,6 +7,10 @@ export enum Plan {
 }
 
 export const MODULES_BY_PLAN: Record<Plan, string[]> = {
+  [Plan.LITE]: [
+    'pos',
+    'configuracion-pos',
+  ],
   [Plan.BASIC]: [
     'dashboard',
     'empresas',
