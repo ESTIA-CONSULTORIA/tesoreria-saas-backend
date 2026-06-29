@@ -13,6 +13,9 @@ export class TenantsController {
       tradeName: string;
       taxId?: string;
       plan?: string;
+      email?: string;
+      password?: string;
+      ownerName?: string;
     },
   ) {
     return this.tenantsService.create(
@@ -20,6 +23,9 @@ export class TenantsController {
       body.tradeName,
       body.taxId,
       body.plan,
+      body.email,
+      body.password,
+      body.ownerName,
     );
   }
 
