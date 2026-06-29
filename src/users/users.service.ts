@@ -99,8 +99,11 @@ export class UsersService {
     });
   }
 
-  async update(id: string, data: { name?: string; roleId?: string; roleCode?: string; isActive?: boolean; executivePin?: string }) {
+  async update(id: string, data: { name?: string; roleId?: string; roleCode?: string; isActive?: boolean; executivePin?: string; password?: string }) {
     const toSave = { ...data };
+    if (toSave.password) {
+      toSave.password = await bcrypt.hash(toSave.password, 10);
+    }
     if (toSave.executivePin) {
       toSave.executivePin = await bcrypt.hash(toSave.executivePin, 10);
     }
