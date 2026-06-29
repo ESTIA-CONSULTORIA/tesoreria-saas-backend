@@ -26,8 +26,7 @@ export class AuthService {
       throw new BadRequestException('El correo ya está registrado');
     }
 
-    const hashedPassword = await bcrypt.hash(password, 10);
-    const user = await this.usersService.create(email, hashedPassword);
+    const user = await this.usersService.create(email, password);
 
     return {
       message: 'Usuario creado correctamente',

@@ -22,10 +22,11 @@ export class UsersService {
     branchId?: string,
     executivePin?: string,
   ) {
+    const hashedPassword = await bcrypt.hash(password, 10);
     const hashedPin = executivePin ? await bcrypt.hash(executivePin, 10) : undefined;
     const user = this.usersRepository.create({
       email,
-      password,
+      password: hashedPassword,
       name,
       roleId,
       roleCode: roleCode || 'USER',
