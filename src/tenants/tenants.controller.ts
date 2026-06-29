@@ -33,6 +33,14 @@ export class TenantsController {
     return this.tenantsService.findOne(id);
   }
 
+  @Put(':id')
+  update(
+    @Param('id') id: string,
+    @Body() body: { legalName?: string; tradeName?: string; plan?: string; isActive?: boolean },
+  ) {
+    return this.tenantsService.update(id, body);
+  }
+
   @Put(':id/plan')
   updatePlan(@Param('id') id: string, @Body('plan') plan: string) {
     return this.tenantsService.updatePlan(id, plan);

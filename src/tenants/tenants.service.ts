@@ -30,6 +30,11 @@ export class TenantsService {
     return this.tenantsRepository.findOne({ where: { id } });
   }
 
+  async update(id: string, data: Partial<{ legalName: string; tradeName: string; plan: string; isActive: boolean }>) {
+    await this.tenantsRepository.update(id, data);
+    return this.tenantsRepository.findOne({ where: { id } });
+  }
+
   async updatePlan(id: string, plan: string) {
     await this.tenantsRepository.update(id, { plan });
     return this.tenantsRepository.findOne({ where: { id } });
