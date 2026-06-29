@@ -10,11 +10,12 @@ export class TenantsService {
     private tenantsRepository: Repository<Tenant>,
   ) {}
 
-  create(legalName: string, tradeName: string, taxId?: string) {
+  create(legalName: string, tradeName: string, taxId?: string, plan?: string) {
     const tenant = this.tenantsRepository.create({
       legalName,
       tradeName,
       taxId,
+      plan: plan || 'BASIC',
       isActive: true,
     });
 

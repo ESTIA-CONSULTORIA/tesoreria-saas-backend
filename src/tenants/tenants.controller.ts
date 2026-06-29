@@ -12,12 +12,14 @@ export class TenantsController {
       legalName: string;
       tradeName: string;
       taxId?: string;
+      plan?: string;
     },
   ) {
     return this.tenantsService.create(
       body.legalName,
       body.tradeName,
       body.taxId,
+      body.plan,
     );
   }
 
