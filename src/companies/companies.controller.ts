@@ -1,5 +1,6 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Request } from '@nestjs/common';
 import { CompaniesService } from './companies.service';
+import { Public } from '../auth/public.decorator';
 
 @Controller('companies')
 export class CompaniesController {
@@ -34,6 +35,7 @@ export class CompaniesController {
     return this.companiesService.findAll();
   }
 
+  @Public()
   @Get('tenant/:tenantId')
   findByTenant(@Param('tenantId') tenantId: string) {
     return this.companiesService.findByTenant(tenantId);
