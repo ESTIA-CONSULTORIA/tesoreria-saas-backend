@@ -5,6 +5,7 @@ import { UsersModule } from '../users/users.module';
 import { SubscriptionsModule } from '../subscriptions/subscriptions.module';
 import { AddonsModule } from '../addons/addons.module';
 import { HrModule } from '../hr/hr.module';
+import { TenantsModule } from '../tenants/tenants.module';
 import { JwtModule } from '@nestjs/jwt';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { JwtMiddleware } from './jwt.middleware';
@@ -15,6 +16,7 @@ import { JwtMiddleware } from './jwt.middleware';
     SubscriptionsModule,
     AddonsModule,
     HrModule,
+    TenantsModule,
     ConfigModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],

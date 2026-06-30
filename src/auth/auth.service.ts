@@ -4,6 +4,7 @@ import { JwtService } from '@nestjs/jwt';
 import { SubscriptionsService } from '../subscriptions/subscriptions.service';
 import { AddonsService } from '../addons/addons.service';
 import { HrService } from '../hr/hr.service';
+import { TenantsService } from '../tenants/tenants.service';
 import { getModulesByPlan, Plan, ALL_MODULES } from '../config/modules-by-plan.config';
 import * as bcrypt from 'bcrypt';
 
@@ -17,6 +18,7 @@ export class AuthService {
     private subscriptionsService: SubscriptionsService,
     private addonsService: AddonsService,
     private hrService: HrService,
+    private tenantsService: TenantsService,
   ) {}
 
   async register(email: string, password: string) {
@@ -83,8 +85,13 @@ export class AuthService {
       // Otros roles: obtener módulos según plan del tenant
       const subscription = await this.subscriptionsService.findByTenant(user.tenantId);
       if (subscription) {
-        const plan = subscription.planCode as Plan;
-        modulosActivos = getModulesByPlan(plan);
+        modulosActivos = getModulesByPlan(subscription.planCode as Plan);
+      } else {
+        // Fallback: usar el plan directo del tenant cuando no hay suscripción
+        const tenant = await this.tenantsService.findOne(user.tenantId);
+        if (tenant?.plan) {
+          modulosActivos = getModulesByPlan(tenant.plan as Plan);
+        }
       }
 
       // Agregar módulos de addons activos
