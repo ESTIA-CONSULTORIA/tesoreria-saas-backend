@@ -90,7 +90,9 @@ export class AuthService {
         // Fallback: usar el plan directo del tenant cuando no hay suscripción
         const tenant = await this.tenantsService.findOne(user.tenantId);
         if (tenant?.plan) {
-          modulosActivos = getModulesByPlan(tenant.plan as Plan);
+          // Compat: "LITE" legacy → LITE_CORTE
+          const planKey = tenant.plan === 'LITE' ? Plan.LITE_CORTE : tenant.plan as Plan;
+          modulosActivos = getModulesByPlan(planKey);
         }
       }
 
