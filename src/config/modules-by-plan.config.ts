@@ -1,15 +1,28 @@
 export enum Plan {
-  LITE = 'LITE',
-  BASIC = 'BASIC',
-  PRO = 'PRO',
-  BUSINESS = 'BUSINESS',
+  LITE_CORTE = 'LITE_CORTE',
+  LITE_POS   = 'LITE_POS',
+  BASIC      = 'BASIC',
+  PRO        = 'PRO',
+  BUSINESS   = 'BUSINESS',
   ENTERPRISE = 'ENTERPRISE',
 }
 
 export const MODULES_BY_PLAN: Record<Plan, string[]> = {
-  [Plan.LITE]: [
-    'pos',
-    'configuracion-pos',
+  [Plan.LITE_CORTE]: [
+    'dashboard',
+    'corte-caja-lite',
+    'usuarios',
+    'empresas',
+    'sucursales',
+    'apariencia-logo-only',
+  ],
+  [Plan.LITE_POS]: [
+    'dashboard',
+    'pos-sin-inventario',
+    'usuarios',
+    'empresas',
+    'sucursales',
+    'apariencia-logo-only',
   ],
   [Plan.BASIC]: [
     'dashboard',
