@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { ILike, Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 import { Tenant } from './entities/tenant.entity';
 import { User } from '../users/entities/user.entity';
@@ -81,6 +81,15 @@ export class TenantsService {
 
   findOne(id: string) {
     return this.tenantsRepository.findOne({ where: { id } });
+  }
+
+  findBySlug(slug: string) {
+    return this.tenantsRepository.findOne({
+      where: [
+        { legalName: ILike(`%${slug}%`) },
+        { tradeName: ILike(`%${slug}%`) },
+      ],
+    });
   }
 
   async update(id: string, data: Partial<{ legalName: string; tradeName: string; plan: string; isActive: boolean }>) {
