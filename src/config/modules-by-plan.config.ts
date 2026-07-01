@@ -11,6 +11,7 @@ export const MODULES_BY_PLAN: Record<Plan, string[]> = {
   [Plan.LITE_CORTE]: [
     'dashboard',
     'corte-caja-lite',
+    'pos',
     'usuarios',
     'empresas',
     'sucursales',
