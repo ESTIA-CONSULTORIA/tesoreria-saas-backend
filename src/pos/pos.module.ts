@@ -16,6 +16,9 @@ import { ShiftsController } from './shifts.controller';
 import { ShiftsService } from './shifts.service';
 import { CashiersController } from './cashiers.controller';
 import { CashiersService } from './cashiers.service';
+import { CorteFieldsController } from './corte-fields.controller';
+import { CorteFieldsService } from './corte-fields.service';
+import { CorteField } from './entities/corte-field.entity';
 import { PosConfig } from './entities/pos-config.entity';
 import { Product } from './entities/product.entity';
 import { PosCategory } from './entities/category.entity';
@@ -29,7 +32,7 @@ import { User } from '../users/entities/user.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([PosConfig, Product, PosCategory, Area, Table, Sale, Shift, Recipe, Insumo, User]),
+    TypeOrmModule.forFeature([PosConfig, Product, PosCategory, Area, Table, Sale, Shift, Recipe, Insumo, User, CorteField]),
   ],
   controllers: [
     PosController,
@@ -40,6 +43,7 @@ import { User } from '../users/entities/user.entity';
     SalesController,
     ShiftsController,
     CashiersController,
+    CorteFieldsController,
   ],
   providers: [
     PosService,
@@ -50,6 +54,7 @@ import { User } from '../users/entities/user.entity';
     SalesService,
     ShiftsService,
     CashiersService,
+    CorteFieldsService,
   ],
   exports: [
     PosService,
