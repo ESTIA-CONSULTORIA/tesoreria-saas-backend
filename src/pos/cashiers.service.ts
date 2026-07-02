@@ -2,6 +2,7 @@ import { Injectable, HttpException, HttpStatus } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { User } from '../users/entities/user.entity';
+import { SubscriptionsService } from '../subscriptions/subscriptions.service';
 import * as bcrypt from 'bcrypt';
 
 @Injectable()
@@ -9,6 +10,7 @@ export class CashiersService {
   constructor(
     @InjectRepository(User)
     private usersRepo: Repository<User>,
+    private subscriptionsService: SubscriptionsService,
   ) {}
 
   async loginWithNip(nip: string, tenantId: string) {
@@ -59,6 +61,10 @@ export class CashiersService {
     // Definir módulos para CAJERO
     const modulosActivos = ['pos'];
 
+    // Obtener plan del tenant para determinar si es LITE
+    const subscription = await this.subscriptionsService.findByTenant(user.tenantId);
+    const planCode = subscription?.planCode || null;
+
     return {
       access_token: token,
       user: {
@@ -69,6 +75,7 @@ export class CashiersService {
         tenantId: user.tenantId,
       },
       modulosActivos,
+      planCode,
     };
   }
 }

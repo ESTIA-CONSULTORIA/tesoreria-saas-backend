@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { SubscriptionsModule } from '../subscriptions/subscriptions.module';
 import { PosController } from './pos.controller';
 import { PosService } from './pos.service';
 import { ProductsController } from './products.controller';
@@ -36,6 +37,7 @@ import { User } from '../users/entities/user.entity';
 @Module({
   imports: [
     TypeOrmModule.forFeature([PosConfig, Product, PosCategory, Area, Table, Sale, Shift, Recipe, Insumo, User, CorteField, InsumoAlert]),
+    SubscriptionsModule,
   ],
   controllers: [
     PosController,
