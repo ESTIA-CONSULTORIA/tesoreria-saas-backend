@@ -23,7 +23,7 @@ export class InsumoAlert {
   @Column({ nullable: true })
   notas: string;
 
-  @Column()
+  @Column({ nullable: true })
   reportadoPor: string;
 
   @UpdateDateColumn()

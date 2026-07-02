@@ -47,7 +47,7 @@ export class CashiersService {
     const secret = process.env.JWT_SECRET || 'secret';
     const token = jwt.sign(
       {
-        id: user.id,
+        sub: user.id,
         email: user.email,
         roleCode: user.roleCode,
         tenantId: user.tenantId,
