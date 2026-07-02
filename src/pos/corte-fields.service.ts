@@ -29,6 +29,15 @@ export class CorteFieldsService {
       fields = await this.repo.save(
         DEFAULT_FIELDS.map(f => this.repo.create({ ...f, tenantId })),
       );
+    } else {
+      const existingKeys = fields.map(f => f.key);
+      const missingFields = DEFAULT_FIELDS.filter(f => !existingKeys.includes(f.key));
+      if (missingFields.length > 0) {
+        const newFields = await this.repo.save(
+          missingFields.map(f => this.repo.create({ ...f, tenantId })),
+        );
+        fields = [...fields, ...newFields].sort((a, b) => a.order - b.order);
+      }
     }
     return fields;
   }
