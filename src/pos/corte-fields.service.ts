@@ -7,11 +7,13 @@ const DEFAULT_FIELDS = [
   { key: 'efectivo',      label: 'Efectivo',      isActive: true,  resta: false, isRequired: true,  order: 0 },
   { key: 'tarjeta',       label: 'Tarjeta',       isActive: true,  resta: false, isRequired: false, order: 1 },
   { key: 'transferencia', label: 'Transferencia', isActive: true,  resta: false, isRequired: false, order: 2 },
-  { key: 'cortesia',      label: 'Cortesías',     isActive: true,  resta: true,  isRequired: false, order: 3 },
-  { key: 'descuento',     label: 'Descuentos',    isActive: true,  resta: true,  isRequired: false, order: 4 },
-  { key: 'gasto',         label: 'Gastos',        isActive: true,  resta: true,  isRequired: false, order: 5 },
-  { key: 'credito',       label: 'Crédito',       isActive: false, resta: false, isRequired: false, order: 6 },
-  { key: 'compras',       label: 'Compras',       isActive: false, resta: true,  isRequired: false, order: 7 },
+  { key: 'plataformas',   label: 'Plataformas',   isActive: false, resta: false, isRequired: false, order: 3 },
+  { key: 'promociones',   label: 'Promociones',   isActive: false, resta: false, isRequired: false, order: 4 },
+  { key: 'cortesia',      label: 'Cortesías',     isActive: true,  resta: true,  isRequired: false, order: 5 },
+  { key: 'descuento',     label: 'Descuentos',    isActive: true,  resta: true,  isRequired: false, order: 6 },
+  { key: 'gasto',         label: 'Gastos',        isActive: true,  resta: true,  isRequired: false, order: 7 },
+  { key: 'credito',       label: 'Crédito',       isActive: false, resta: false, isRequired: false, order: 8 },
+  { key: 'compras',       label: 'Compras',       isActive: false, resta: true,  isRequired: false, order: 9 },
 ];
 
 @Injectable()
