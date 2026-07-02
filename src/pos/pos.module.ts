@@ -19,6 +19,9 @@ import { CashiersService } from './cashiers.service';
 import { CorteFieldsController } from './corte-fields.controller';
 import { CorteFieldsService } from './corte-fields.service';
 import { CorteField } from './entities/corte-field.entity';
+import { InsumoAlertsController } from './insumo-alerts.controller';
+import { InsumoAlertsService } from './insumo-alerts.service';
+import { InsumoAlert } from './entities/insumo-alert.entity';
 import { PosConfig } from './entities/pos-config.entity';
 import { Product } from './entities/product.entity';
 import { PosCategory } from './entities/category.entity';
@@ -32,7 +35,7 @@ import { User } from '../users/entities/user.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([PosConfig, Product, PosCategory, Area, Table, Sale, Shift, Recipe, Insumo, User, CorteField]),
+    TypeOrmModule.forFeature([PosConfig, Product, PosCategory, Area, Table, Sale, Shift, Recipe, Insumo, User, CorteField, InsumoAlert]),
   ],
   controllers: [
     PosController,
@@ -44,6 +47,7 @@ import { User } from '../users/entities/user.entity';
     ShiftsController,
     CashiersController,
     CorteFieldsController,
+    InsumoAlertsController,
   ],
   providers: [
     PosService,
@@ -55,6 +59,7 @@ import { User } from '../users/entities/user.entity';
     ShiftsService,
     CashiersService,
     CorteFieldsService,
+    InsumoAlertsService,
   ],
   exports: [
     PosService,
