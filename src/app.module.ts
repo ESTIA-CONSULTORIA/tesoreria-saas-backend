@@ -60,7 +60,7 @@ import { StorageModule } from './storage/storage.module';
             autoLoadEntities: true,
             synchronize: false,
             migrations: [__dirname + '/migrations/*{.ts,.js}'],
-            migrationsRun: true,
+            migrationsRun: false,
           };
         }
         return {
@@ -73,7 +73,7 @@ import { StorageModule } from './storage/storage.module';
           autoLoadEntities: true,
           synchronize: false,
           migrations: [__dirname + '/migrations/*{.ts,.js}'],
-          migrationsRun: true,
+          migrationsRun: false,
         };
       },
     }),
