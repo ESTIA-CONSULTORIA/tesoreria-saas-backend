@@ -14,8 +14,29 @@ export class Tenant {
   @Column({ nullable: true })
   taxId: string;
 
+  @Column({ nullable: true })
+  rfc: string;
+
+  @Column({ nullable: true })
+  industry: string;
+
+  @Column({ nullable: true })
+  phone: string;
+
+  @Column({ nullable: true })
+  city: string;
+
+  @Column({ nullable: true })
+  state: string;
+
+  @Column({ nullable: true })
+  slug: string;
+
+  @Column({ default: 'monthly' })
+  billingCycle: string;
+
   @Column({ default: 'BASIC' })
-  plan: string; // BASIC, PROFESIONAL, BUSINESS, ENTERPRISE
+  plan: string;
 
   @Column({ default: true })
   isActive: boolean;

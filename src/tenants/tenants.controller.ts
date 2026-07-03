@@ -11,23 +11,22 @@ export class TenantsController {
     @Body()
     body: {
       legalName: string;
-      tradeName: string;
+      tradeName?: string;
       taxId?: string;
       plan?: string;
       email?: string;
       password?: string;
       ownerName?: string;
+      rfc?: string;
+      industry?: string;
+      phone?: string;
+      city?: string;
+      state?: string;
+      slug?: string;
+      billingCycle?: string;
     },
   ) {
-    return this.tenantsService.create(
-      body.legalName,
-      body.tradeName,
-      body.taxId,
-      body.plan,
-      body.email,
-      body.password,
-      body.ownerName,
-    );
+    return this.tenantsService.create(body);
   }
 
   @Get()

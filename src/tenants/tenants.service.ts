@@ -16,21 +16,38 @@ export class TenantsService {
     @InjectRepository(Branch)  private branchesRepository:  Repository<Branch>,
   ) {}
 
-  async create(
-    legalName: string,
-    tradeName: string,
-    taxId?: string,
-    plan?: string,
-    email?: string,
-    password?: string,
-    ownerName?: string,
-  ) {
+  async create(dto: {
+    legalName: string;
+    tradeName?: string;
+    taxId?: string;
+    plan?: string;
+    email?: string;
+    password?: string;
+    ownerName?: string;
+    rfc?: string;
+    industry?: string;
+    phone?: string;
+    city?: string;
+    state?: string;
+    slug?: string;
+    billingCycle?: string;
+  }) {
+    const { legalName, tradeName, taxId, plan, email, password, ownerName,
+            rfc, industry, phone, city, state, slug, billingCycle } = dto;
+
     // 1. Tenant
     const tenant = await this.tenantsRepository.save(
       this.tenantsRepository.create({
         legalName,
-        tradeName,
-        taxId,
+        tradeName: tradeName || legalName,
+        taxId: taxId || rfc,
+        rfc,
+        industry,
+        phone,
+        city,
+        state,
+        slug,
+        billingCycle: billingCycle || 'monthly',
         plan: plan || 'BASIC',
         isActive: true,
       }),
@@ -56,6 +73,7 @@ export class TenantsService {
       this.companiesRepository.create({
         legalName,
         tradeName: tradeName || legalName,
+
         tenantId: tenant.id,
         baseCurrency: 'MXN',
         isActive: true,
