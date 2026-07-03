@@ -35,4 +35,15 @@ export class AuthController {
   executiveLogin(@Body() body: { tenantId: string; pin: string }) {
     return this.authService.executiveLogin(body.tenantId, body.pin);
   }
+
+  @Public()
+  @Post('refresh')
+  refresh(@Body() body: { refreshToken: string }) {
+    return this.authService.refreshAccessToken(body.refreshToken);
+  }
+
+  @Post('logout')
+  logout(@Body() body: { refreshToken: string }) {
+    return this.authService.revokeRefreshToken(body.refreshToken);
+  }
 }

@@ -1,4 +1,6 @@
 import { Injectable, UnauthorizedException, BadRequestException } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
 import { UsersService } from '../users/users.service';
 import { JwtService } from '@nestjs/jwt';
 import { SubscriptionsService } from '../subscriptions/subscriptions.service';
@@ -6,7 +8,10 @@ import { AddonsService } from '../addons/addons.service';
 import { HrService } from '../hr/hr.service';
 import { TenantsService } from '../tenants/tenants.service';
 import { getModulesByPlan, Plan, ALL_MODULES } from '../config/modules-by-plan.config';
+import { RefreshToken } from './entities/refresh-token.entity';
+import { User } from '../users/entities/user.entity';
 import * as bcrypt from 'bcrypt';
+import * as crypto from 'crypto';
 
 const ATTENDANCE_GATED_ROLES = ['CAJERO', 'MESERO', 'GERENTE', 'CONTADOR', 'EMPLEADO'];
 
@@ -19,6 +24,8 @@ export class AuthService {
     private addonsService: AddonsService,
     private hrService: HrService,
     private tenantsService: TenantsService,
+    @InjectRepository(RefreshToken) private refreshTokenRepo: Repository<RefreshToken>,
+    @InjectRepository(User) private usersRepo: Repository<User>,
   ) {}
 
   async register(email: string, password: string) {
@@ -67,42 +74,12 @@ export class AuthService {
       }
     }
 
-    const token = this.jwtService.sign({
-      sub: user.id,
-      email: user.email,
-      roleCode: user.roleCode,
-      tenantId: user.tenantId,
-      companyId: user.companyId || null,
-      branchId: user.branchId || null,
-    });
-
-    // Calcular módulos activos según rol y tenant
-    let modulosActivos: string[] = [];
-    if (user.roleCode === 'SOPORTE') {
-      // SOPORTE tiene acceso a todos los módulos
-      modulosActivos = ALL_MODULES;
-    } else if (user.tenantId) {
-      // Otros roles: obtener módulos según plan del tenant
-      const subscription = await this.subscriptionsService.findByTenant(user.tenantId);
-      if (subscription) {
-        modulosActivos = getModulesByPlan(subscription.planCode as Plan);
-      } else {
-        // Fallback: usar el plan directo del tenant cuando no hay suscripción
-        const tenant = await this.tenantsService.findOne(user.tenantId);
-        if (tenant?.plan) {
-          // Compat: "LITE" legacy → LITE_CORTE
-          const planKey = tenant.plan === 'LITE' ? Plan.LITE_CORTE : tenant.plan as Plan;
-          modulosActivos = getModulesByPlan(planKey);
-        }
-      }
-
-      // Agregar módulos de addons activos
-      const addonModules = await this.addonsService.getActiveModulesByTenant(user.tenantId);
-      modulosActivos = [...modulosActivos, ...addonModules];
-    }
+    const modulosActivos = await this.getModulosActivos(user.tenantId, user.roleCode || '');
+    const { access_token, refresh_token } = await this.generateTokens(user, modulosActivos);
 
     return {
-      access_token: token,
+      access_token,
+      refresh_token,
       modulosActivos,
       user: {
         id: user.id,
@@ -126,16 +103,14 @@ export class AuthService {
     if (!user) {
       throw new UnauthorizedException('Usuario no encontrado');
     }
-    const token = this.jwtService.sign({
-      sub: user.id,
-      email: user.email,
-      roleCode: user.roleCode,
-      tenantId: user.tenantId,
-      companyId: companyId || null,
-      branchId: user.branchId || null,
-    });
+    const modulosActivos = await this.getModulosActivos(user.tenantId, user.roleCode || '');
+    const { access_token, refresh_token } = await this.generateTokens(
+      { ...user, companyId: companyId || null },
+      modulosActivos,
+    );
     return {
-      access_token: token,
+      access_token,
+      refresh_token,
       user: {
         id: user.id,
         email: user.email,
@@ -183,5 +158,74 @@ export class AuthService {
       }
     }
     throw new UnauthorizedException('PIN incorrecto');
+  }
+
+  private async getModulosActivos(tenantId: string, roleCode: string): Promise<string[]> {
+    if (roleCode === 'SOPORTE') return ALL_MODULES;
+    let modulosActivos: string[] = [];
+    if (tenantId) {
+      const subscription = await this.subscriptionsService.findByTenant(tenantId);
+      if (subscription) {
+        modulosActivos = getModulesByPlan(subscription.planCode as Plan);
+      } else {
+        const tenant = await this.tenantsService.findOne(tenantId);
+        if (tenant?.plan) {
+          const planKey = tenant.plan === 'LITE' ? Plan.LITE_CORTE : tenant.plan as Plan;
+          modulosActivos = getModulesByPlan(planKey);
+        }
+      }
+      const addonModules = await this.addonsService.getActiveModulesByTenant(tenantId);
+      modulosActivos = [...modulosActivos, ...addonModules];
+    }
+    return modulosActivos;
+  }
+
+  async generateTokens(user: any, modulosActivos: string[]) {
+    const payload = {
+      sub: user.id,
+      email: user.email,
+      roleCode: user.roleCode,
+      tenantId: user.tenantId,
+      companyId: user.companyId || null,
+      branchId: user.branchId || null,
+      modulosActivos,
+    };
+
+    const access_token = this.jwtService.sign(payload, { expiresIn: '15m' });
+
+    const refresh_token = crypto.randomBytes(64).toString('hex');
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + 7);
+
+    await this.refreshTokenRepo.save({
+      userId: user.id,
+      tenantId: user.tenantId,
+      token: refresh_token,
+      expiresAt,
+      revoked: false,
+    });
+
+    return { access_token, refresh_token };
+  }
+
+  async refreshAccessToken(token: string) {
+    const stored = await this.refreshTokenRepo.findOne({ where: { token, revoked: false } });
+    if (!stored || stored.expiresAt < new Date()) {
+      throw new UnauthorizedException('Refresh token inválido o expirado');
+    }
+
+    const user = await this.usersRepo.findOne({ where: { id: stored.userId } });
+    if (!user) throw new UnauthorizedException('Usuario no encontrado');
+
+    stored.revoked = true;
+    await this.refreshTokenRepo.save(stored);
+
+    const modulosActivos = await this.getModulosActivos(stored.tenantId, user.roleCode || '');
+    return this.generateTokens(user, modulosActivos);
+  }
+
+  async revokeRefreshToken(token: string) {
+    await this.refreshTokenRepo.update({ token }, { revoked: true });
+    return { message: 'Sesión cerrada correctamente' };
   }
 }
