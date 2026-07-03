@@ -193,17 +193,23 @@ export class AuthService {
 
     const access_token = this.jwtService.sign(payload, { expiresIn: '15m' });
 
-    const refresh_token = crypto.randomBytes(64).toString('hex');
-    const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + 7);
+    let refresh_token: string | null = null;
+    try {
+      const token = crypto.randomBytes(64).toString('hex');
+      const expiresAt = new Date();
+      expiresAt.setDate(expiresAt.getDate() + 7);
 
-    await this.refreshTokenRepo.save({
-      userId: user.id,
-      tenantId: user.tenantId,
-      token: refresh_token,
-      expiresAt,
-      revoked: false,
-    });
+      await this.refreshTokenRepo.save({
+        userId: user.id,
+        tenantId: user.tenantId,
+        token,
+        expiresAt,
+        revoked: false,
+      });
+      refresh_token = token;
+    } catch (e: any) {
+      console.warn('No se pudo guardar refresh token:', e.message);
+    }
 
     return { access_token, refresh_token };
   }
