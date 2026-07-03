@@ -58,7 +58,9 @@ import { StorageModule } from './storage/storage.module';
             url: databaseUrl,
             ssl: { rejectUnauthorized: false },
             autoLoadEntities: true,
-            synchronize: true,
+            synchronize: false,
+            migrations: [__dirname + '/migrations/*{.ts,.js}'],
+            migrationsRun: true,
           };
         }
         return {
@@ -69,7 +71,9 @@ import { StorageModule } from './storage/storage.module';
           password: config.get<string>('DB_PASS') || 'postgres',
           database: config.get<string>('DB_NAME') || 'tesoreria',
           autoLoadEntities: true,
-          synchronize: true,
+          synchronize: false,
+          migrations: [__dirname + '/migrations/*{.ts,.js}'],
+          migrationsRun: true,
         };
       },
     }),
