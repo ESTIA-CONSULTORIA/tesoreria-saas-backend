@@ -8,24 +8,18 @@ on:
 jobs:
   backup:
     runs-on: ubuntu-latest
+    container:
+      image: postgres:18
     steps:
-      - name: Instalar PostgreSQL client
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y wget gnupg
-          wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo apt-key add -
-          echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list
-          sudo apt-get update
-          sudo apt-get install -y postgresql-client-18
-
       - name: Crear backup
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          PGPASSWORD: ${{ secrets.PGPASSWORD }}
         run: |
           TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-          pg_dump "$DATABASE_URL" --no-password -F c -f "backup_${TIMESTAMP}.dump"
-          echo "Backup creado: backup_${TIMESTAMP}.dump"
+          pg_dump "$DATABASE_URL" -F c -f "backup_${TIMESTAMP}.dump"
           echo "BACKUP_FILE=backup_${TIMESTAMP}.dump" >> $GITHUB_ENV
+          ls -lh *.dump
 
       - name: Subir backup como artifact
         uses: actions/upload-artifact@v4
