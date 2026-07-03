@@ -26,4 +26,4 @@ jobs:
         with:
           name: db-backup-${{ github.run_number }}
           path: "*.dump"
-          retention-days: 30
+          retention-days: 90
