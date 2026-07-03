@@ -61,6 +61,8 @@ async function bootstrap() {
     console.error('⚠️ Seed falló pero el servidor continuará:', seedErr?.message ?? seedErr);
   }
 
+  app.setGlobalPrefix('api/v1');
+
   const port = process.env.PORT ?? 3000;
   const host = '0.0.0.0';
 
