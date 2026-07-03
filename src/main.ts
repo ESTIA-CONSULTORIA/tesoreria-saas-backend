@@ -5,20 +5,30 @@ import { seedDatabase } from './seed/seed';
 import { JwtMiddleware } from './auth/jwt.middleware';
 import * as bodyParser from 'body-parser';
 
+const ALLOWED_ORIGINS = [
+  'https://app.estiaconsultoria.com',
+  'https://tesoreria-saas-frontend-production.up.railway.app',
+  'http://localhost:5173',
+  'http://localhost:3000',
+];
+
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
     bodyParser: false,
     cors: {
-      origin: true,
+      origin: ALLOWED_ORIGINS,
       credentials: true,
       methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
       allowedHeaders: ['Content-Type', 'Authorization', 'x-tenant-id', 'tenant-id', 'x-company-id', 'x-branch-id'],
     },
   });
 
-  // CORS manual — antes de bodyParser y de enableCors
+  // CORS manual — antes de bodyParser
   app.use((req, res, next) => {
-    res.header('Access-Control-Allow-Origin', req.headers.origin || '*');
+    const origin = req.headers.origin as string;
+    if (origin && ALLOWED_ORIGINS.includes(origin)) {
+      res.header('Access-Control-Allow-Origin', origin);
+    }
     res.header('Access-Control-Allow-Credentials', 'true');
     res.header('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,PATCH,OPTIONS');
     res.header('Access-Control-Allow-Headers', 'Content-Type,Authorization,x-tenant-id,tenant-id,x-company-id,x-branch-id');
