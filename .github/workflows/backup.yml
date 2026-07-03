@@ -1,0 +1,29 @@
+name: PostgreSQL Backup
+
+on:
+  schedule:
+    - cron: '0 6 * * *'  # Todos los días a las 6am UTC (12am Mexicali)
+  workflow_dispatch:      # También se puede correr manualmente
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Instalar PostgreSQL client
+        run: sudo apt-get install -y postgresql-client
+
+      - name: Crear backup
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+          pg_dump "$DATABASE_URL" --no-password -F c -f "backup_${TIMESTAMP}.dump"
+          echo "Backup creado: backup_${TIMESTAMP}.dump"
+          echo "BACKUP_FILE=backup_${TIMESTAMP}.dump" >> $GITHUB_ENV
+
+      - name: Subir backup como artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: db-backup-${{ github.run_number }}
+          path: "*.dump"
+          retention-days: 30
