@@ -42,6 +42,7 @@ import { HrModule } from './hr/hr.module';
 import { PayrollModule } from './payroll/payroll.module';
 import { ContractsModule } from './contracts/contracts.module';
 import { StorageModule } from './storage/storage.module';
+import { PatientsModule } from './patients/patients.module';
 
 @Module({
   imports: [
@@ -114,6 +115,7 @@ import { StorageModule } from './storage/storage.module';
     PayrollModule,
     ContractsModule,
     StorageModule,
+    PatientsModule,
   ],
 
   providers: [
