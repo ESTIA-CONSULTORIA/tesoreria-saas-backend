@@ -1,10 +1,14 @@
 import { Body, Controller, Get, Param, Post, Put } from '@nestjs/common';
 import { SubscriptionsService } from './subscriptions.service';
+import { SubscriptionAlertsService } from './subscription-alerts.service';
 import { Subscription } from './entities/subscription.entity';
 
 @Controller('subscriptions')
 export class SubscriptionsController {
-  constructor(private subsService: SubscriptionsService) {}
+  constructor(
+    private subsService: SubscriptionsService,
+    private alertsService: SubscriptionAlertsService,
+  ) {}
 
   @Post()
   create(@Body() body: Partial<Subscription>) {
@@ -24,5 +28,10 @@ export class SubscriptionsController {
   @Post(':tenantId/renew')
   renew(@Param('tenantId') tenantId: string) {
     return this.subsService.renewSubscription(tenantId);
+  }
+
+  @Get('alerts')
+  getAlerts() {
+    return this.alertsService.getAlerts();
   }
 }
