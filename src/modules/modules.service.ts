@@ -28,7 +28,7 @@ export class ModulesService {
     if (existing) {
       existing.status = 'active';
       existing.source = source;
-      existing.activatedBy = activatedBy ?? null;
+      existing.activatedBy = (activatedBy ?? null) as string;
       return this.tenantModuleRepo.save(existing);
     }
     return this.tenantModuleRepo.save(

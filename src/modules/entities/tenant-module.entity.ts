@@ -8,7 +8,7 @@ export class TenantModule {
   @Column({ default: 'plan_base' }) source: string;
   @Column({ default: 'active' }) status: string;
   @Column({ type: 'decimal', default: 0 }) price: number;
-  @Column({ nullable: true }) activatedBy: string | null;
+  @Column({ nullable: true, type: 'varchar' }) activatedBy: string;
   @Column({ nullable: true }) expiresAt: Date;
   @Column({ nullable: true }) notes: string;
   @CreateDateColumn() activatedAt: Date;
