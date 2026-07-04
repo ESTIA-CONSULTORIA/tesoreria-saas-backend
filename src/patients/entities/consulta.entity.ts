@@ -8,7 +8,7 @@ export class Consulta {
   @Column()
   tenantId: string;
 
-  @Column()
+  @Column({ nullable: true })
   companyId: string;
 
   @Column()

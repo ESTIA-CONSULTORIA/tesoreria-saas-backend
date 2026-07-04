@@ -8,7 +8,7 @@ export class Patient {
   @Column()
   tenantId: string;
 
-  @Column()
+  @Column({ nullable: true })
   companyId: string;
 
   @Column()
