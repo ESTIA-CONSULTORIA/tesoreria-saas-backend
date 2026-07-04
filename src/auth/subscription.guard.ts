@@ -55,19 +55,18 @@ export class SubscriptionGuard implements CanActivate {
     const subscription = await this.subsService.findByTenant(tenantId);
 
     if (!subscription) {
-      // Fallback: si el tenant tiene un plan directo, se permite el acceso
+      // Tenant legacy sin suscripción formal — crear una automática por 30 días
       const tenant = await this.tenantsService.findOne(tenantId);
-      if (tenant?.plan) {
-        return true;
-      }
-      throw new ForbiddenException('Sin suscripción');
+      if (!tenant?.plan) throw new ForbiddenException('Sin suscripción');
+      await this.subsService.createForTenant(tenant.id, tenant.plan, 'monthly');
+      return true;
     }
 
     const today = new Date();
     const endDate = subscription.endDate ? new Date(subscription.endDate) : null;
 
     if (subscription.status !== 'ACTIVE' || (endDate && endDate < today)) {
-      throw new ForbiddenException('Suscripción vencida');
+      throw new ForbiddenException('Suscripción vencida — contacta a ESTIA Consultoría para renovar');
     }
 
     return true;

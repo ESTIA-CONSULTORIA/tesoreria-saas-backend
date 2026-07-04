@@ -6,6 +6,7 @@ import { Tenant } from './entities/tenant.entity';
 import { User } from '../users/entities/user.entity';
 import { Company } from '../companies/entities/company.entity';
 import { Branch } from '../branches/entities/branch.entity';
+import { SubscriptionsService } from '../subscriptions/subscriptions.service';
 
 @Injectable()
 export class TenantsService {
@@ -14,6 +15,7 @@ export class TenantsService {
     @InjectRepository(User)    private usersRepository:     Repository<User>,
     @InjectRepository(Company) private companiesRepository: Repository<Company>,
     @InjectRepository(Branch)  private branchesRepository:  Repository<Branch>,
+    private subscriptionsService: SubscriptionsService,
   ) {}
 
   async create(dto: {
@@ -88,6 +90,13 @@ export class TenantsService {
         name: 'Matriz',
         isActive: true,
       }),
+    );
+
+    // 5. Suscripción inicial
+    await this.subscriptionsService.createForTenant(
+      tenant.id,
+      dto.plan || 'BASIC',
+      dto.billingCycle || 'monthly',
     );
 
     return tenant;

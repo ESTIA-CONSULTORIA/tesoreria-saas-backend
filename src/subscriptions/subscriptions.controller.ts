@@ -20,4 +20,9 @@ export class SubscriptionsController {
   updatePlan(@Param('tenantId') tenantId: string, @Body('planCode') planCode: string) {
     return this.subsService.updatePlan(tenantId, planCode);
   }
+
+  @Post(':tenantId/renew')
+  renew(@Param('tenantId') tenantId: string) {
+    return this.subsService.renewSubscription(tenantId);
+  }
 }

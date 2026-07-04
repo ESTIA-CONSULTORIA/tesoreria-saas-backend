@@ -6,9 +6,10 @@ import { Tenant } from './entities/tenant.entity';
 import { User } from '../users/entities/user.entity';
 import { Company } from '../companies/entities/company.entity';
 import { Branch } from '../branches/entities/branch.entity';
+import { SubscriptionsModule } from '../subscriptions/subscriptions.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Tenant, User, Company, Branch])],
+  imports: [TypeOrmModule.forFeature([Tenant, User, Company, Branch]), SubscriptionsModule],
   controllers: [TenantsController],
   providers: [TenantsService],
   exports: [TenantsService],
