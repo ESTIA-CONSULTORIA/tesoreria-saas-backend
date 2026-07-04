@@ -1,6 +1,8 @@
-import { Injectable, CanActivate, ExecutionContext, ForbiddenException } from '@nestjs/common';
+import { CanActivate, ExecutionContext, Injectable, ForbiddenException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { SubscriptionsService } from '../subscriptions/subscriptions.service';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { TenantModule } from '../modules/entities/tenant-module.entity';
 import { getModulesByPlan, Plan } from '../config/modules-by-plan.config';
 import { MODULO_KEY } from './modulo.decorator';
 import { IS_PUBLIC_KEY } from './public.decorator';
@@ -9,66 +11,42 @@ import { IS_PUBLIC_KEY } from './public.decorator';
 export class PlanModuloGuard implements CanActivate {
   constructor(
     private reflector: Reflector,
-    private subscriptionsService: SubscriptionsService,
+    @InjectRepository(TenantModule)
+    private tenantModuleRepo: Repository<TenantModule>,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
-    // Verificar si es público
     const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
       context.getHandler(),
       context.getClass(),
     ]);
+    if (isPublic) return true;
 
-    if (isPublic) {
-      return true;
-    }
-
-    const request = context.switchToHttp().getRequest();
-    const user = request.user;
-
-    // SOPORTE y vista ejecutiva tienen acceso a todos los módulos
-    if (user?.roleCode === 'SOPORTE' || user?.executiveAccess === true) {
-      return true;
-    }
-
-    // Obtener el módulo requerido del decorator
     const requiredModulo = this.reflector.getAllAndOverride<string>(MODULO_KEY, [
       context.getHandler(),
       context.getClass(),
     ]);
+    if (!requiredModulo) return true;
 
-    // Si no hay módulo requerido, permitir acceso
-    if (!requiredModulo) {
-      return true;
-    }
+    if (requiredModulo === 'dashboard') return true;
 
-    // El módulo dashboard está disponible para todos los planes
-    if (requiredModulo === 'dashboard') {
-      return true;
-    }
+    const request = context.switchToHttp().getRequest();
+    const user = request.user;
 
-    const tenantId = request.user?.tenantId;
+    if (!user?.tenantId) return true;
 
-    if (!tenantId) {
-      throw new ForbiddenException('Sesión inválida');
-    }
+    if (user.roleCode === 'SOPORTE' || user.executiveAccess === true) return true;
 
-    // Obtener suscripción del tenant
-    const subscription = await this.subscriptionsService.findByTenant(tenantId);
+    // PASO 1: tenant_modules (nueva arquitectura)
+    const tenantMod = await this.tenantModuleRepo.findOne({
+      where: { tenantId: user.tenantId, moduleCode: requiredModulo, status: 'active' },
+    });
+    if (tenantMod) return true;
 
-    if (!subscription) {
-      throw new ForbiddenException('No se encontró suscripción activa');
-    }
+    // PASO 2: fallback a config estática (legacy)
+    const modulosActivos = getModulesByPlan((user.plan || 'BASIC') as Plan);
+    if (modulosActivos.includes(requiredModulo)) return true;
 
-    // Obtener módulos del plan
-    const plan = subscription.planCode as Plan;
-    const modulosActivos = getModulesByPlan(plan);
-
-    // Verificar si el módulo está activo
-    if (!modulosActivos.includes(requiredModulo)) {
-      throw new ForbiddenException(`El módulo '${requiredModulo}' no está disponible en su plan`);
-    }
-
-    return true;
+    throw new ForbiddenException(`Módulo '${requiredModulo}' no disponible en tu plan`);
   }
 }
