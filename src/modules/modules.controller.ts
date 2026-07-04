@@ -28,4 +28,9 @@ export class ModulesController {
   deactivate(@Param('tenantId') tenantId: string, @Param('moduleCode') moduleCode: string) {
     return this.service.deactivateModule(tenantId, moduleCode);
   }
+
+  @Post('tenant/:tenantId/init')
+  initFromPlan(@Param('tenantId') tenantId: string, @Body() body: { planCode: string }) {
+    return this.service.initFromPlan(tenantId, body.planCode);
+  }
 }
