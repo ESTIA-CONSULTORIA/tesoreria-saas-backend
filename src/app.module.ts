@@ -43,6 +43,7 @@ import { PayrollModule } from './payroll/payroll.module';
 import { ContractsModule } from './contracts/contracts.module';
 import { StorageModule } from './storage/storage.module';
 import { PatientsModule } from './patients/patients.module';
+import { ModulesModule } from './modules/modules.module';
 
 @Module({
   imports: [
@@ -116,6 +117,7 @@ import { PatientsModule } from './patients/patients.module';
     ContractsModule,
     StorageModule,
     PatientsModule,
+    ModulesModule,
   ],
 
   providers: [

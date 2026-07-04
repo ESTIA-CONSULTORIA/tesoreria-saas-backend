@@ -49,6 +49,9 @@ export async function seedDatabase(dataSource: DataSource) {
   const areasRepository = dataSource.getRepository('Area');
   const permissionsRepository = dataSource.getRepository('Permission');
   const tablesRepository = dataSource.getRepository('Table');
+  const moduleRepo = dataSource.getRepository('Module');
+  const planModuleRepo = dataSource.getRepository('PlanModule');
+  const tenantModuleRepo = dataSource.getRepository('TenantModule');
 
   // Limpiar testTenant y todos sus datos
   try {
@@ -2867,6 +2870,66 @@ export async function seedDatabase(dataSource: DataSource) {
   const totalAlmacenes = await dataSource.getRepository('Almacen').count({ where: { tenantId: demoTenant.id } });
   const totalPaymentSchedules = await dataSource.getRepository('PaymentSchedule').count({ where: { tenantId: demoTenant.id } });
   const totalSales = await dataSource.getRepository('Sale').count({ where: { tenantId: demoTenant.id } });
+
+  // ═══════════════════════════════════════════════════════════════
+  // MÓDULOS: catálogo y plan_modules
+  // ═══════════════════════════════════════════════════════════════
+  const MODULES_CATALOG = [
+    { code: 'dashboard',          name: 'Dashboard',             category: 'core',        isAddon: false, defaultPrice: 0 },
+    { code: 'cortes',             name: 'Corte de Caja',         category: 'operaciones', isAddon: false, defaultPrice: 0 },
+    { code: 'tesoreria',          name: 'Tesorería',             category: 'finanzas',    isAddon: false, defaultPrice: 0 },
+    { code: 'bancos',             name: 'Bancos',                category: 'finanzas',    isAddon: false, defaultPrice: 0 },
+    { code: 'rh',                 name: 'Recursos Humanos',      category: 'rh',          isAddon: true,  defaultPrice: 300 },
+    { code: 'compras',            name: 'Compras',               category: 'operaciones', isAddon: true,  defaultPrice: 200 },
+    { code: 'reportes',           name: 'Reportes',              category: 'analitica',   isAddon: false, defaultPrice: 0 },
+    { code: 'auditoria',          name: 'Auditoría',             category: 'core',        isAddon: false, defaultPrice: 0 },
+    { code: 'usuarios',           name: 'Usuarios',              category: 'core',        isAddon: false, defaultPrice: 0 },
+    { code: 'empresas',           name: 'Empresas',              category: 'core',        isAddon: false, defaultPrice: 0 },
+    { code: 'sucursales',         name: 'Sucursales',            category: 'core',        isAddon: false, defaultPrice: 0 },
+    { code: 'pos',                name: 'POS General',           category: 'pos',         isAddon: true,  defaultPrice: 400 },
+    { code: 'pos_restaurante',    name: 'POS Restaurante',       category: 'pos',         isAddon: true,  defaultPrice: 500 },
+    { code: 'pos_dental',         name: 'POS Dental',            category: 'pos',         isAddon: true,  defaultPrice: 400 },
+    { code: 'pos_comercio',       name: 'POS Comercio',          category: 'pos',         isAddon: true,  defaultPrice: 400 },
+    { code: 'pos_clinica',        name: 'POS Clínica',           category: 'pos',         isAddon: true,  defaultPrice: 400 },
+    { code: 'pos_bar',            name: 'POS Bar',               category: 'pos',         isAddon: true,  defaultPrice: 500 },
+    { code: 'pacientes',          name: 'Pacientes',             category: 'salud',       isAddon: true,  defaultPrice: 250 },
+    { code: 'inventario',         name: 'Inventario',            category: 'operaciones', isAddon: true,  defaultPrice: 300 },
+    { code: 'ocr',                name: 'OCR Documentos',        category: 'documentos',  isAddon: true,  defaultPrice: 200 },
+    { code: 'integraciones',      name: 'Integraciones',         category: 'tecnologia',  isAddon: true,  defaultPrice: 500 },
+    { code: 'soporte',            name: 'Panel Soporte',         category: 'admin',       isAddon: false, defaultPrice: 0 },
+    { code: 'centro_soluciones',  name: 'Centro de Soluciones',  category: 'comercial',   isAddon: false, defaultPrice: 0 },
+  ];
+
+  try {
+    for (const mod of MODULES_CATALOG) {
+      const exists = await moduleRepo.findOne({ where: { code: mod.code } });
+      if (!exists) {
+        await moduleRepo.save(moduleRepo.create({ ...mod, isActive: true }));
+      }
+    }
+    console.log('✅ Catálogo de módulos sembrado');
+
+    const PLAN_MODULES: Record<string, string[]> = {
+      LITE_CORTE: ['dashboard', 'cortes', 'usuarios', 'empresas', 'sucursales', 'auditoria'],
+      LITE_POS:   ['dashboard', 'cortes', 'pos', 'usuarios', 'empresas', 'sucursales', 'auditoria'],
+      BASIC:      ['dashboard', 'cortes', 'tesoreria', 'bancos', 'reportes', 'usuarios', 'empresas', 'sucursales', 'auditoria'],
+      PRO:        ['dashboard', 'cortes', 'tesoreria', 'bancos', 'rh', 'compras', 'reportes', 'usuarios', 'empresas', 'sucursales', 'auditoria'],
+      BUSINESS:   ['dashboard', 'cortes', 'tesoreria', 'bancos', 'rh', 'compras', 'reportes', 'integraciones', 'usuarios', 'empresas', 'sucursales', 'auditoria'],
+      ENTERPRISE: ['dashboard', 'cortes', 'tesoreria', 'bancos', 'rh', 'compras', 'reportes', 'integraciones', 'ocr', 'usuarios', 'empresas', 'sucursales', 'auditoria'],
+    };
+
+    for (const [planCode, modules] of Object.entries(PLAN_MODULES)) {
+      for (const moduleCode of modules) {
+        const exists = await planModuleRepo.findOne({ where: { planCode, moduleCode } });
+        if (!exists) {
+          await planModuleRepo.save(planModuleRepo.create({ planCode, moduleCode, included: true }));
+        }
+      }
+    }
+    console.log('✅ plan_modules sembrados');
+  } catch (modErr) {
+    console.log('⚠️ Seed de módulos omitido (tablas no creadas aún):', modErr.message);
+  }
 
   console.log('═══════════════════════════════════════');
   console.log('✅ SEED COMPLETADO');
