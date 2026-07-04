@@ -34,6 +34,7 @@ export const MODULES_BY_PLAN: Record<Plan, string[]> = {
     'bancos',
     'movimientos',
     'transferencias',
+    'pacientes',
   ],
   [Plan.PRO]: [
     'dashboard',
@@ -68,6 +69,7 @@ export const MODULES_BY_PLAN: Record<Plan, string[]> = {
     'proveedores',
     'compras',
     'costos',
+    'pacientes',
   ],
   [Plan.ENTERPRISE]: [
     'dashboard',
