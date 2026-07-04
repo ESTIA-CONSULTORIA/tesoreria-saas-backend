@@ -1,6 +1,7 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Company } from './entities/company.entity';
+import { Tenant } from '../tenants/entities/tenant.entity';
 import { Repository } from 'typeorm';
 
 @Injectable()
@@ -8,15 +9,25 @@ export class CompaniesService {
   constructor(
     @InjectRepository(Company)
     private companiesRepository: Repository<Company>,
+    @InjectRepository(Tenant)
+    private tenantRepo: Repository<Tenant>,
   ) {}
 
-  create(
+  async create(
     tenantId: string,
     legalName: string,
     tradeName: string,
     taxId?: string,
     baseCurrency?: string,
   ) {
+    const tenant = await this.tenantRepo.findOne({ where: { id: tenantId } });
+    if (tenant?.plan?.startsWith('LITE')) {
+      const count = await this.companiesRepository.count({ where: { tenantId } });
+      if (count >= 1) {
+        throw new BadRequestException('El plan LITE permite máximo 1 empresa');
+      }
+    }
+
     const company = this.companiesRepository.create({
       tenantId,
       legalName,

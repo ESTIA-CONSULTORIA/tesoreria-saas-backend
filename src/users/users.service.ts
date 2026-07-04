@@ -1,6 +1,7 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { User } from './entities/user.entity';
+import { Tenant } from '../tenants/entities/tenant.entity';
 import { Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 
@@ -9,6 +10,8 @@ export class UsersService {
   constructor(
     @InjectRepository(User)
     private usersRepository: Repository<User>,
+    @InjectRepository(Tenant)
+    private tenantRepo: Repository<Tenant>,
   ) {}
 
   async create(
@@ -22,6 +25,16 @@ export class UsersService {
     branchId?: string,
     executivePin?: string,
   ) {
+    if (tenantId) {
+      const tenant = await this.tenantRepo.findOne({ where: { id: tenantId } });
+      if (tenant?.plan?.startsWith('LITE')) {
+        const count = await this.usersRepository.count({ where: { tenantId } });
+        if (count >= 3) {
+          throw new BadRequestException('El plan LITE permite máximo 3 usuarios');
+        }
+      }
+    }
+
     const hashedPassword = await bcrypt.hash(password, 10);
     const hashedPin = executivePin ? await bcrypt.hash(executivePin, 10) : undefined;
     const user = this.usersRepository.create({
