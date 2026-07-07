@@ -379,4 +379,51 @@ export class ShiftsService {
       throw new Error(`Error al obtener resumen del turno: ${error.message}`);
     }
   }
+
+  async createBackfillShift(data: {
+    cajero: string;
+    sucursalId: string;
+    tenantId: string;
+    fecha: string; // 'YYYY-MM-DD'
+    fondoInicial: number;
+    totalVentas?: number;
+    totalEfectivo?: number;
+    totalTarjeta?: number;
+    totalTransferencia?: number;
+    totalCortesia?: number;
+    totalDevoluciones?: number;
+    totalRetiros?: number;
+    totalDepositos?: number;
+    efectivoContado?: number;
+    notas?: string;
+  }) {
+    try {
+      const now = new Date();
+      const shift = this.shiftsRepo.create();
+      shift.cajero = data.cajero;
+      shift.sucursalId = data.sucursalId;
+      shift.tenantId = data.tenantId;
+      shift.fecha = new Date(data.fecha); // fecha de negocio elegida por el admin
+      shift.horaApertura = now.toTimeString().slice(0, 8); // hora real de captura (servidor)
+      shift.horaCierre = now.toTimeString().slice(0, 8);
+      shift.fondoInicial = data.fondoInicial || 0;
+      shift.totalVentas = data.totalVentas || 0;
+      shift.totalEfectivo = data.totalEfectivo || 0;
+      shift.totalTarjeta = data.totalTarjeta || 0;
+      shift.totalTransferencia = data.totalTransferencia || 0;
+      shift.totalCortesia = data.totalCortesia || 0;
+      shift.totalDevoluciones = data.totalDevoluciones || 0;
+      shift.totalRetiros = data.totalRetiros || 0;
+      shift.totalDepositos = data.totalDepositos || 0;
+      shift.efectivoContado = data.efectivoContado ?? 0;
+      shift.precorteGuardado = true;
+      shift.status = 'CERRADO';
+      shift.esRetroactivo = true;
+      shift.notas = `[CAPTURA RETROACTIVA — registrada el ${now.toISOString()}] ${data.notas || ''}`.trim();
+      return this.shiftsRepo.save(shift);
+    } catch (error) {
+      console.error('ShiftsService.createBackfillShift error:', error);
+      throw new Error(`Error al capturar corte retroactivo: ${error.message}`);
+    }
+  }
 }

@@ -65,6 +65,9 @@ export class Shift {
   @Column({ type: 'text', nullable: true })
   notas: string;
 
+  @Column({ type: 'boolean', default: false })
+  esRetroactivo: boolean;
+
   @CreateDateColumn()
   createdAt: Date;
 }

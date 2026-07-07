@@ -1,5 +1,7 @@
-import { Controller, Get, Post, Put, Body, Headers, Param, Query, Request } from '@nestjs/common';
+import { Controller, Get, Post, Put, Body, Headers, Param, Query, Request, UseGuards } from '@nestjs/common';
 import { ShiftsService } from './shifts.service';
+import { RolesGuard } from '../auth/roles.guard';
+import { Roles } from '../auth/roles.decorator';
 
 @Controller('pos/shifts')
 export class ShiftsController {
@@ -12,6 +14,15 @@ export class ShiftsController {
       ...data,
       tenantId,
     });
+  }
+
+  @UseGuards(RolesGuard)
+  @Roles('ADMIN', 'SOPORTE')
+  @Post('backfill')
+  createBackfill(@Body() data: any, @Request() req) {
+    const tenantId = req.user?.tenantId || req.tenantId;
+    const cajero = req.user?.sub || req.user?.id;
+    return this.shiftsService.createBackfillShift({ ...data, tenantId, cajero });
   }
 
   @Post(':id/withdrawal')
