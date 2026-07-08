@@ -2898,6 +2898,7 @@ export async function seedDatabase(dataSource: DataSource) {
     { code: 'integraciones',      name: 'Integraciones',         category: 'tecnologia',  isAddon: true,  defaultPrice: 500 },
     { code: 'soporte',            name: 'Panel Soporte',         category: 'admin',       isAddon: false, defaultPrice: 0 },
     { code: 'centro_soluciones',  name: 'Centro de Soluciones',  category: 'comercial',   isAddon: false, defaultPrice: 0 },
+    { code: 'corte_retroactivo',  name: 'Captura Retroactiva de Cortes', category: 'operaciones', isAddon: true,  defaultPrice: 0 },
   ];
 
   try {

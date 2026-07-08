@@ -2,6 +2,7 @@ import { Controller, Get, Post, Put, Body, Headers, Param, Query, Request, UseGu
 import { ShiftsService } from './shifts.service';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
+import { Modulo } from '../auth/modulo.decorator';
 
 @Controller('pos/shifts')
 export class ShiftsController {
@@ -18,6 +19,7 @@ export class ShiftsController {
 
   @UseGuards(RolesGuard)
   @Roles('ADMIN', 'SOPORTE')
+  @Modulo('corte_retroactivo')
   @Post('backfill')
   createBackfill(@Body() data: any, @Request() req) {
     const tenantId = req.user?.tenantId || req.tenantId;
