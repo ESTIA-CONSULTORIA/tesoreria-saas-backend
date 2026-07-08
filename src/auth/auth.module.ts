@@ -12,10 +12,11 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { JwtMiddleware } from './jwt.middleware';
 import { RefreshToken } from './entities/refresh-token.entity';
 import { User } from '../users/entities/user.entity';
+import { TenantModule } from '../modules/entities/tenant-module.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([RefreshToken, User]),
+    TypeOrmModule.forFeature([RefreshToken, User, TenantModule]),
     UsersModule,
     SubscriptionsModule,
     AddonsModule,

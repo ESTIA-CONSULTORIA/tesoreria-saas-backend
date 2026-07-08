@@ -10,6 +10,7 @@ import { TenantsService } from '../tenants/tenants.service';
 import { getModulesByPlan, Plan, ALL_MODULES } from '../config/modules-by-plan.config';
 import { RefreshToken } from './entities/refresh-token.entity';
 import { User } from '../users/entities/user.entity';
+import { TenantModule } from '../modules/entities/tenant-module.entity';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 
@@ -26,6 +27,7 @@ export class AuthService {
     private tenantsService: TenantsService,
     @InjectRepository(RefreshToken) private refreshTokenRepo: Repository<RefreshToken>,
     @InjectRepository(User) private usersRepo: Repository<User>,
+    @InjectRepository(TenantModule) private tenantModuleRepo: Repository<TenantModule>,
   ) {}
 
   async register(email: string, password: string) {
@@ -175,7 +177,8 @@ export class AuthService {
         }
       }
       const addonModules = await this.addonsService.getActiveModulesByTenant(tenantId);
-      modulosActivos = [...modulosActivos, ...addonModules];
+      const tenantModules = await this.tenantModuleRepo.find({ where: { tenantId, status: 'active' } });
+      modulosActivos = [...new Set([...modulosActivos, ...addonModules, ...tenantModules.map(m => m.moduleCode)])];
     }
     return modulosActivos;
   }
