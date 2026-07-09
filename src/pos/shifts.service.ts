@@ -223,14 +223,14 @@ export class ShiftsService {
       // Primero intentar con tenantId
       if (tenantId) {
         const shift = await this.shiftsRepo.findOne({
-          where: { status: 'ABIERTO', tenantId },
+          where: { status: 'ABIERTO', tenantId, cajero },
           order: { createdAt: 'DESC' },
         });
         if (shift) return shift;
       }
 
-      // Fallback: buscar cualquier turno abierto, filtrando por sucursalId si se proporciona
-      const whereConditions: any = { status: 'ABIERTO' };
+      // Fallback: buscar turno abierto del mismo cajero, filtrando por sucursalId si se proporciona
+      const whereConditions: any = { status: 'ABIERTO', cajero };
       if (sucursalId) {
         whereConditions.sucursalId = sucursalId;
       }
