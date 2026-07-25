@@ -38,6 +38,8 @@
     "bcrypt": "^6.0.0",
     "body-parser": "^1.20.3",
     "canvas": "^3.2.3",
+    "class-transformer": "^0.5.1",
+    "class-validator": "^0.15.1",
     "cloudinary": "^2.10.0",
     "docxtemplater": "^3.69.0",
     "pdf-lib": "^1.17.1",

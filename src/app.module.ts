@@ -45,6 +45,7 @@ import { StorageModule } from './storage/storage.module';
 import { PatientsModule } from './patients/patients.module';
 import { ModulesModule } from './modules/modules.module';
 import { TenantModule } from './modules/entities/tenant-module.entity';
+import { DeliveryIngestModule } from './integrations/delivery/delivery-ingest.module';
 
 @Module({
   imports: [
@@ -120,6 +121,7 @@ import { TenantModule } from './modules/entities/tenant-module.entity';
     PatientsModule,
     ModulesModule,
     TypeOrmModule.forFeature([TenantModule]),
+    DeliveryIngestModule,
   ],
 
   providers: [
