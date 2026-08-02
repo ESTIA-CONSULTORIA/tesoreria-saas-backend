@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Between } from 'typeorm';
 import { Insumo } from './entities/insumo.entity';
 import { Recipe } from './entities/recipe.entity';
+import { RecipeItem } from './entities/recipe-item.entity';
 import { Inventory } from './entities/inventory.entity';
 import { PhysicalCount } from './entities/physical-count.entity';
 import { Justifiable, JustifiableCategory } from './entities/justifiable.entity';
@@ -16,6 +17,8 @@ export class CostsService {
     private insumosRepo: Repository<Insumo>,
     @InjectRepository(Recipe)
     private recipesRepo: Repository<Recipe>,
+    @InjectRepository(RecipeItem)
+    private recipeItemsRepo: Repository<RecipeItem>,
     @InjectRepository(Inventory)
     private inventoryRepo: Repository<Inventory>,
     @InjectRepository(PhysicalCount)
@@ -310,6 +313,130 @@ export class CostsService {
     }
 
     return results;
+  }
+
+  // RecipeItem (líneas de receta normalizadas)
+  findRecipeItems(recipeId: string) {
+    return this.recipeItemsRepo.find({
+      where: { recipeId },
+      order: { createdAt: 'ASC' },
+    });
+  }
+
+  async createRecipeItem(recipeId: string, data: Partial<RecipeItem>) {
+    const hasInsumo = !!data.insumoId;
+    const hasComponentRecipe = !!data.componentRecipeId;
+
+    if (hasInsumo === hasComponentRecipe) {
+      throw new Error('Debe especificar exactamente uno: insumoId o componentRecipeId, nunca ambos ni ninguno');
+    }
+
+    if (data.componentRecipeId) {
+      const cycle = await this.wouldCreateCycle(recipeId, data.componentRecipeId);
+      if (cycle) {
+        throw new Error('Referencia circular: esta receta ya depende de sí misma a través de esta cadena');
+      }
+    }
+
+    const item = this.recipeItemsRepo.create({ ...data, recipeId });
+    return this.recipeItemsRepo.save(item);
+  }
+
+  async updateRecipeItem(id: string, data: Partial<RecipeItem>) {
+    const existing = await this.recipeItemsRepo.findOne({ where: { id } });
+    if (!existing) {
+      throw new Error('Línea de receta no encontrada');
+    }
+
+    const insumoId = data.insumoId !== undefined ? data.insumoId : existing.insumoId;
+    const componentRecipeId = data.componentRecipeId !== undefined ? data.componentRecipeId : existing.componentRecipeId;
+    const hasInsumo = !!insumoId;
+    const hasComponentRecipe = !!componentRecipeId;
+
+    if (hasInsumo === hasComponentRecipe) {
+      throw new Error('Debe especificar exactamente uno: insumoId o componentRecipeId, nunca ambos ni ninguno');
+    }
+
+    if (hasComponentRecipe) {
+      const cycle = await this.wouldCreateCycle(existing.recipeId, componentRecipeId);
+      if (cycle) {
+        throw new Error('Referencia circular: esta receta ya depende de sí misma a través de esta cadena');
+      }
+    }
+
+    await this.recipeItemsRepo.update(id, { ...data, updatedAt: new Date() });
+    return this.recipeItemsRepo.findOne({ where: { id } });
+  }
+
+  async deleteRecipeItem(id: string) {
+    await this.recipeItemsRepo.delete(id);
+  }
+
+  private costoUnitarioInsumo(insumo: Insumo): number {
+    return Number(insumo.costoUnitario);
+  }
+
+  async costoRecipe(recipeId: string, visitados: Set<string> = new Set()): Promise<{ subtotal: number; costoPorUnidad: number }> {
+    if (visitados.has(recipeId)) {
+      throw new Error(`Referencia circular detectada en la receta ${recipeId}`);
+    }
+    visitados.add(recipeId);
+
+    const recipe = await this.recipesRepo.findOne({ where: { id: recipeId } });
+    if (!recipe) {
+      throw new Error('Receta no encontrada');
+    }
+
+    const items = await this.recipeItemsRepo.find({ where: { recipeId } });
+
+    let subtotal = 0;
+    for (const item of items) {
+      if (item.insumoId) {
+        const insumo = await this.insumosRepo.findOne({ where: { id: item.insumoId } });
+        if (!insumo) {
+          throw new Error(`Insumo ${item.insumoId} no encontrado`);
+        }
+        subtotal += Number(item.cantidad) * this.costoUnitarioInsumo(insumo);
+      } else if (item.componentRecipeId) {
+        const sub = await this.costoRecipe(item.componentRecipeId, visitados);
+        subtotal += Number(item.cantidad) * sub.costoPorUnidad;
+      }
+    }
+
+    const costoPorUnidad = Number(recipe.rendimiento) > 0 ? subtotal / Number(recipe.rendimiento) : 0;
+
+    visitados.delete(recipeId);
+    return { subtotal, costoPorUnidad };
+  }
+
+  async getRecipeCost(recipeId: string) {
+    return this.costoRecipe(recipeId);
+  }
+
+  private async wouldCreateCycle(
+    parentRecipeId: string,
+    componentRecipeId: string,
+    visitados: Set<string> = new Set(),
+  ): Promise<boolean> {
+    if (parentRecipeId === componentRecipeId) return true;
+
+    if (visitados.has(componentRecipeId)) {
+      throw new Error(`Referencia circular ya existente en la receta ${componentRecipeId}`);
+    }
+    visitados.add(componentRecipeId);
+
+    const items = await this.recipeItemsRepo.find({ where: { recipeId: componentRecipeId } });
+    for (const item of items) {
+      if (item.componentRecipeId) {
+        if (await this.wouldCreateCycle(parentRecipeId, item.componentRecipeId, visitados)) {
+          visitados.delete(componentRecipeId);
+          return true;
+        }
+      }
+    }
+
+    visitados.delete(componentRecipeId);
+    return false;
   }
 
   // Inventario

@@ -154,6 +154,33 @@ export class CostsController {
     return this.costsService.importRecipes(data.recetas);
   }
 
+  // RecipeItem (líneas de receta normalizadas)
+  @Get('recipes/:id/items')
+  findRecipeItems(@Param('id') id: string) {
+    return this.costsService.findRecipeItems(id);
+  }
+
+  @Post('recipes/:id/items')
+  createRecipeItem(@Param('id') id: string, @Body() data: any, @Request() req?: any) {
+    const tenantId = req?.user?.tenantId;
+    return this.costsService.createRecipeItem(id, { ...data, tenantId });
+  }
+
+  @Put('recipe-items/:id')
+  updateRecipeItem(@Param('id') id: string, @Body() data: any) {
+    return this.costsService.updateRecipeItem(id, data);
+  }
+
+  @Delete('recipe-items/:id')
+  deleteRecipeItem(@Param('id') id: string) {
+    return this.costsService.deleteRecipeItem(id);
+  }
+
+  @Get('recipes/:id/cost')
+  getRecipeCost(@Param('id') id: string) {
+    return this.costsService.getRecipeCost(id);
+  }
+
   // Inventario
   @Get('inventory')
   async findInventoryByPeriod(

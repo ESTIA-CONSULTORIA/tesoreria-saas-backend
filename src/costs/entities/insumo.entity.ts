@@ -37,6 +37,15 @@ export class Insumo {
   @Column({ type: 'decimal', precision: 10, scale: 2, default: 0 })
   costoUnitario: number;
 
+  @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true })
+  precioCompra: number;
+
+  @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true })
+  cantidadPresentacion: number;
+
+  @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true })
+  merma: number;
+
   @Column({ default: 'MXN' })
   moneda: string;
 
