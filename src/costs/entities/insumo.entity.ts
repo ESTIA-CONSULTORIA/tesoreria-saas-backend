@@ -40,7 +40,7 @@ export class Insumo {
   @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true })
   precioCompra: number;
 
-  @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true })
+  @Column({ type: 'decimal', precision: 10, scale: 4, nullable: true })
   cantidadPresentacion: number;
 
   @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true })

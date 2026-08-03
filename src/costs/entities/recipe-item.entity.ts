@@ -29,7 +29,7 @@ export class RecipeItem {
   @JoinColumn({ name: 'componentRecipeId' })
   componentRecipe: Recipe;
 
-  @Column({ type: 'decimal', precision: 10, scale: 2 })
+  @Column({ type: 'decimal', precision: 10, scale: 4 })
   cantidad: number;
 
   @Column()
