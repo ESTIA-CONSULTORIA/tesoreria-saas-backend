@@ -65,6 +65,13 @@ export class Insumo {
   isActive: boolean;
 
   @Column({ nullable: true })
+  reemplazadoPorId: string;
+
+  @ManyToOne(() => Insumo, { nullable: true, onDelete: 'RESTRICT' })
+  @JoinColumn({ name: 'reemplazadoPorId' })
+  reemplazadoPor: Insumo;
+
+  @Column({ nullable: true })
   tenantId: string;
 
   @CreateDateColumn()

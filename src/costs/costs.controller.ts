@@ -52,6 +52,11 @@ export class CostsController {
     return this.costsService.deleteInsumo(id);
   }
 
+  @Post('insumos/:id/replace')
+  replaceInsumo(@Param('id') id: string, @Body() data: { newInsumoId: string }) {
+    return this.costsService.replaceInsumo(id, data.newInsumoId);
+  }
+
   @Post('insumos/import')
   importInsumos(@Body() data: { insumos: any[] }) {
     return this.costsService.importInsumos(data.insumos);

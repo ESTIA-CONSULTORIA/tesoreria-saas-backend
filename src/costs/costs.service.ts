@@ -81,6 +81,58 @@ export class CostsService {
     await this.insumosRepo.delete(id);
   }
 
+  async replaceInsumo(oldId: string, newId: string) {
+    if (oldId === newId) {
+      throw new Error('El insumo de reemplazo no puede ser el mismo insumo');
+    }
+
+    const oldInsumo = await this.insumosRepo.findOne({ where: { id: oldId } });
+    if (!oldInsumo) {
+      throw new Error('Insumo a reemplazar no encontrado');
+    }
+
+    const newInsumo = await this.insumosRepo.findOne({ where: { id: newId } });
+    if (!newInsumo) {
+      throw new Error('Insumo de reemplazo no encontrado');
+    }
+
+    if (!newInsumo.isActive) {
+      throw new Error('El insumo de reemplazo debe estar activo');
+    }
+
+    const cycle = await this.wouldCreateReplacementCycle(oldId, newId);
+    if (cycle) {
+      throw new Error('Referencia circular: esta cadena de reemplazo ya depende del insumo original');
+    }
+
+    await this.insumosRepo.update(oldId, { isActive: false, reemplazadoPorId: newId, updatedAt: new Date() });
+    return this.insumosRepo.findOne({ where: { id: oldId } });
+  }
+
+  private async wouldCreateReplacementCycle(
+    oldId: string,
+    candidateId: string,
+    visitados: Set<string> = new Set(),
+  ): Promise<boolean> {
+    if (candidateId === oldId) return true;
+
+    if (visitados.has(candidateId)) {
+      throw new Error(`Referencia circular ya existente en la cadena de reemplazo del insumo ${candidateId}`);
+    }
+    visitados.add(candidateId);
+
+    const candidate = await this.insumosRepo.findOne({ where: { id: candidateId } });
+    if (candidate?.reemplazadoPorId) {
+      if (await this.wouldCreateReplacementCycle(oldId, candidate.reemplazadoPorId, visitados)) {
+        visitados.delete(candidateId);
+        return true;
+      }
+    }
+
+    visitados.delete(candidateId);
+    return false;
+  }
+
   async getNextInsumoCode(familiaId: string): Promise<{ codigo: string }> {
     const familia = await this.familiasRepo.findOne({ where: { id: familiaId } });
     if (!familia) {
@@ -372,8 +424,29 @@ export class CostsService {
     await this.recipeItemsRepo.delete(id);
   }
 
-  private costoUnitarioInsumo(insumo: Insumo): number {
-    return Number(insumo.costoUnitario);
+  private async costoUnitarioInsumo(insumo: Insumo, visitados: Set<string> = new Set()): Promise<number> {
+    if (visitados.has(insumo.id)) {
+      throw new Error(`Referencia circular detectada en la cadena de reemplazo del insumo ${insumo.id}`);
+    }
+    visitados.add(insumo.id);
+
+    if (insumo.isActive) {
+      visitados.delete(insumo.id);
+      return Number(insumo.costoUnitario);
+    }
+
+    if (!insumo.reemplazadoPorId) {
+      throw new Error(`El insumo "${insumo.nombre}" está inactivo y no tiene reemplazo configurado`);
+    }
+
+    const siguiente = await this.insumosRepo.findOne({ where: { id: insumo.reemplazadoPorId } });
+    if (!siguiente) {
+      throw new Error(`El insumo de reemplazo ${insumo.reemplazadoPorId} no existe`);
+    }
+
+    const costo = await this.costoUnitarioInsumo(siguiente, visitados);
+    visitados.delete(insumo.id);
+    return costo;
   }
 
   async costoRecipe(recipeId: string, visitados: Set<string> = new Set()): Promise<{ subtotal: number; costoPorUnidad: number }> {
@@ -396,7 +469,8 @@ export class CostsService {
         if (!insumo) {
           throw new Error(`Insumo ${item.insumoId} no encontrado`);
         }
-        subtotal += Number(item.cantidad) * this.costoUnitarioInsumo(insumo);
+        const costoUnitario = await this.costoUnitarioInsumo(insumo);
+        subtotal += Number(item.cantidad) * costoUnitario;
       } else if (item.componentRecipeId) {
         const sub = await this.costoRecipe(item.componentRecipeId, visitados);
         subtotal += Number(item.cantidad) * sub.costoPorUnidad;
