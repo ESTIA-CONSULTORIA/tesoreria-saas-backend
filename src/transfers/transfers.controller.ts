@@ -1,13 +1,13 @@
 import { Body, Controller, ForbiddenException, Get, Post, Put, Param, Req } from '@nestjs/common';
 import { TransfersService } from './transfers.service';
-import { Feature } from '../auth/feature/decorator';
+import { Modulo } from '../auth/modulo.decorator';
 
 @Controller('transfers')
 export class TransfersController {
   constructor(private transfersService: TransfersService) {}
 
   @Post()
-  @Feature('TREASURY')
+  @Modulo('tesoreria')
   create(
     @Body()
     body: {
@@ -45,7 +45,7 @@ export class TransfersController {
   }
 
   @Put(':id/authorize')
-  @Feature('TREASURY')
+  @Modulo('tesoreria')
   authorize(@Param('id') id: string, @Req() req: any) {
     const roleCode = req?.user?.roleCode;
     if (!['ADMIN'].includes(roleCode)) {
@@ -55,7 +55,7 @@ export class TransfersController {
   }
 
   @Put(':id/reject')
-  @Feature('TREASURY')
+  @Modulo('tesoreria')
   reject(@Param('id') id: string, @Body() body: { motivo: string }) {
     return this.transfersService.reject(id, body.motivo);
   }
