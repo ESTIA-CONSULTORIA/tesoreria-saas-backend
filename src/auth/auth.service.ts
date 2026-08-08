@@ -6,7 +6,7 @@ import { JwtService } from '@nestjs/jwt';
 import { SubscriptionsService } from '../subscriptions/subscriptions.service';
 import { HrService } from '../hr/hr.service';
 import { TenantsService } from '../tenants/tenants.service';
-import { getModulesByPlan, Plan, ALL_MODULES } from '../config/modules-by-plan.config';
+import { ALL_MODULES } from '../config/all-modules.config';
 import { RefreshToken } from './entities/refresh-token.entity';
 import { User } from '../users/entities/user.entity';
 import { TenantModule } from '../modules/entities/tenant-module.entity';

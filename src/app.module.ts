@@ -18,7 +18,6 @@ import { TransfersModule } from './transfers/transfers.module';
 import { BusinessTypesModule } from './business-types/business-types.module';
 
 import { SubscriptionGuard } from './auth/subscription.guard';
-import { FeatureGuard } from './auth/feature/feature.guard';
 import { PlanModuloGuard } from './auth/plan-modulo.guard';
 import { AuditInterceptor } from './audit/audit.interceptor';
 import { IntegrationsModule } from './integrations/integrations.module';
@@ -130,10 +129,6 @@ import { DeliveryIngestModule } from './integrations/delivery/delivery-ingest.mo
     {
       provide: APP_GUARD,
       useClass: SubscriptionGuard,
-    },
-    {
-      provide: APP_GUARD,
-      useClass: FeatureGuard,
     },
     {
       provide: APP_GUARD,

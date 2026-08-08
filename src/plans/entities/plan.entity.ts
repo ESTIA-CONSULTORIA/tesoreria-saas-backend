@@ -24,23 +24,5 @@ export class Plan {
   maxUsers: number;
 
   @Column({ default: true })
-  allowTreasury: boolean;
-
-  @Column({ default: false })
-  allowPOS: boolean;
-
-  @Column({ default: false })
-  allowInventory: boolean;
-
-  @Column({ default: false })
-  allowReceivables: boolean;
-
-  @Column({ default: false })
-  allowPayables: boolean;
-
-  @Column({ default: false })
-  allowReports: boolean;
-
-  @Column({ default: true })
   isActive: boolean;
 }
