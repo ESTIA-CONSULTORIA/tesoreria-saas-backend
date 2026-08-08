@@ -4,7 +4,6 @@ import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { UsersModule } from '../users/users.module';
 import { SubscriptionsModule } from '../subscriptions/subscriptions.module';
-import { AddonsModule } from '../addons/addons.module';
 import { HrModule } from '../hr/hr.module';
 import { TenantsModule } from '../tenants/tenants.module';
 import { JwtModule } from '@nestjs/jwt';
@@ -19,7 +18,6 @@ import { TenantModule } from '../modules/entities/tenant-module.entity';
     TypeOrmModule.forFeature([RefreshToken, User, TenantModule]),
     UsersModule,
     SubscriptionsModule,
-    AddonsModule,
     HrModule,
     TenantsModule,
     ConfigModule,

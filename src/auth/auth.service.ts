@@ -4,7 +4,6 @@ import { Repository } from 'typeorm';
 import { UsersService } from '../users/users.service';
 import { JwtService } from '@nestjs/jwt';
 import { SubscriptionsService } from '../subscriptions/subscriptions.service';
-import { AddonsService } from '../addons/addons.service';
 import { HrService } from '../hr/hr.service';
 import { TenantsService } from '../tenants/tenants.service';
 import { getModulesByPlan, Plan, ALL_MODULES } from '../config/modules-by-plan.config';
@@ -22,7 +21,6 @@ export class AuthService {
     private usersService: UsersService,
     private jwtService: JwtService,
     private subscriptionsService: SubscriptionsService,
-    private addonsService: AddonsService,
     private hrService: HrService,
     private tenantsService: TenantsService,
     @InjectRepository(RefreshToken) private refreshTokenRepo: Repository<RefreshToken>,
@@ -167,11 +165,9 @@ export class AuthService {
     let modulosActivos: string[] = [];
     if (tenantId) {
       // tenant_modules es la única fuente de verdad (Sistema 3). Ya no se calcula nada a
-      // partir del plan (Sistema 1). addonsService se deja tal cual (Sistema 2, hoy vacío,
-      // se retira en Fase 5).
-      const addonModules = await this.addonsService.getActiveModulesByTenant(tenantId);
+      // partir del plan (Sistema 1) ni de addons (Sistema 2, retirado en Fase 5).
       const tenantModules = await this.tenantModuleRepo.find({ where: { tenantId, status: 'active' } });
-      modulosActivos = [...new Set([...addonModules, ...tenantModules.map(m => m.moduleCode)])];
+      modulosActivos = [...new Set(tenantModules.map(m => m.moduleCode))];
     }
     return modulosActivos;
   }

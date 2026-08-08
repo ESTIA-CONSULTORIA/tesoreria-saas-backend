@@ -34,7 +34,6 @@ import { PosModule } from './pos/pos.module';
 import { SuppliersModule } from './suppliers/suppliers.module';
 import { PurchasesModule } from './purchases/purchases.module';
 import { CostsModule } from './costs/costs.module';
-import { AddonsModule } from './addons/addons.module';
 import { AuditModule } from './audit/audit.module';
 import { OcrModule } from './ocr/ocr.module';
 import { PosChatModule } from './pos-chat/pos-chat.module';
@@ -110,7 +109,6 @@ import { DeliveryIngestModule } from './integrations/delivery/delivery-ingest.mo
     SuppliersModule,
     PurchasesModule,
     CostsModule,
-    AddonsModule,
     AuditModule,
     OcrModule,
     PosChatModule,
