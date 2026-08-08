@@ -3,7 +3,6 @@ import { Reflector } from '@nestjs/core';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { TenantModule } from '../modules/entities/tenant-module.entity';
-import { getModulesByPlan, Plan } from '../config/modules-by-plan.config';
 import { MODULO_KEY } from './modulo.decorator';
 import { IS_PUBLIC_KEY } from './public.decorator';
 
@@ -37,15 +36,11 @@ export class PlanModuloGuard implements CanActivate {
 
     if (user.roleCode === 'SOPORTE' || user.executiveAccess === true) return true;
 
-    // PASO 1: tenant_modules (nueva arquitectura)
+    // tenant_modules es la única fuente de verdad (Sistema 3). Sin fallback a config estática.
     const tenantMod = await this.tenantModuleRepo.findOne({
       where: { tenantId: user.tenantId, moduleCode: requiredModulo, status: 'active' },
     });
     if (tenantMod) return true;
-
-    // PASO 2: fallback a config estática (legacy)
-    const modulosActivos = getModulesByPlan((user.plan || 'BASIC') as Plan);
-    if (modulosActivos.includes(requiredModulo)) return true;
 
     throw new ForbiddenException(`Módulo '${requiredModulo}' no disponible en tu plan`);
   }

@@ -166,19 +166,12 @@ export class AuthService {
     if (roleCode === 'SOPORTE') return ALL_MODULES;
     let modulosActivos: string[] = [];
     if (tenantId) {
-      const subscription = await this.subscriptionsService.findByTenant(tenantId);
-      if (subscription) {
-        modulosActivos = getModulesByPlan(subscription.planCode as Plan);
-      } else {
-        const tenant = await this.tenantsService.findOne(tenantId);
-        if (tenant?.plan) {
-          const planKey = tenant.plan === 'LITE' ? Plan.LITE_CORTE : tenant.plan as Plan;
-          modulosActivos = getModulesByPlan(planKey);
-        }
-      }
+      // tenant_modules es la única fuente de verdad (Sistema 3). Ya no se calcula nada a
+      // partir del plan (Sistema 1). addonsService se deja tal cual (Sistema 2, hoy vacío,
+      // se retira en Fase 5).
       const addonModules = await this.addonsService.getActiveModulesByTenant(tenantId);
       const tenantModules = await this.tenantModuleRepo.find({ where: { tenantId, status: 'active' } });
-      modulosActivos = [...new Set([...modulosActivos, ...addonModules, ...tenantModules.map(m => m.moduleCode)])];
+      modulosActivos = [...new Set([...addonModules, ...tenantModules.map(m => m.moduleCode)])];
     }
     return modulosActivos;
   }
