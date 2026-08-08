@@ -39,6 +39,7 @@ export class TransfersController {
   }
 
   @Get()
+  @Modulo('tesoreria')
   findAll(@Req() req) {
     const tenantId = req.user?.tenantId || req.tenantId;
     return this.transfersService.findAll(tenantId);

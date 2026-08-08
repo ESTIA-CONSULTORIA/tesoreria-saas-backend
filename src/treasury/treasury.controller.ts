@@ -1,5 +1,6 @@
 import { Controller, Get, Post, Put, Delete, Body, Headers, Param, Query, Request } from '@nestjs/common';
 import { TreasuryService } from './treasury.service';
+import { Modulo } from '../auth/modulo.decorator';
 
 @Controller('treasury')
 export class TreasuryController {
@@ -104,12 +105,14 @@ export class TreasuryController {
 
   // Transfers
   @Get('transfers')
+  @Modulo('tesoreria')
   getTransferHistory(@Request() req, @Query('limit') limit?: string) {
     const tenantId = req.user?.tenantId || req.tenantId;
     return this.treasuryService.getTransferHistory(tenantId, limit ? parseInt(limit) : 20);
   }
 
   @Post('transfers')
+  @Modulo('tesoreria')
   createTransfer(@Body() data: any, @Request() req) {
     const tenantId = req.user?.tenantId || req.tenantId;
     return this.treasuryService.createTransfer({ ...data, tenantId });
