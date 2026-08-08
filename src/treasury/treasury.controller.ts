@@ -7,6 +7,7 @@ export class TreasuryController {
   constructor(private treasuryService: TreasuryService) {}
 
   @Get('executive-summary')
+  @Modulo('tesoreria')
   getExecutiveSummary(@Request() req, @Headers('x-branch-id') headerBranchId?: string, @Headers('x-company-id') headerCompanyId?: string) {
     const tenantId = req.user?.tenantId || req.tenantId;
     const userBranchId = req.user?.branchId;
@@ -19,6 +20,7 @@ export class TreasuryController {
   }
 
   @Get('cash-flow-forecast')
+  @Modulo('tesoreria')
   getCashFlowForecast(@Query('days') days?: string, @Request() req?: any, @Headers('x-branch-id') headerBranchId?: string, @Headers('x-company-id') headerCompanyId?: string) {
     const tenantId = req?.user?.tenantId || req?.tenantId;
     const userBranchId = req?.user?.branchId;
@@ -31,6 +33,7 @@ export class TreasuryController {
   }
 
   @Get('bank-position')
+  @Modulo('tesoreria')
   getBankPosition(@Request() req, @Headers('x-branch-id') headerBranchId?: string, @Headers('x-company-id') headerCompanyId?: string) {
     const tenantId = req.user?.tenantId || req.tenantId;
     const userBranchId = req.user?.branchId;
@@ -43,6 +46,7 @@ export class TreasuryController {
   }
 
   @Get('alerts')
+  @Modulo('tesoreria')
   getAlerts(@Request() req, @Headers('x-branch-id') headerBranchId?: string, @Headers('x-company-id') headerCompanyId?: string) {
     const tenantId = req.user?.tenantId || req.tenantId;
     const userBranchId = req.user?.branchId;
@@ -62,6 +66,7 @@ export class TreasuryController {
   }
 
   @Get('pending-deposits')
+  @Modulo('tesoreria')
   getPendingDeposits(@Request() req, @Headers('x-branch-id') headerBranchId?: string) {
     const tenantId = req.user?.tenantId;
     const branchId = req.user?.branchId || headerBranchId;
@@ -69,6 +74,7 @@ export class TreasuryController {
   }
 
   @Post('confirm-deposit/:shiftId')
+  @Modulo('tesoreria')
   confirmDeposit(@Param('shiftId') shiftId: string, @Body() body: { bankId: string; amount: number }, @Request() req) {
     const tenantId = req.user?.tenantId;
     return this.treasuryService.confirmDeposit(shiftId, tenantId, body.bankId, body.amount);
@@ -76,6 +82,7 @@ export class TreasuryController {
 
   // Scheduled Payments CRUD
   @Get('scheduled-payments')
+  @Modulo('tesoreria')
   getScheduledPayments(@Request() req, @Headers('x-branch-id') headerBranchId?: string, @Headers('x-company-id') headerCompanyId?: string) {
     const tenantId = req.user?.tenantId || req.tenantId;
     const userBranchId = req.user?.branchId;
@@ -88,17 +95,20 @@ export class TreasuryController {
   }
 
   @Post('scheduled-payments')
+  @Modulo('tesoreria')
   createScheduledPayment(@Body() data: any, @Request() req) {
     const tenantId = req.user?.tenantId || req.tenantId;
     return this.treasuryService.createScheduledPayment({ ...data, tenantId });
   }
 
   @Put('scheduled-payments/:id')
+  @Modulo('tesoreria')
   updateScheduledPayment(@Param('id') id: string, @Body() data: any) {
     return this.treasuryService.updateScheduledPayment(id, data);
   }
 
   @Delete('scheduled-payments/:id')
+  @Modulo('tesoreria')
   deleteScheduledPayment(@Param('id') id: string) {
     return this.treasuryService.deleteScheduledPayment(id);
   }
@@ -120,6 +130,7 @@ export class TreasuryController {
 
   // Accounts Payable (CxP)
   @Get('accounts-payable')
+  @Modulo('tesoreria')
   getAccountsPayable(@Request() req, @Headers('x-branch-id') headerBranchId?: string, @Headers('x-company-id') headerCompanyId?: string) {
     const tenantId = req.user?.tenantId || req.tenantId;
     const userBranchId = req.user?.branchId;
@@ -133,6 +144,7 @@ export class TreasuryController {
 
   // Accounts Receivable (CxC)
   @Get('accounts-receivable')
+  @Modulo('tesoreria')
   getAccountsReceivable(@Request() req, @Headers('x-branch-id') headerBranchId?: string, @Headers('x-company-id') headerCompanyId?: string) {
     const tenantId = req.user?.tenantId || req.tenantId;
     const userBranchId = req.user?.branchId;
@@ -146,12 +158,14 @@ export class TreasuryController {
 
   // Alert Configuration
   @Get('alert-config')
+  @Modulo('tesoreria')
   getAlertConfig(@Request() req) {
     const tenantId = req.user?.tenantId || req.tenantId;
     return this.treasuryService.getAlertConfig(tenantId);
   }
 
   @Put('alert-config')
+  @Modulo('tesoreria')
   updateAlertConfig(@Body() data: any, @Request() req) {
     const tenantId = req.user?.tenantId || req.tenantId;
     return this.treasuryService.updateAlertConfig({ ...data, tenantId });
