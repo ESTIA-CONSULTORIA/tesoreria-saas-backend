@@ -3,7 +3,7 @@ import { PosService } from './pos.service';
 import { Modulo } from '../auth/modulo.decorator';
 
 @Controller('pos')
-@Modulo('configuracion-pos')
+@Modulo('configuracion_pos')
 export class PosController {
   constructor(private posService: PosService) {}
 

@@ -1,11 +1,15 @@
-import { Body, Controller, Get, Post, Put, Patch, Param } from '@nestjs/common';
+import { Body, Controller, Get, Post, Put, Patch, Param, UseGuards } from '@nestjs/common';
 import { TenantsService } from './tenants.service';
 import { Public } from '../auth/public.decorator';
+import { RolesGuard } from '../auth/roles.guard';
+import { Roles } from '../auth/roles.decorator';
 
 @Controller('tenants')
 export class TenantsController {
   constructor(private tenantsService: TenantsService) {}
 
+  @UseGuards(RolesGuard)
+  @Roles('SOPORTE')
   @Post()
   create(
     @Body()

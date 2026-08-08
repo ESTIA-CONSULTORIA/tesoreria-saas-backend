@@ -3,7 +3,7 @@ import { ProductsService } from './products.service';
 import { Modulo } from '../auth/modulo.decorator';
 
 @Controller('pos/products')
-@Modulo('configuracion-pos')
+@Modulo('configuracion_pos')
 export class ProductsController {
   constructor(private productsService: ProductsService) {}
 

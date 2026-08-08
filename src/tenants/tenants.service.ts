@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { ILike, Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
@@ -7,15 +7,19 @@ import { User } from '../users/entities/user.entity';
 import { Company } from '../companies/entities/company.entity';
 import { Branch } from '../branches/entities/branch.entity';
 import { SubscriptionsService } from '../subscriptions/subscriptions.service';
+import { ModulesService } from '../modules/modules.service';
 
 @Injectable()
 export class TenantsService {
+  private readonly logger = new Logger(TenantsService.name);
+
   constructor(
     @InjectRepository(Tenant)  private tenantsRepository:   Repository<Tenant>,
     @InjectRepository(User)    private usersRepository:     Repository<User>,
     @InjectRepository(Company) private companiesRepository: Repository<Company>,
     @InjectRepository(Branch)  private branchesRepository:  Repository<Branch>,
     private subscriptionsService: SubscriptionsService,
+    private modulesService: ModulesService,
   ) {}
 
   async create(dto: {
@@ -99,7 +103,21 @@ export class TenantsService {
       dto.billingCycle || 'monthly',
     );
 
-    return tenant;
+    // 6. Inicializar tenant_modules a partir del plan (Sistema 3, fuente única de verdad).
+    // No debe tumbar el alta del tenant si falla: se loguea completo y se avisa en la
+    // respuesta para que quede visible, no en silencio.
+    let modulesWarning: string | undefined;
+    try {
+      await this.modulesService.initFromPlan(tenant.id, dto.plan || 'BASIC');
+    } catch (err) {
+      this.logger.error(
+        `initFromPlan() falló para tenant ${tenant.id} (${legalName}), plan ${dto.plan || 'BASIC'}`,
+        err instanceof Error ? err.stack : err,
+      );
+      modulesWarning = `No se pudieron inicializar los módulos automáticamente, ejecutar POST /modules/tenant/${tenant.id}/init manualmente`;
+    }
+
+    return modulesWarning ? { ...tenant, warning: modulesWarning } : tenant;
   }
 
   findAll() {

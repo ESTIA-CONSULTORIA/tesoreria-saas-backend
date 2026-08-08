@@ -3,7 +3,7 @@ import { TablesService } from './tables.service';
 import { Modulo } from '../auth/modulo.decorator';
 
 @Controller('pos/tables')
-@Modulo('configuracion-pos')
+@Modulo('configuracion_pos')
 export class TablesController {
   constructor(private tablesService: TablesService) {}
 

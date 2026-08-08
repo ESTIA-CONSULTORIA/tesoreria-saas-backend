@@ -2922,13 +2922,15 @@ export async function seedDatabase(dataSource: DataSource) {
     }
     console.log('✅ Catálogo de módulos sembrado');
 
+    // Debe coincidir EXACTAMENTE con MODULES_BY_PLAN en src/config/modules-by-plan.config.ts
+    // (fuente única para initFromPlan() y para el fallback legacy). Si se edita uno, editar el otro.
     const PLAN_MODULES: Record<string, string[]> = {
-      LITE_CORTE: ['dashboard', 'cortes', 'usuarios', 'empresas', 'sucursales', 'auditoria'],
-      LITE_POS:   ['dashboard', 'cortes', 'pos', 'usuarios', 'empresas', 'sucursales', 'auditoria'],
-      BASIC:      ['dashboard', 'cortes', 'tesoreria', 'bancos', 'reportes', 'usuarios', 'empresas', 'sucursales', 'auditoria'],
-      PRO:        ['dashboard', 'cortes', 'tesoreria', 'bancos', 'rh', 'compras', 'reportes', 'usuarios', 'empresas', 'sucursales', 'auditoria'],
-      BUSINESS:   ['dashboard', 'cortes', 'tesoreria', 'bancos', 'rh', 'compras', 'reportes', 'integraciones', 'usuarios', 'empresas', 'sucursales', 'auditoria'],
-      ENTERPRISE: ['dashboard', 'cortes', 'tesoreria', 'bancos', 'rh', 'compras', 'reportes', 'integraciones', 'ocr', 'usuarios', 'empresas', 'sucursales', 'auditoria'],
+      LITE_CORTE: ['dashboard', 'corte_caja_lite', 'pos', 'usuarios', 'empresas', 'sucursales', 'apariencia_logo_only'],
+      LITE_POS:   ['dashboard', 'pos_sin_inventario', 'usuarios', 'empresas', 'sucursales', 'apariencia_logo_only'],
+      BASIC:      ['dashboard', 'empresas', 'sucursales', 'usuarios', 'configuracion', 'bancos', 'movimientos', 'transferencias', 'pacientes'],
+      PRO:        ['dashboard', 'empresas', 'sucursales', 'usuarios', 'configuracion', 'bancos', 'movimientos', 'transferencias', 'reportes', 'tesoreria', 'conciliacion', 'proveedores', 'compras'],
+      BUSINESS:   ['dashboard', 'empresas', 'sucursales', 'usuarios', 'configuracion', 'bancos', 'movimientos', 'transferencias', 'reportes', 'tesoreria', 'conciliacion', 'pos', 'configuracion_pos', 'integraciones', 'proveedores', 'compras', 'costos', 'pacientes'],
+      ENTERPRISE: ['dashboard', 'empresas', 'sucursales', 'usuarios', 'configuracion', 'bancos', 'movimientos', 'transferencias', 'reportes', 'tesoreria', 'conciliacion', 'pos', 'configuracion_pos', 'integraciones', 'rh', 'sat_cfdi', 'white_label', 'proveedores', 'compras', 'costos', 'ocr', 'audit'],
     };
 
     for (const [planCode, modules] of Object.entries(PLAN_MODULES)) {

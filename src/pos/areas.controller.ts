@@ -3,7 +3,7 @@ import { AreasService } from './areas.service';
 import { Modulo } from '../auth/modulo.decorator';
 
 @Controller('pos/areas')
-@Modulo('configuracion-pos')
+@Modulo('configuracion_pos')
 export class AreasController {
   constructor(private areasService: AreasService) {}
 
