@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { DataSource, EntityManager, Repository } from 'typeorm';
 import { Sale, SaleItem } from './entities/sale.entity';
 import { Product } from './entities/product.entity';
 import { Recipe } from '../costs/entities/recipe.entity';
@@ -17,6 +17,7 @@ export class SalesService {
     private recipeRepo: Repository<Recipe>,
     @InjectRepository(Insumo)
     private insumoRepo: Repository<Insumo>,
+    private dataSource: DataSource,
   ) {}
 
   async generateFolio(): Promise<string> {
@@ -66,76 +67,87 @@ export class SalesService {
     referencia?: string;
     tableId?: string;
   }) {
-    try {
-      const folio = await this.generateFolio();
-      const now = new Date();
-      const sale = this.salesRepo.create();
-      sale.folio = folio;
-      sale.fecha = now;
-      sale.hora = now.toTimeString().slice(0, 8);
-      sale.items = data.items;
-      sale.subtotal = data.subtotal;
-      sale.descuento = data.descuento;
-      sale.impuestos = data.impuestos;
-      sale.total = data.total;
-      sale.formaPago = (data.formaPago || data.formasPago?.[0]?.forma) as any;
-      sale.formasPago = data.formasPago || [];
-      // Mark as PAGADA immediately when payment forms are included
-      sale.status = (data.formasPago && data.formasPago.length > 0) ? 'PAGADA' : 'ABIERTA';
-      sale.cajero = data.cajero;
-      sale.turnoId = data.turnoId;
-      sale.sucursalId = data.sucursalId;
-      sale.tenantId = data.tenantId;
-      sale.notas = data.notas || '';
-      sale.referencia = data.referencia || '';
-      sale.tableId = data.tableId || null;
-      sale.costoReal = await this.calculateCostoReal(data.items);
+    const folio = await this.generateFolio();
+    const now = new Date();
+    const costoReal = await this.calculateCostoReal(data.items);
 
-      const savedSale = await this.salesRepo.save(sale);
-      
-      // Deduct inventory for each product sold
-      await this.deductInventory(data.items, folio);
-      
-      return savedSale;
+    try {
+      // Venta + descuento de inventario en una sola transacción: si cualquier parte
+      // falla, TypeORM hace rollback de todo (ni la venta ni el inventario quedan a
+      // medias) y relanza el error, que se captura abajo.
+      return await this.dataSource.transaction(async (manager) => {
+        const sale = manager.create(Sale, {
+          folio,
+          fecha: now,
+          hora: now.toTimeString().slice(0, 8),
+          items: data.items,
+          subtotal: data.subtotal,
+          descuento: data.descuento,
+          impuestos: data.impuestos,
+          total: data.total,
+          formaPago: (data.formaPago || data.formasPago?.[0]?.forma) as any,
+          formasPago: data.formasPago || [],
+          // Mark as PAGADA immediately when payment forms are included
+          status: (data.formasPago && data.formasPago.length > 0) ? 'PAGADA' : 'ABIERTA',
+          cajero: data.cajero,
+          turnoId: data.turnoId,
+          sucursalId: data.sucursalId,
+          tenantId: data.tenantId,
+          notas: data.notas || '',
+          referencia: data.referencia || '',
+          tableId: data.tableId || null,
+          costoReal,
+        });
+
+        const savedSale = await manager.save(sale);
+
+        // Deduct inventory for each product sold
+        await this.deductInventory(manager, data.items, folio);
+
+        return savedSale;
+      });
     } catch (error) {
-      console.error('SalesService.create error:', error);
-      throw new Error(`Error al crear venta: ${error.message}`);
+      // Detalle técnico completo al log (para soporte/diagnóstico), mensaje genérico
+      // y accionable al cajero: la causa más probable es momentánea (red, timeout) y
+      // un reintento inmediato del mismo cobro debería funcionar.
+      console.error(`SalesService.create error (folio ${folio}, rollback aplicado, nada quedó guardado):`, error);
+      throw new Error('No se pudo procesar la venta, intenta de nuevo.');
     }
   }
 
-  private async deductInventory(items: SaleItem[], folio: string) {
+  private async deductInventory(manager: EntityManager, items: SaleItem[], folio: string) {
     for (const item of items) {
-      const product = await this.productRepo.findOne({ where: { id: item.productoId } });
+      const product = await manager.findOne(Product, { where: { id: item.productoId } });
       if (!product) continue;
 
       if (product.type === 'PREPARADO' && product.recipeId) {
         // Deduct recipe ingredients
-        await this.deductRecipeIngredients(product.recipeId, item.cantidad, folio);
+        await this.deductRecipeIngredients(manager, product.recipeId, item.cantidad, folio);
       } else if (product.type === 'SIMPLE' && product.insumoId) {
         // Deduct single insumo
-        await this.deductInsumo(product.insumoId, item.cantidad, folio);
+        await this.deductInsumo(manager, product.insumoId, item.cantidad, folio);
       }
     }
   }
 
-  private async deductRecipeIngredients(recipeId: string, quantity: number, folio: string) {
-    const recipe = await this.recipeRepo.findOne({ where: { id: recipeId } });
+  private async deductRecipeIngredients(manager: EntityManager, recipeId: string, quantity: number, folio: string) {
+    const recipe = await manager.findOne(Recipe, { where: { id: recipeId } });
     if (!recipe || !recipe.items) return;
 
     for (const item of recipe.items) {
-      await this.deductInsumo(item.insumoId, item.cantidad * quantity, folio);
+      await this.deductInsumo(manager, item.insumoId, item.cantidad * quantity, folio);
     }
   }
 
-  private async deductInsumo(insumoId: string, quantity: number, folio: string) {
-    const insumo = await this.insumoRepo.findOne({ where: { id: insumoId } });
+  private async deductInsumo(manager: EntityManager, insumoId: string, quantity: number, folio: string) {
+    const insumo = await manager.findOne(Insumo, { where: { id: insumoId } });
     if (!insumo) return;
 
     const newStock = Math.max(0, Number(insumo.stockActual) - quantity);
-    await this.insumoRepo.update(insumoId, { stockActual: newStock });
+    await manager.update(Insumo, insumoId, { stockActual: newStock });
 
     // TODO: Create low-stock alert in system when newStock <= insumo.stockMinimo
-    // TODO: Register inventory movement type SALIDA_VENTA
+    // TODO: Register inventory movement type SALIDA_VENTA — folio ya disponible como parámetro
   }
 
   async findAll(filters?: {
