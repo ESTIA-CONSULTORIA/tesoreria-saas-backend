@@ -5,6 +5,7 @@ import { Sale, SaleItem } from './entities/sale.entity';
 import { Product } from './entities/product.entity';
 import { Recipe } from '../costs/entities/recipe.entity';
 import { Insumo } from '../costs/entities/insumo.entity';
+import { InventoryMovement } from '../costs/entities/inventory-movement.entity';
 import { Branch } from '../branches/entities/branch.entity';
 import { InsumoAlertsService } from './insumo-alerts.service';
 
@@ -116,7 +117,7 @@ export class SalesService {
 
         // Deduct inventory for each product sold; junta los insumos que quedaron en
         // stock bajo para generar sus alertas DESPUÉS de confirmar la venta (abajo).
-        lowStockInsumos = await this.deductInventory(manager, data.items, folio);
+        lowStockInsumos = await this.deductInventory(manager, data.items, folio, data.tenantId, data.sucursalId);
 
         return saved;
       });
@@ -172,7 +173,7 @@ export class SalesService {
     }
   }
 
-  private async deductInventory(manager: EntityManager, items: SaleItem[], folio: string): Promise<LowStockInsumo[]> {
+  private async deductInventory(manager: EntityManager, items: SaleItem[], folio: string, tenantId: string, sucursalId: string): Promise<LowStockInsumo[]> {
     const lowStock: LowStockInsumo[] = [];
     for (const item of items) {
       const product = await manager.findOne(Product, { where: { id: item.productoId } });
@@ -180,36 +181,48 @@ export class SalesService {
 
       if (product.type === 'PREPARADO' && product.recipeId) {
         // Deduct recipe ingredients
-        lowStock.push(...await this.deductRecipeIngredients(manager, product.recipeId, item.cantidad, folio));
+        lowStock.push(...await this.deductRecipeIngredients(manager, product.recipeId, item.cantidad, folio, tenantId, sucursalId));
       } else if (product.type === 'SIMPLE' && product.insumoId) {
         // Deduct single insumo
-        const result = await this.deductInsumo(manager, product.insumoId, item.cantidad, folio);
+        const result = await this.deductInsumo(manager, product.insumoId, item.cantidad, folio, tenantId, sucursalId);
         if (result) lowStock.push(result);
       }
     }
     return lowStock;
   }
 
-  private async deductRecipeIngredients(manager: EntityManager, recipeId: string, quantity: number, folio: string): Promise<LowStockInsumo[]> {
+  private async deductRecipeIngredients(manager: EntityManager, recipeId: string, quantity: number, folio: string, tenantId: string, sucursalId: string): Promise<LowStockInsumo[]> {
     const recipe = await manager.findOne(Recipe, { where: { id: recipeId } });
     const lowStock: LowStockInsumo[] = [];
     if (!recipe || !recipe.items) return lowStock;
 
     for (const item of recipe.items) {
-      const result = await this.deductInsumo(manager, item.insumoId, item.cantidad * quantity, folio);
+      const result = await this.deductInsumo(manager, item.insumoId, item.cantidad * quantity, folio, tenantId, sucursalId);
       if (result) lowStock.push(result);
     }
     return lowStock;
   }
 
-  private async deductInsumo(manager: EntityManager, insumoId: string, quantity: number, folio: string): Promise<LowStockInsumo | null> {
+  private async deductInsumo(manager: EntityManager, insumoId: string, quantity: number, folio: string, tenantId: string, sucursalId: string): Promise<LowStockInsumo | null> {
     const insumo = await manager.findOne(Insumo, { where: { id: insumoId } });
     if (!insumo) return null;
 
     const newStock = Math.max(0, Number(insumo.stockActual) - quantity);
     await manager.update(Insumo, insumoId, { stockActual: newStock });
 
-    // TODO: Register inventory movement type SALIDA_VENTA — folio ya disponible como parámetro
+    // Ledger auditable del movimiento — misma transacción que el descuento de stock,
+    // a diferencia de las alertas de stock bajo (esas sí son best-effort y van aparte).
+    const movement = manager.create(InventoryMovement, {
+      insumoId: insumo.id,
+      tenantId,
+      tipo: 'SALIDA_VENTA',
+      cantidad: quantity,
+      stockResultante: newStock,
+      costoUnitario: Number(insumo.costoUnitario),
+      referencia: folio,
+      sucursalId,
+    });
+    await manager.save(movement);
 
     const stockMinimo = Number(insumo.stockMinimo);
     if (newStock <= stockMinimo) {
