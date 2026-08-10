@@ -5,6 +5,7 @@ import { Insumo } from './entities/insumo.entity';
 import { Recipe } from './entities/recipe.entity';
 import { RecipeItem } from './entities/recipe-item.entity';
 import { Inventory } from './entities/inventory.entity';
+import { InventoryMovement } from './entities/inventory-movement.entity';
 import { PhysicalCount } from './entities/physical-count.entity';
 import { Justifiable, JustifiableCategory } from './entities/justifiable.entity';
 import { Almacen } from './entities/almacen.entity';
@@ -21,6 +22,8 @@ export class CostsService {
     private recipeItemsRepo: Repository<RecipeItem>,
     @InjectRepository(Inventory)
     private inventoryRepo: Repository<Inventory>,
+    @InjectRepository(InventoryMovement)
+    private inventoryMovementRepo: Repository<InventoryMovement>,
     @InjectRepository(PhysicalCount)
     private physicalCountRepo: Repository<PhysicalCount>,
     @InjectRepository(Justifiable)
@@ -544,6 +547,22 @@ export class CostsService {
   async updateInventory(id: string, data: Partial<Inventory>) {
     await this.inventoryRepo.update(id, { ...data, updatedAt: new Date() });
     return this.inventoryRepo.findOne({ where: { id } });
+  }
+
+  // Movimientos de inventario (ledger auditable, solo lectura desde aquí — se escriben
+  // desde SalesService dentro de la transacción de la venta)
+  findInventoryMovements(tenantId?: string, filters?: { insumoId?: string; desde?: string; hasta?: string }) {
+    const where: any = {};
+    if (tenantId) where.tenantId = tenantId;
+    if (filters?.insumoId) where.insumoId = filters.insumoId;
+    if (filters?.desde && filters?.hasta) {
+      where.fecha = Between(new Date(filters.desde), new Date(filters.hasta));
+    }
+
+    return this.inventoryMovementRepo.find({
+      where,
+      order: { fecha: 'DESC' },
+    });
   }
 
   async deleteInventory(id: string) {

@@ -218,6 +218,18 @@ export class CostsController {
     return this.costsService.deleteInventory(id);
   }
 
+  @Get('inventory-movements')
+  findInventoryMovements(
+    @Query('insumoId') insumoId?: string,
+    @Query('desde') desde?: string,
+    @Query('hasta') hasta?: string,
+    @Query('tenantId') queryTenantId?: string,
+    @Request() req?: any,
+  ) {
+    const tenantId = req?.user?.tenantId || queryTenantId;
+    return this.costsService.findInventoryMovements(tenantId, { insumoId, desde, hasta });
+  }
+
   // Costo de Venta
   @Get('cost-of-sales')
   async calculateCostOfSales(
