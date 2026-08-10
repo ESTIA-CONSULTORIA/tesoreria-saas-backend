@@ -5,6 +5,15 @@ import { Sale, SaleItem } from './entities/sale.entity';
 import { Product } from './entities/product.entity';
 import { Recipe } from '../costs/entities/recipe.entity';
 import { Insumo } from '../costs/entities/insumo.entity';
+import { Branch } from '../branches/entities/branch.entity';
+import { InsumoAlertsService } from './insumo-alerts.service';
+
+interface LowStockInsumo {
+  id: string;
+  nombre: string;
+  stockActual: number;
+  stockMinimo: number;
+}
 
 @Injectable()
 export class SalesService {
@@ -18,6 +27,7 @@ export class SalesService {
     @InjectRepository(Insumo)
     private insumoRepo: Repository<Insumo>,
     private dataSource: DataSource,
+    private insumoAlertsService: InsumoAlertsService,
   ) {}
 
   async generateFolio(): Promise<string> {
@@ -71,11 +81,14 @@ export class SalesService {
     const now = new Date();
     const costoReal = await this.calculateCostoReal(data.items);
 
+    let savedSale: Sale;
+    let lowStockInsumos: LowStockInsumo[] = [];
+
     try {
       // Venta + descuento de inventario en una sola transacción: si cualquier parte
       // falla, TypeORM hace rollback de todo (ni la venta ni el inventario quedan a
       // medias) y relanza el error, que se captura abajo.
-      return await this.dataSource.transaction(async (manager) => {
+      savedSale = await this.dataSource.transaction(async (manager) => {
         const sale = manager.create(Sale, {
           folio,
           fecha: now,
@@ -99,12 +112,13 @@ export class SalesService {
           costoReal,
         });
 
-        const savedSale = await manager.save(sale);
+        const saved = await manager.save(sale);
 
-        // Deduct inventory for each product sold
-        await this.deductInventory(manager, data.items, folio);
+        // Deduct inventory for each product sold; junta los insumos que quedaron en
+        // stock bajo para generar sus alertas DESPUÉS de confirmar la venta (abajo).
+        lowStockInsumos = await this.deductInventory(manager, data.items, folio);
 
-        return savedSale;
+        return saved;
       });
     } catch (error) {
       // Detalle técnico completo al log (para soporte/diagnóstico), mensaje genérico
@@ -113,41 +127,95 @@ export class SalesService {
       console.error(`SalesService.create error (folio ${folio}, rollback aplicado, nada quedó guardado):`, error);
       throw new Error('No se pudo procesar la venta, intenta de nuevo.');
     }
+
+    // Alertas de stock bajo: best-effort, fuera de la transacción de la venta. La venta
+    // ya está confirmada y cobrada; un fallo aquí no debe afectarla en absoluto.
+    if (lowStockInsumos.length > 0) {
+      await this.reportLowStockAlerts(lowStockInsumos, data, folio);
+    }
+
+    return savedSale;
   }
 
-  private async deductInventory(manager: EntityManager, items: SaleItem[], folio: string) {
+  private async reportLowStockAlerts(
+    insumos: LowStockInsumo[],
+    data: { sucursalId: string; tenantId: string; cajero: string },
+    folio: string,
+  ) {
+    let companyId: string | undefined;
+    try {
+      // Insumo/Product/Sale no tienen companyId propio — se resuelve vía la sucursal,
+      // que sí lo tiene (Branch.companyId), sin necesitar ningún cambio de esquema.
+      const branch = await this.dataSource.getRepository(Branch).findOne({ where: { id: data.sucursalId } });
+      companyId = branch?.companyId;
+    } catch (error) {
+      console.error(`SalesService: error al resolver companyId desde sucursalId ${data.sucursalId} para alertas de stock (folio ${folio}):`, error);
+    }
+
+    if (!companyId) {
+      console.error(`SalesService: companyId no encontrado para sucursalId ${data.sucursalId}, se omiten alertas de stock bajo (folio ${folio})`);
+      return;
+    }
+
+    for (const insumo of insumos) {
+      try {
+        const estado = insumo.stockActual <= 0 ? 'agotado' : 'proximo';
+        await this.insumoAlertsService.upsert(data.tenantId, companyId, data.cajero, {
+          nombre: insumo.nombre,
+          tipo: 'insumo',
+          estado,
+          notas: `Auto-generada por venta ${folio}: stock actual ${insumo.stockActual} (mínimo ${insumo.stockMinimo}).`,
+        });
+      } catch (error) {
+        console.error(`SalesService: no se pudo crear/actualizar alerta de stock bajo para insumo ${insumo.nombre} (${insumo.id}), venta ${folio}:`, error);
+      }
+    }
+  }
+
+  private async deductInventory(manager: EntityManager, items: SaleItem[], folio: string): Promise<LowStockInsumo[]> {
+    const lowStock: LowStockInsumo[] = [];
     for (const item of items) {
       const product = await manager.findOne(Product, { where: { id: item.productoId } });
       if (!product) continue;
 
       if (product.type === 'PREPARADO' && product.recipeId) {
         // Deduct recipe ingredients
-        await this.deductRecipeIngredients(manager, product.recipeId, item.cantidad, folio);
+        lowStock.push(...await this.deductRecipeIngredients(manager, product.recipeId, item.cantidad, folio));
       } else if (product.type === 'SIMPLE' && product.insumoId) {
         // Deduct single insumo
-        await this.deductInsumo(manager, product.insumoId, item.cantidad, folio);
+        const result = await this.deductInsumo(manager, product.insumoId, item.cantidad, folio);
+        if (result) lowStock.push(result);
       }
     }
+    return lowStock;
   }
 
-  private async deductRecipeIngredients(manager: EntityManager, recipeId: string, quantity: number, folio: string) {
+  private async deductRecipeIngredients(manager: EntityManager, recipeId: string, quantity: number, folio: string): Promise<LowStockInsumo[]> {
     const recipe = await manager.findOne(Recipe, { where: { id: recipeId } });
-    if (!recipe || !recipe.items) return;
+    const lowStock: LowStockInsumo[] = [];
+    if (!recipe || !recipe.items) return lowStock;
 
     for (const item of recipe.items) {
-      await this.deductInsumo(manager, item.insumoId, item.cantidad * quantity, folio);
+      const result = await this.deductInsumo(manager, item.insumoId, item.cantidad * quantity, folio);
+      if (result) lowStock.push(result);
     }
+    return lowStock;
   }
 
-  private async deductInsumo(manager: EntityManager, insumoId: string, quantity: number, folio: string) {
+  private async deductInsumo(manager: EntityManager, insumoId: string, quantity: number, folio: string): Promise<LowStockInsumo | null> {
     const insumo = await manager.findOne(Insumo, { where: { id: insumoId } });
-    if (!insumo) return;
+    if (!insumo) return null;
 
     const newStock = Math.max(0, Number(insumo.stockActual) - quantity);
     await manager.update(Insumo, insumoId, { stockActual: newStock });
 
-    // TODO: Create low-stock alert in system when newStock <= insumo.stockMinimo
     // TODO: Register inventory movement type SALIDA_VENTA — folio ya disponible como parámetro
+
+    const stockMinimo = Number(insumo.stockMinimo);
+    if (newStock <= stockMinimo) {
+      return { id: insumo.id, nombre: insumo.nombre, stockActual: newStock, stockMinimo };
+    }
+    return null;
   }
 
   async findAll(filters?: {
