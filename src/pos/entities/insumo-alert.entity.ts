@@ -11,6 +11,10 @@ export class InsumoAlert {
   @Column()
   companyId: string;
 
+  @Column({ nullable: true })
+  insumoId: string; // vínculo real al Insumo, cuando el origen lo conoce (ej. SalesService).
+                     // Nullable: alertas manuales legacy (CorteCajaLite) no lo tienen todavía.
+
   @Column()
   nombre: string;
 

@@ -27,12 +27,24 @@ export class InsumoAlertsService {
     });
   }
 
-  async upsert(tenantId: string, companyId: string, userId: string, data: { nombre: string; tipo: string; estado: string; notas?: string }) {
-    let alert = await this.repo.findOne({ where: { tenantId, companyId, nombre: data.nombre } });
+  async upsert(tenantId: string, companyId: string, userId: string, data: { nombre: string; tipo: string; estado: string; notas?: string; insumoId?: string }) {
+    // Deduplicación: si viene insumoId, es la clave preferida (vínculo real). Si no hay
+    // match por insumoId (o no vino), cae al camino legacy por nombre — así una alerta
+    // vieja creada a mano (sin insumoId) se actualiza en vez de duplicarse, y de paso
+    // queda con el insumoId ya relleno para la próxima vez.
+    let alert: InsumoAlert | null = null;
+    if (data.insumoId) {
+      alert = await this.repo.findOne({ where: { tenantId, companyId, insumoId: data.insumoId } });
+    }
+    if (!alert) {
+      alert = await this.repo.findOne({ where: { tenantId, companyId, nombre: data.nombre } });
+    }
+
     if (alert) {
       alert.estado = data.estado;
       alert.notas = data.notas || alert.notas;
       alert.reportadoPor = userId;
+      if (data.insumoId) alert.insumoId = data.insumoId;
     } else {
       alert = this.repo.create({ tenantId, companyId, reportadoPor: userId, ...data });
     }

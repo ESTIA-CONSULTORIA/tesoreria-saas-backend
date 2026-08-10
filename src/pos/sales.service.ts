@@ -162,6 +162,7 @@ export class SalesService {
       try {
         const estado = insumo.stockActual <= 0 ? 'agotado' : 'proximo';
         await this.insumoAlertsService.upsert(data.tenantId, companyId, data.cajero, {
+          insumoId: insumo.id,
           nombre: insumo.nombre,
           tipo: 'insumo',
           estado,
