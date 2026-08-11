@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Shift } from './entities/shift.entity';
 import { Sale } from './entities/sale.entity';
+import { resolveEventTimestamp } from '../common/resolve-event-timestamp.util';
 
 @Injectable()
 export class ShiftsService {
@@ -19,9 +20,12 @@ export class ShiftsService {
     tenantId: string;
     fondoInicial: number;
     notas?: string;
+    clientTimestamp?: string;
   }) {
+    // Fuera del try: un clientTimestamp inválido debe llegar al cliente como 400
+    // (BadRequestException), no enmascararse como 500 por el catch genérico de abajo.
+    const now = resolveEventTimestamp(data.clientTimestamp);
     try {
-      const now = new Date();
       const shift = this.shiftsRepo.create();
       shift.cajero = data.cajero;
       shift.sucursalId = data.sucursalId;
@@ -145,7 +149,10 @@ export class ShiftsService {
   async closeShift(id: string, data: {
     efectivoContado?: number;
     notas?: string;
+    clientTimestamp?: string;
   }) {
+    // Fuera del try, mismo motivo que en openShift.
+    const now = resolveEventTimestamp(data.clientTimestamp);
     try {
       const shift = await this.shiftsRepo.findOne({ where: { id } });
       if (!shift) {
@@ -195,7 +202,6 @@ export class ShiftsService {
       const cancelledSales = await this.salesRepo.find({ where: { turnoId: id, status: 'CANCELADA' } });
       const calcTotalDevoluciones = cancelledSales.reduce((sum, s) => sum + (Number(s.total) || 0), 0);
 
-      const now = new Date();
       await this.shiftsRepo.update(id, {
         horaCierre: now.toTimeString().slice(0, 8),
         totalVentas: calcTotalVentas,

@@ -8,6 +8,7 @@ import { Insumo } from '../costs/entities/insumo.entity';
 import { InventoryMovement } from '../costs/entities/inventory-movement.entity';
 import { Branch } from '../branches/entities/branch.entity';
 import { InsumoAlertsService } from './insumo-alerts.service';
+import { resolveEventTimestamp } from '../common/resolve-event-timestamp.util';
 
 interface LowStockInsumo {
   id: string;
@@ -77,9 +78,12 @@ export class SalesService {
     notas?: string;
     referencia?: string;
     tableId?: string;
+    clientTimestamp?: string;
   }) {
     const folio = await this.generateFolio();
-    const now = new Date();
+    // Fuera del try (más abajo): un clientTimestamp inválido debe llegar al cliente como
+    // 400 (BadRequestException), no enmascararse como 500 por el catch genérico de la venta.
+    const now = resolveEventTimestamp(data.clientTimestamp);
     const costoReal = await this.calculateCostoReal(data.items);
 
     let savedSale: Sale;
