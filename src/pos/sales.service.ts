@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, EntityManager, Repository } from 'typeorm';
 import { Sale, SaleItem } from './entities/sale.entity';
@@ -79,8 +79,10 @@ export class SalesService {
     referencia?: string;
     tableId?: string;
     clientTimestamp?: string;
+    folio?: string; // generado en el cliente (Fase A1, modo offline). Si no viene,
+                     // se genera server-side como siempre — retrocompatible.
   }) {
-    const folio = await this.generateFolio();
+    const folio = data.folio || await this.generateFolio();
     // Fuera del try (más abajo): un clientTimestamp inválido debe llegar al cliente como
     // 400 (BadRequestException), no enmascararse como 500 por el catch genérico de la venta.
     const now = resolveEventTimestamp(data.clientTimestamp);
@@ -126,6 +128,16 @@ export class SalesService {
         return saved;
       });
     } catch (error) {
+      // Colisión de folio (23505 = unique_violation de Postgres): error específico y
+      // claro, NO el mensaje genérico de "intenta de nuevo" — un folio duplicado
+      // (generado en el cliente, Fase A1) fallaría exactamente igual en cada reintento
+      // con el mismo folio; el cajero necesita una señal distinta a un fallo transitorio.
+      // BadRequestException (HttpException real) para que llegue como 400 al cliente,
+      // no enmascarado como 500 — mismo cuidado que con clientTimestamp más arriba.
+      if ((error as any)?.code === '23505') {
+        console.error(`SalesService.create: folio duplicado (folio ${folio}):`, error);
+        throw new BadRequestException(`El folio '${folio}' ya existe, no se pudo registrar la venta.`);
+      }
       // Detalle técnico completo al log (para soporte/diagnóstico), mensaje genérico
       // y accionable al cajero: la causa más probable es momentánea (red, timeout) y
       // un reintento inmediato del mismo cobro debería funcionar.
