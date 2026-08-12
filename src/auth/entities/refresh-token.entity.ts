@@ -8,8 +8,9 @@ export class RefreshToken {
   @Column()
   userId: string;
 
-  @Column()
-  tenantId: string;
+  @Column({ nullable: true })
+  tenantId: string; // Nullable: SOPORTE opera sin tenant fijo (User.tenantId también es
+                     // nullable) — antes rompía el guardado del refresh token en su login.
 
   @Column({ unique: true })
   token: string;
