@@ -23,7 +23,7 @@ export class CashiersService {
 
     const users = await this.usersRepo.find({
       where,
-      select: ['id', 'email', 'name', 'password', 'roleCode', 'tenantId'],
+      select: ['id', 'email', 'name', 'password', 'roleCode', 'tenantId', 'branchId'],
     });
     if (!users.length) {
       throw new HttpException('NIP incorrecto', HttpStatus.UNAUTHORIZED);
@@ -74,6 +74,7 @@ export class CashiersService {
         name: user.name,
         roleCode: user.roleCode,
         tenantId: user.tenantId,
+        branchId: user.branchId || null,
       },
       modulosActivos,
       planCode,

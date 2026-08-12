@@ -60,7 +60,10 @@ export class ShiftsController {
     return this.shiftsService.findAll({
       ...filters,
       tenantId,
-      branchId,
+      // findAll() solo filtra por la clave sucursalId (mismo nombre que usa el resto del
+      // sistema: entidad Shift, openShift, findOpenShift) — branchId aquí nunca se leía,
+      // el filtro por sucursal en el listado no tenía efecto.
+      sucursalId: branchId,
     });
   }
 
