@@ -59,6 +59,7 @@ export class TreasuryController {
   }
 
   @Get('aging-report')
+  @Modulo('compras')
   getAgingReport(@Request() req, @Headers('x-company-id') headerCompanyId?: string) {
     const tenantId = req.user?.tenantId;
     const companyId = req.user?.companyId || headerCompanyId;

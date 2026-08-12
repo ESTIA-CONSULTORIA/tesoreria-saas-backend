@@ -1,7 +1,9 @@
 import { Controller, Get, Query, Request, Headers } from '@nestjs/common';
 import { ReportsService } from './reports.service';
+import { Modulo } from '../auth/modulo.decorator';
 
 @Controller('reports')
+@Modulo('reportes')
 export class ReportsController {
   constructor(private reportsService: ReportsService) {}
 
