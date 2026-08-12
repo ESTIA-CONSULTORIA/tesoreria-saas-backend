@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
+import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 
 import { UsersModule } from './users/users.module';
@@ -52,6 +53,14 @@ import { DeliveryIngestModule } from './integrations/delivery/delivery-ingest.mo
     }),
 
     ScheduleModule.forRoot(),
+
+    // Límite global generoso — no debe afectar el uso normal de la API (sync en
+    // segundo plano del POS, dashboards, etc.). La regla estricta de verdad
+    // (5 intentos / 15 min) se aplica solo en los 4 endpoints públicos de
+    // login por contraseña/PIN vía @Throttle(), que sobreescribe este default ahí.
+    ThrottlerModule.forRoot([
+      { name: 'default', ttl: 60_000, limit: 120 },
+    ]),
 
     TypeOrmModule.forRootAsync({
       inject: [ConfigService],
@@ -125,6 +134,13 @@ import { DeliveryIngestModule } from './integrations/delivery/delivery-ingest.mo
     {
       provide: APP_INTERCEPTOR,
       useClass: AuditInterceptor,
+    },
+    // Antes que SubscriptionGuard/PlanModuloGuard a propósito: rechazar una ráfaga de
+    // peticiones debe ser lo más barato y temprano posible, sin gastar consultas a BD
+    // en los otros guards primero.
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
     },
     {
       provide: APP_GUARD,

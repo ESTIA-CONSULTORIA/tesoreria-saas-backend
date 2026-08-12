@@ -34,7 +34,7 @@ export class PlanModuloGuard implements CanActivate {
 
     if (!user?.tenantId) return true;
 
-    if (user.roleCode === 'SOPORTE' || user.executiveAccess === true) return true;
+    if (user.roleCode === 'SOPORTE') return true;
 
     // tenant_modules es la única fuente de verdad (Sistema 3). Sin fallback a config estática.
     const tenantMod = await this.tenantModuleRepo.findOne({

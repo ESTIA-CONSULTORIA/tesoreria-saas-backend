@@ -30,8 +30,11 @@ export class SubscriptionGuard implements CanActivate {
     const request = context.switchToHttp().getRequest();
     const user = request.user;
 
-    // SOPORTE y vista ejecutiva tienen acceso sin restricciones de suscripción
-    if (user && (user.roleCode === 'SOPORTE' || user.executiveAccess === true)) {
+    // Solo SOPORTE tiene acceso sin restricciones de suscripción. Vista Ejecutiva
+    // (executiveAccess) YA NO bypasea este guard — si la suscripción del tenant está
+    // vencida/inactiva, su Vista Ejecutiva se corta igual que el resto del sistema
+    // (decisión de negocio confirmada, corrección de seguridad).
+    if (user && user.roleCode === 'SOPORTE') {
       return true;
     }
 
