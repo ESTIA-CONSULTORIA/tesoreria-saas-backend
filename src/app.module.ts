@@ -45,6 +45,7 @@ import { PatientsModule } from './patients/patients.module';
 import { ModulesModule } from './modules/modules.module';
 import { TenantModule } from './modules/entities/tenant-module.entity';
 import { DeliveryIngestModule } from './integrations/delivery/delivery-ingest.module';
+import { ExecutiveConfigModule } from './executive-config/executive-config.module';
 
 @Module({
   imports: [
@@ -128,6 +129,7 @@ import { DeliveryIngestModule } from './integrations/delivery/delivery-ingest.mo
     ModulesModule,
     TypeOrmModule.forFeature([TenantModule]),
     DeliveryIngestModule,
+    ExecutiveConfigModule,
   ],
 
   providers: [
