@@ -1,7 +1,9 @@
-import { Body, Controller, Post, Headers, Request } from '@nestjs/common';
+import { Body, Controller, Get, Post, Headers, Request, Res, UnauthorizedException } from '@nestjs/common';
+import type { Response } from 'express';
 import { Throttle } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
 import { Public } from './public.decorator';
+import { setAuthCookies, clearAuthCookies } from './auth-cookies.util';
 
 // 5 intentos / 15 min en los endpoints de login por contraseña/PIN — sin esto, no había
 // ningún límite de fuerza bruta en todo el backend (diagnóstico de la auditoría de
@@ -22,21 +24,52 @@ export class AuthController {
   @Public()
   @Throttle(LOGIN_THROTTLE)
   @Post('login')
-  login(@Body() body: { email: string; password: string }) {
-    return this.authService.login(body.email, body.password);
+  async login(
+    @Body() body: { email: string; password: string },
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const { access_token, refresh_token, user, modulosActivos } = await this.authService.login(
+      body.email,
+      body.password,
+    );
+    setAuthCookies(res, access_token, refresh_token);
+    return { user, modulosActivos };
   }
 
   @Public()
   @Throttle(LOGIN_THROTTLE)
   @Post('portal-login')
-  portalLogin(@Body() body: { email: string; password: string }) {
-    return this.authService.portalLogin(body.email, body.password);
+  async portalLogin(
+    @Body() body: { email: string; password: string },
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const { access_token, refresh_token, user, modulosActivos } = await this.authService.portalLogin(
+      body.email,
+      body.password,
+    );
+    setAuthCookies(res, access_token, refresh_token);
+    return { user, modulosActivos };
   }
 
   @Post('switch-company')
-  switchCompany(@Body() body: { companyId: string }, @Request() req) {
-    const user = req.user;
-    return this.authService.switchCompany(user.id, user.tenantId, body.companyId);
+  async switchCompany(
+    @Body() body: { companyId: string },
+    @Request() req,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const reqUser = req.user;
+    const { access_token, refresh_token, user } = await this.authService.switchCompany(
+      reqUser.id,
+      reqUser.tenantId,
+      body.companyId,
+    );
+    setAuthCookies(res, access_token, refresh_token);
+    return { user };
+  }
+
+  @Get('me')
+  me(@Request() req) {
+    return req.user;
   }
 
   @Public()
@@ -48,12 +81,23 @@ export class AuthController {
 
   @Public()
   @Post('refresh')
-  refresh(@Body() body: { refreshToken: string }) {
-    return this.authService.refreshAccessToken(body.refreshToken);
+  async refresh(@Request() req, @Res({ passthrough: true }) res: Response) {
+    const refreshToken = req.cookies?.refresh_token;
+    if (!refreshToken) {
+      throw new UnauthorizedException('Refresh token inválido o expirado');
+    }
+    const { access_token, refresh_token } = await this.authService.refreshAccessToken(refreshToken);
+    setAuthCookies(res, access_token, refresh_token);
+    return { success: true };
   }
 
   @Post('logout')
-  logout(@Body() body: { refreshToken: string }) {
-    return this.authService.revokeRefreshToken(body.refreshToken);
+  async logout(@Request() req, @Res({ passthrough: true }) res: Response) {
+    const refreshToken = req.cookies?.refresh_token;
+    if (refreshToken) {
+      await this.authService.revokeRefreshToken(refreshToken);
+    }
+    clearAuthCookies(res);
+    return { message: 'Sesión cerrada correctamente' };
   }
 }

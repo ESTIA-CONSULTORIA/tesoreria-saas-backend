@@ -4,6 +4,7 @@ import { getDataSourceToken } from '@nestjs/typeorm';
 import { seedDatabase } from './seed/seed';
 import { JwtMiddleware } from './auth/jwt.middleware';
 import * as bodyParser from 'body-parser';
+import cookieParser from 'cookie-parser';
 
 const ALLOWED_ORIGINS = [
   'https://app.estiaconsultoria.com',
@@ -40,6 +41,9 @@ async function bootstrap() {
 
   app.use(bodyParser.json({ limit: '50mb' }));
   app.use(bodyParser.urlencoded({ limit: '50mb', extended: true }));
+  // Cookies httpOnly de sesión del ERP normal (login/portal-login/switch-company/refresh) —
+  // debe ir antes de JwtMiddleware, que ya lee req.cookies como fuente alterna del token.
+  app.use(cookieParser());
 
   // Timeout de conexión
   app.use((req, res, next) => {

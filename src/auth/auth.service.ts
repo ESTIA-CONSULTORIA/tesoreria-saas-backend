@@ -207,16 +207,24 @@ export class AuthService {
   }
 
   async refreshAccessToken(token: string) {
-    const stored = await this.refreshTokenRepo.findOne({ where: { token, revoked: false } });
-    if (!stored || stored.expiresAt < new Date()) {
+    // UPDATE atómico en vez de findOne()+save(): con eso, dos peticiones casi simultáneas
+    // con el mismo refresh_token (varias pestañas, o varias llamadas en paralelo del
+    // frontend antes de la deduplicación del interceptor) podían leer revoked:false las
+    // dos ANTES de que cualquiera escribiera revoked:true — ambas pasaban y generaban un
+    // par nuevo cada una, resultado no determinístico (confirmado: 2 de 4 fallaban en
+    // pruebas reales). El WHERE revoked=false en el UPDATE hace que como mucho una fila
+    // se actualice; la segunda petición no encuentra nada que afectar y cae limpio a 401.
+    const result = await this.refreshTokenRepo.query(
+      `UPDATE refresh_tokens SET revoked = true WHERE token = $1 AND revoked = false AND "expiresAt" > NOW() RETURNING *`,
+      [token],
+    );
+    const stored = result[0]?.[0];
+    if (!stored) {
       throw new UnauthorizedException('Refresh token inválido o expirado');
     }
 
     const user = await this.usersRepo.findOne({ where: { id: stored.userId } });
     if (!user) throw new UnauthorizedException('Usuario no encontrado');
-
-    stored.revoked = true;
-    await this.refreshTokenRepo.save(stored);
 
     const modulosActivos = await this.getModulosActivos(stored.tenantId, user.roleCode || '');
     return this.generateTokens(user, modulosActivos);
