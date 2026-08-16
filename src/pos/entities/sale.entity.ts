@@ -89,6 +89,30 @@ export class Sale {
   @Column({ type: 'varchar', nullable: true })
   tableId: string | null;
 
+  // Origen de la venta: 'POS' (default, ventas de siempre) o 'DELIVERY' (ingest de
+  // DeliveryHub Pro — ver DeliveryIngestService). Las columnas de abajo solo se llenan
+  // cuando origin === 'DELIVERY'; quedan NULL/0 en toda venta POS existente y nueva.
+  @Column({ default: 'POS' })
+  origin: 'POS' | 'DELIVERY';
+
+  @Column({ nullable: true })
+  platform: string;
+
+  @Column({ nullable: true })
+  externalOrderId: string;
+
+  @Column({ type: 'decimal', precision: 10, scale: 2, default: 0 })
+  platformCommission: number;
+
+  @Column({ type: 'decimal', precision: 10, scale: 2, default: 0 })
+  netPayout: number;
+
+  @Column({ type: 'timestamp', nullable: true })
+  placedAt: Date;
+
+  @Column({ type: 'timestamp', nullable: true })
+  deliveredAt: Date | null;
+
   @CreateDateColumn()
   createdAt: Date;
 }
