@@ -1,9 +1,15 @@
 import { Body, Controller, Get, Post, Headers, Request, Res, UnauthorizedException } from '@nestjs/common';
 import type { Response } from 'express';
 import { Throttle } from '@nestjs/throttler';
+import { JwtService } from '@nestjs/jwt';
 import { AuthService } from './auth.service';
 import { Public } from './public.decorator';
-import { setAuthCookies, clearAuthCookies } from './auth-cookies.util';
+import {
+  setAuthCookies,
+  clearAuthCookies,
+  setExecutiveCookie,
+  clearExecutiveCookie,
+} from './auth-cookies.util';
 
 // 5 intentos / 15 min en los endpoints de login por contraseña/PIN — sin esto, no había
 // ningún límite de fuerza bruta en todo el backend (diagnóstico de la auditoría de
@@ -13,7 +19,10 @@ const LOGIN_THROTTLE = { default: { limit: 5, ttl: 900_000 } };
 
 @Controller('auth')
 export class AuthController {
-  constructor(private authService: AuthService) {}
+  constructor(
+    private authService: AuthService,
+    private jwtService: JwtService,
+  ) {}
 
   @Public()
   @Post('register')
@@ -86,8 +95,51 @@ export class AuthController {
   @Public()
   @Throttle(LOGIN_THROTTLE)
   @Post('executive-login')
-  executiveLogin(@Body() body: { tenantId: string; pin: string }) {
-    return this.authService.executiveLogin(body.tenantId, body.pin);
+  async executiveLogin(
+    @Body() body: { tenantId: string; pin: string },
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const { access_token, user } = await this.authService.executiveLogin(body.tenantId, body.pin);
+    setExecutiveCookie(res, access_token);
+    return { user };
+  }
+
+  // Sin cookie de refresh (Vista Ejecutiva no tiene, sesión de 8h fija) — limpieza
+  // puramente de la cookie, no hay nada que revocar en BD.
+  @Public()
+  @Post('executive-logout')
+  executiveLogout(@Res({ passthrough: true }) res: Response) {
+    clearExecutiveCookie(res);
+    return { message: 'Sesión cerrada correctamente' };
+  }
+
+  // Bootstrap de sesión para ExecutivePage.tsx (ya no hay token legible en JS para
+  // decidir esto del lado del cliente). Lee la cookie de Vista Ejecutiva directo, no pasa
+  // por el chain genérico del middleware — evita la ambigüedad de "cuál cookie es esta
+  // request" cuando el mismo navegador también tiene una sesión del ERP normal abierta.
+  // name ya viaja en el payload firmado (auth.service.ts) así que esto es solo verificar
+  // el JWT, sin ir a la base de datos — mismo espíritu de "sesión de 8h fija, sin
+  // mecanismo de renovación" que ya tenía executiveLogin.
+  @Public()
+  @Get('executive-me')
+  executiveMe(@Request() req) {
+    const token = req.cookies?.exec_access_token;
+    if (!token) throw new UnauthorizedException('Sesión no encontrada');
+    try {
+      const decoded: any = this.jwtService.verify(token);
+      if (decoded.executiveAccess !== true) throw new Error('not executive token');
+      return {
+        user: {
+          id: decoded.sub,
+          email: decoded.email,
+          name: decoded.name,
+          roleCode: decoded.roleCode,
+          tenantId: decoded.tenantId,
+        },
+      };
+    } catch {
+      throw new UnauthorizedException('Sesión inválida o expirada');
+    }
   }
 
   @Public()

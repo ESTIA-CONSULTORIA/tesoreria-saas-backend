@@ -1,6 +1,7 @@
 import { Injectable, HttpException, HttpStatus } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { JwtService } from '@nestjs/jwt';
 import { User } from '../users/entities/user.entity';
 import { Tenant } from '../tenants/entities/tenant.entity';
 import * as bcrypt from 'bcrypt';
@@ -12,6 +13,7 @@ export class CashiersService {
     private usersRepo: Repository<User>,
     @InjectRepository(Tenant)
     private tenantsRepo: Repository<Tenant>,
+    private jwtService: JwtService,
   ) {}
 
   async loginWithNip(nip: string, tenantId: string) {
@@ -45,17 +47,17 @@ export class CashiersService {
 
     const user = matchedUser;
 
-    // Generar token (reutilizar lógica de AuthService)
-    const jwt = require('jsonwebtoken');
-    const secret = process.env.JWT_SECRET || 'secret';
-    const token = jwt.sign(
+    // posLiteAccess: true por paridad con executiveAccess (auth.service.ts) — permite que
+    // GET /pos/cashiers/me rechace un JWT que verifique pero no haya salido de este flujo.
+    const token = this.jwtService.sign(
       {
         sub: user.id,
         email: user.email,
+        name: user.name,
         roleCode: user.roleCode,
         tenantId: user.tenantId,
+        posLiteAccess: true,
       },
-      secret,
       { expiresIn: '24h' },
     );
 

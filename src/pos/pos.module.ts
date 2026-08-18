@@ -1,5 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { JwtModule } from '@nestjs/jwt';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { PosController } from './pos.controller';
 import { PosService } from './pos.service';
 import { ProductsController } from './products.controller';
@@ -37,6 +39,15 @@ import { Tenant } from '../tenants/entities/tenant.entity';
 @Module({
   imports: [
     TypeOrmModule.forFeature([PosConfig, Product, PosCategory, Area, Table, Sale, Shift, Recipe, Insumo, User, CorteField, InsumoAlert, Tenant]),
+    // Mismo secret que AuthModule (JWT_SECRET) — cashiers.service.ts firma/verifica con
+    // JwtService en vez del jsonwebtoken crudo que usaba antes de la migración a cookies.
+    JwtModule.registerAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => ({
+        secret: config.get<string>('JWT_SECRET'),
+      }),
+    }),
   ],
   controllers: [
     PosController,

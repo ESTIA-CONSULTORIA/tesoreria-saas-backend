@@ -184,6 +184,7 @@ export class AuthService {
           {
             sub: user.id,
             email: user.email,
+            name: user.name,
             roleCode: user.roleCode,
             tenantId: user.tenantId,
             companyId: user.companyId || null,
@@ -199,6 +200,7 @@ export class AuthService {
             email: user.email,
             name: user.name,
             roleCode: user.roleCode,
+            tenantId: user.tenantId,
           },
         };
       }
