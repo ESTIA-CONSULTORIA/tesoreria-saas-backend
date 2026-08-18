@@ -1,6 +1,6 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { In, Not, Repository } from 'typeorm';
 import { Employee } from './entities/employee.entity';
 import { HrDocument } from './entities/hr-document.entity';
 import { VacationRequest } from './entities/vacation-request.entity';
@@ -59,7 +59,15 @@ export class HrService {
   }
 
   async createEmployee(data: Partial<Employee>): Promise<Employee> {
-    return this.empRepo.save(this.empRepo.create(data));
+    const normalized = this.normalizeEmployeeUserId(data);
+    if (normalized.userId) {
+      await this.assertUserIdNotLinked(normalized.userId, normalized.tenantId);
+    }
+    try {
+      return await this.empRepo.save(this.empRepo.create(normalized));
+    } catch (error) {
+      throw this.mapUserIdConflict(error);
+    }
   }
 
   async updateEmployee(id: string, data: Partial<Employee>, tenantId?: string): Promise<Employee> {
@@ -68,8 +76,56 @@ export class HrService {
     if (tenantId && emp.tenantId && emp.tenantId !== tenantId) {
       throw new ForbiddenException('No tienes permiso sobre este empleado');
     }
-    await this.empRepo.update(id, data);
+    const normalized = this.normalizeEmployeeUserId(data);
+    if (normalized.userId) {
+      await this.assertUserIdNotLinked(normalized.userId, tenantId ?? emp.tenantId, id);
+    }
+    try {
+      await this.empRepo.update(id, normalized);
+    } catch (error) {
+      throw this.mapUserIdConflict(error);
+    }
     return this.empRepo.findOne({ where: { id } }) as Promise<Employee>;
+  }
+
+  // El selector del frontend envía '' para "Sin vincular" — se normaliza a NULL para
+  // que el índice único parcial (WHERE "userId" IS NOT NULL) no trate strings vacíos
+  // como un valor duplicado real.
+  private normalizeEmployeeUserId<T extends Partial<Employee>>(data: T): T {
+    if (data.userId === '') {
+      return { ...data, userId: null as unknown as string };
+    }
+    return data;
+  }
+
+  // Chequeo por tenant: un userId real solo pertenece a un tenant de todas formas
+  // (User.tenantId es fijo), así que scopear acá no baja la seguridad — solo evita
+  // comparar contra empleados de otros tenants. excludeEmployeeId es para permitir
+  // que un update conserve su propio vínculo sin chocar consigo mismo.
+  private async assertUserIdNotLinked(
+    userId: string,
+    tenantId?: string,
+    excludeEmployeeId?: string,
+  ): Promise<void> {
+    const where: any = { userId };
+    if (tenantId) where.tenantId = tenantId;
+    if (excludeEmployeeId) where.id = Not(excludeEmployeeId);
+    const existing = await this.empRepo.findOne({ where });
+    if (existing) {
+      throw new BadRequestException('Este usuario ya está vinculado a otro empleado');
+    }
+  }
+
+  // Red de seguridad contra la carrera de dos requests casi simultáneos vinculando
+  // al mismo userId dos empleados distintos: el chequeo de arriba no es atómico,
+  // el índice único parcial UQ_employee_userId sí lo es. Mismo patrón de mapeo de
+  // 23505 que sales.service.ts (folio duplicado) — es un conflicto real que debe
+  // llegar al usuario como 400, no como 500 genérico.
+  private mapUserIdConflict(error: any): Error {
+    if (error?.code === '23505' && error?.constraint === 'UQ_employee_userId') {
+      return new BadRequestException('Este usuario ya está vinculado a otro empleado');
+    }
+    return error;
   }
 
   async removeEmployee(id: string, tenantId?: string): Promise<void> {
