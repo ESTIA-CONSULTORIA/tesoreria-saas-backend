@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException, BadRequestException } from '@nestjs/common';
+import { Injectable, UnauthorizedException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { UsersService } from '../users/users.service';
@@ -43,7 +43,10 @@ export class AuthService {
     };
   }
 
-  async login(email: string, password: string, skipAttendanceGate = false) {
+  // Compartido por login() y serviceLogin() — mismo bcrypt.compare para ambos, no una
+  // copia. Siempre lanza el mismo mensaje genérico tanto si el email no existe como si
+  // la contraseña es incorrecta, para no filtrar cuáles emails están registrados.
+  private async verifyCredentials(email: string, password: string) {
     const user = await this.usersService.findByEmail(email);
 
     if (!user) {
@@ -55,6 +58,12 @@ export class AuthService {
     if (!isPasswordValid) {
       throw new UnauthorizedException('Credenciales incorrectas');
     }
+
+    return user;
+  }
+
+  async login(email: string, password: string, skipAttendanceGate = false) {
+    const user = await this.verifyCredentials(email, password);
 
     // Attendance gate — gated roles must have checked in before accessing main system
     if (!skipAttendanceGate && user.tenantId && ATTENDANCE_GATED_ROLES.includes(user.roleCode || '')) {
@@ -95,6 +104,43 @@ export class AuthService {
 
   async portalLogin(email: string, password: string) {
     return this.login(email, password, true);
+  }
+
+  // Exclusivo para cuentas de servicio server-to-server (ej. DeliveryHub Pro), que no
+  // tienen sesión de navegador y por lo tanto no pueden usar cookies httpOnly. Devuelve
+  // los tokens en el body en vez de setearlos como cookies (auth.controller.ts hace esa
+  // parte). El gate de roleCode/tenantId corre DESPUÉS de verifyCredentials(): si la
+  // contraseña es incorrecta, siempre es 401 genérico igual que login() — no se filtra
+  // si el email pertenece o no a una cuenta de servicio antes de probar la contraseña.
+  async serviceLogin(email: string, password: string) {
+    const user = await this.verifyCredentials(email, password);
+
+    // Mismo patrón que ya identifica a las cuentas de servicio (ver
+    // delivery-ingest.controller.ts:14 — deliveryhub@service.estia es SOPORTE con
+    // tenantId null). Esto NO es una puerta trasera para evitar cookies en logins
+    // normales: cualquier usuario con tenantId real se rechaza aquí aunque la
+    // contraseña sea correcta.
+    if (user.roleCode !== 'SOPORTE' || user.tenantId) {
+      throw new ForbiddenException('Este endpoint es exclusivo para cuentas de servicio');
+    }
+
+    const modulosActivos = await this.getModulosActivos(user.tenantId, user.roleCode || '');
+    const { access_token, refresh_token } = await this.generateTokens(user, modulosActivos);
+
+    return {
+      access_token,
+      refresh_token,
+      modulosActivos,
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        roleCode: user.roleCode,
+        tenantId: user.tenantId,
+        companyId: user.companyId || null,
+        branchId: user.branchId || null,
+      },
+    };
   }
 
   async switchCompany(userId: string, tenantId: string, companyId: string) {
@@ -228,6 +274,33 @@ export class AuthService {
 
     const modulosActivos = await this.getModulosActivos(stored.tenantId, user.roleCode || '');
     return this.generateTokens(user, modulosActivos);
+  }
+
+  // Variante de refreshAccessToken() para cuentas de servicio: lee el refresh_token del
+  // body en vez de una cookie. Antes de tocar la rotación atómica, hace un SELECT de
+  // solo lectura para identificar al dueño del token y validar el gate SOPORTE +
+  // tenantId null — a propósito NO reutiliza refreshAccessToken() directo primero,
+  // porque ese método revoca el token en el mismo UPDATE que lo lee. Si este endpoint
+  // recibiera por error/abuso el refresh_token de un usuario normal, revocarlo como
+  // efecto secundario del gate invalidaría su sesión legítima sin motivo; con el SELECT
+  // previo, un token que no pasa el gate se rechaza sin haber sido tocado.
+  async serviceRefreshAccessToken(token: string) {
+    const result = await this.refreshTokenRepo.query(
+      `SELECT * FROM refresh_tokens WHERE token = $1 AND revoked = false AND "expiresAt" > NOW()`,
+      [token],
+    );
+    const stored = result[0];
+    if (!stored) {
+      throw new UnauthorizedException('Refresh token inválido o expirado');
+    }
+
+    const user = await this.usersRepo.findOne({ where: { id: stored.userId } });
+    if (!user || user.roleCode !== 'SOPORTE' || user.tenantId) {
+      throw new ForbiddenException('Este endpoint es exclusivo para cuentas de servicio');
+    }
+
+    // Gate superado: recién ahora la rotación atómica normal (consume el token).
+    return this.refreshAccessToken(token);
   }
 
   async revokeRefreshToken(token: string) {

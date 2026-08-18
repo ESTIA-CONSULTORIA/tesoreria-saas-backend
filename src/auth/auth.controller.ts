@@ -51,6 +51,17 @@ export class AuthController {
     return { user, modulosActivos };
   }
 
+  // Exclusivo para cuentas de servicio server-to-server (ej. DeliveryHub Pro) — sin
+  // sesión de navegador, las cookies httpOnly no tienen sentido para este cliente.
+  // Devuelve los tokens en el body en vez de setearlos como cookies; el gate de
+  // roleCode/tenantId vive en authService.serviceLogin().
+  @Public()
+  @Throttle(LOGIN_THROTTLE)
+  @Post('service-login')
+  async serviceLogin(@Body() body: { email: string; password: string }) {
+    return this.authService.serviceLogin(body.email, body.password);
+  }
+
   @Post('switch-company')
   async switchCompany(
     @Body() body: { companyId: string },
@@ -89,6 +100,21 @@ export class AuthController {
     const { access_token, refresh_token } = await this.authService.refreshAccessToken(refreshToken);
     setAuthCookies(res, access_token, refresh_token);
     return { success: true };
+  }
+
+  // Contraparte de service-login: renueva el access_token de una cuenta de servicio
+  // leyendo el refresh_token del body en vez de una cookie. Sin throttle, igual que
+  // /auth/refresh — el token es aleatorio de 128 hex, no una contraseña adivinable.
+  @Public()
+  @Post('service-refresh')
+  async serviceRefresh(@Body() body: { refresh_token: string }) {
+    if (!body?.refresh_token) {
+      throw new UnauthorizedException('Refresh token inválido o expirado');
+    }
+    const { access_token, refresh_token } = await this.authService.serviceRefreshAccessToken(
+      body.refresh_token,
+    );
+    return { access_token, refresh_token };
   }
 
   @Post('logout')
