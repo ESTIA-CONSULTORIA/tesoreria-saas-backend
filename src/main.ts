@@ -20,7 +20,7 @@ async function bootstrap() {
       origin: ALLOWED_ORIGINS,
       credentials: true,
       methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-      allowedHeaders: ['Content-Type', 'Authorization', 'x-tenant-id', 'tenant-id', 'x-company-id', 'x-branch-id'],
+      allowedHeaders: ['Content-Type', 'Authorization', 'x-tenant-id', 'tenant-id', 'x-company-id', 'x-branch-id', 'x-session-scope'],
     },
   });
 
@@ -32,7 +32,7 @@ async function bootstrap() {
     }
     res.header('Access-Control-Allow-Credentials', 'true');
     res.header('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,PATCH,OPTIONS');
-    res.header('Access-Control-Allow-Headers', 'Content-Type,Authorization,x-tenant-id,tenant-id,x-company-id,x-branch-id');
+    res.header('Access-Control-Allow-Headers', 'Content-Type,Authorization,x-tenant-id,tenant-id,x-company-id,x-branch-id,x-session-scope');
     if (req.method === 'OPTIONS') {
       return res.sendStatus(200);
     }
