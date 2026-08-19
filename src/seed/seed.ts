@@ -2349,7 +2349,21 @@ export async function seedDatabase(dataSource: DataSource) {
             }
           }
           if (Object.keys(needsUpdate).length > 0) {
-            await empRepo.update(existingEmp.id, needsUpdate);
+            try {
+              await empRepo.update(existingEmp.id, needsUpdate);
+            } catch (updateErr: any) {
+              // 23505 = UQ_employee_userId: la migración P4-04 de arriba intenta vincular
+              // ed.userId, pero ese userId ya está en uso por otro empleado — caso real: un
+              // duplicado que se corrigió a mano (ver commit "feat(hr): agrega vinculación
+              // User↔Employee con integridad a nivel DB"), dejando esta fila con userId NULL
+              // a propósito. Sin este catch, esto abortaba TODO el bloque de HR demo data en
+              // cada boot (docs/turnos/asistencias de los 6 empleados), no solo este update.
+              if (updateErr?.code === '23505') {
+                console.log(`ℹ️ No se pudo vincular userId de "${ed.nombre}" (ya en uso por otro empleado) — se omite.`);
+              } else {
+                throw updateErr;
+              }
+            }
           }
           savedEmps.push(existingEmp);
           console.log(`ℹ️ Empleado "${ed.nombre}" ya existe`);
