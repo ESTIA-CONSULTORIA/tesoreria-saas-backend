@@ -128,7 +128,14 @@ export class TenantsService {
     return this.tenantsRepository.findOne({ where: { id } });
   }
 
-  findBySlug(slug: string) {
+  // Bug preexistente encontrado hoy: nunca consultaba la columna slug, solo hacía ILIKE
+  // contra legalName/tradeName — nunca se había ejercitado porque ningún tenant tenía slug
+  // configurado hasta la prueba de Vista Ejecutiva de hoy (grupo-empresarial-demo). Match
+  // exacto por slug primero; el ILIKE de nombre queda como fallback para tenants sin slug,
+  // por si algo dependiera del comportamiento viejo (no debería, pero no se rompe).
+  async findBySlug(slug: string) {
+    const bySlug = await this.tenantsRepository.findOne({ where: { slug } });
+    if (bySlug) return bySlug;
     return this.tenantsRepository.findOne({
       where: [
         { legalName: ILike(`%${slug}%`) },
