@@ -3,7 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
-import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
+import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 
 import { UsersModule } from './users/users.module';
 import { AuthModule } from './auth/auth.module';
@@ -21,6 +21,7 @@ import { BusinessTypesModule } from './business-types/business-types.module';
 import { SubscriptionGuard } from './auth/subscription.guard';
 import { PlanModuloGuard } from './auth/plan-modulo.guard';
 import { AuditInterceptor } from './audit/audit.interceptor';
+import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { IntegrationsModule } from './integrations/integrations.module';
 import { RolesModule } from './roles/roles.module';
 import { BanksModule } from './banks/banks.module';
@@ -133,6 +134,16 @@ import { ExecutiveConfigModule } from './executive-config/executive-config.modul
   ],
 
   providers: [
+    // Antes de todo lo demás a propósito: un filtro global debe capturar cualquier error
+    // no controlado (QueryFailedError de TypeORM, errores de programación, etc.) sin
+    // importar en qué guard/interceptor/controller haya ocurrido — hoy Nest los enmascara
+    // como "Internal server error" genérico sin loguear contexto útil del lado del
+    // servidor. Las HttpException existentes (94 usos en el proyecto) no se tocan, se
+    // delegan tal cual — ver all-exceptions.filter.ts.
+    {
+      provide: APP_FILTER,
+      useClass: AllExceptionsFilter,
+    },
     {
       provide: APP_INTERCEPTOR,
       useClass: AuditInterceptor,
