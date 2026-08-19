@@ -2,12 +2,15 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { InsumoAlert } from './entities/insumo-alert.entity';
+import { Insumo } from '../costs/entities/insumo.entity';
 
 @Injectable()
 export class InsumoAlertsService {
   constructor(
     @InjectRepository(InsumoAlert)
     private repo: Repository<InsumoAlert>,
+    @InjectRepository(Insumo)
+    private insumoRepo: Repository<Insumo>,
   ) {}
 
   getAlerts(tenantId: string) {
@@ -24,6 +27,18 @@ export class InsumoAlertsService {
     return this.repo.find({
       where: { tenantId },
       order: { updatedAt: 'DESC' },
+    });
+  }
+
+  // Catálogo ligero para el selector de CorteCajaLite.tsx — sin el gate de
+  // @Modulo('costos') (BOCATTA, ej., no tiene ese módulo activo pero sí puede tener
+  // insumos reales cargados; confirmado que la tabla insumo no depende del estado del
+  // módulo, solo el acceso vía CostsController). Solo id/nombre, nunca costos ni precios.
+  listInsumosLigero(tenantId: string) {
+    return this.insumoRepo.find({
+      where: { tenantId, isActive: true },
+      select: ['id', 'nombre'],
+      order: { nombre: 'ASC' },
     });
   }
 

@@ -15,6 +15,15 @@ export class InsumoAlertsController {
     return this.service.getAllAlerts(req.user.tenantId);
   }
 
+  // Catálogo ligero (solo id/nombre) para el selector de insumo real de CorteCajaLite.tsx.
+  // Vive acá y no en CostsController a propósito: ese controller entero está gateado por
+  // @Modulo('costos'), y un tenant sin ese módulo (BOCATTA, confirmado) puede igual tener
+  // insumos reales que un cajero necesita elegir al reportar un aviso.
+  @Get('insumos-lista')
+  listInsumos(@Request() req: any) {
+    return this.service.listInsumosLigero(req.user.tenantId);
+  }
+
   @Post()
   create(@Request() req: any, @Body() body: any) {
     return this.service.upsert(req.user.tenantId, body.companyId, req.user.id, body);
