@@ -11,13 +11,13 @@ export class PhysicalCount {
   @Column()
   insumoId: string;
 
-  @Column({ type: 'decimal', precision: 10, scale: 2, default: 0 })
+  @Column({ type: 'decimal', precision: 10, scale: 4, default: 0 })
   existenciaTeorica: number;
 
-  @Column({ type: 'decimal', precision: 10, scale: 2, default: 0 })
+  @Column({ type: 'decimal', precision: 10, scale: 4, default: 0 })
   existenciaFisica: number;
 
-  @Column({ type: 'decimal', precision: 10, scale: 2, default: 0 })
+  @Column({ type: 'decimal', precision: 10, scale: 4, default: 0 })
   diferencia: number;
 
   @Column({ nullable: true })

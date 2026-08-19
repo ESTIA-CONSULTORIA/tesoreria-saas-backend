@@ -11,16 +11,16 @@ export class Inventory {
   @Column({ type: 'varchar', nullable: true })
   periodo: string; // formato YYYY-MM
 
-  @Column({ type: 'decimal', precision: 10, scale: 2, default: 0 })
+  @Column({ type: 'decimal', precision: 10, scale: 4, default: 0 })
   inventarioInicial: number;
 
-  @Column({ type: 'decimal', precision: 10, scale: 2, default: 0 })
+  @Column({ type: 'decimal', precision: 10, scale: 4, default: 0 })
   entradas: number; // compras del período
 
-  @Column({ type: 'decimal', precision: 10, scale: 2, default: 0 })
+  @Column({ type: 'decimal', precision: 10, scale: 4, default: 0 })
   salidas: number; // consumo
 
-  @Column({ type: 'decimal', precision: 10, scale: 2, default: 0 })
+  @Column({ type: 'decimal', precision: 10, scale: 4, default: 0 })
   inventarioFinal: number;
 
   @Column({ type: 'decimal', precision: 10, scale: 2, default: 0 })

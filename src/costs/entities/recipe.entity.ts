@@ -14,7 +14,7 @@ export class Recipe {
   @Column({ default: 'PRODUCTO_VENTA' })
   tipo: string; // PRODUCTO_VENTA/INSUMO_ELABORADO
 
-  @Column({ type: 'decimal', precision: 10, scale: 2, default: 1 })
+  @Column({ type: 'decimal', precision: 10, scale: 4, default: 1 })
   rendimiento: number; // cuántas unidades produce
 
   @Column({ default: '' })
