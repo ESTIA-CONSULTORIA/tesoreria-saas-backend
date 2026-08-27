@@ -1,18 +1,21 @@
-import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 import { DataSource, EntityManager, Repository } from 'typeorm';
 import { DeliveryIngestDto, DeliveryOrderStatus } from './delivery-ingest.dto';
+import { DeliveryQuarantine } from './entities/delivery-quarantine.entity';
 import { Sale, SaleItem } from '../../pos/entities/sale.entity';
 import { Company } from '../../companies/entities/company.entity';
 import { Branch } from '../../branches/entities/branch.entity';
 import { Bank } from '../../banks/entities/bank.entity';
 import { Movement } from '../../movements/entities/movement.entity';
 import { AuditService } from '../../audit/audit.service';
+import { ModulesService } from '../../modules/modules.service';
 
 export interface DeliveryIngestResult {
   success: boolean;
   sale_id: string;
   was_duplicate: boolean;
+  quarantined?: boolean;
 }
 
 // Mismo umbral que MovementsService.create() (movements.service.ts) — un movimiento que
@@ -31,9 +34,12 @@ export class DeliveryIngestService {
   constructor(
     @InjectRepository(Sale)
     private salesRepo: Repository<Sale>,
+    @InjectRepository(DeliveryQuarantine)
+    private quarantineRepo: Repository<DeliveryQuarantine>,
     @InjectDataSource()
     private dataSource: DataSource,
     private auditService: AuditService,
+    private modulesService: ModulesService,
   ) {}
 
   async ingest(dto: DeliveryIngestDto, meta: { ip: string; userAgent: string }): Promise<DeliveryIngestResult> {
@@ -51,6 +57,17 @@ export class DeliveryIngestService {
     }
 
     const tenantId = company.tenantId;
+
+    // Auditoría de seguridad (GoodsHabits): un tenant sin el addon 'delivery' activo no
+    // debe generar Sale/Bank/Movement reales — se cuarentena en vez de procesar o
+    // rechazar. No es un 403: DeliveryHub Pro recibe un 200 normal (mismo shape de
+    // respuesta, con quarantined:true) para que no lo reintente como si fuera un error
+    // transitorio — el pedido sí quedó registrado, solo que fuera de reportes/
+    // facturación hasta que SOPORTE lo resuelva a mano.
+    const hasDelivery = await this.modulesService.hasModule(tenantId, 'delivery');
+    if (!hasDelivery) {
+      return this.quarantine(dto, tenantId);
+    }
 
     // Chequeo temprano (no atómico, pero evita trabajo de más en el caso común de
     // reintentos de DeliveryHub): si ya existe, devolvemos sin abrir transacción.
@@ -100,6 +117,123 @@ export class DeliveryIngestService {
     await this.logAudit(dto, tenantId, saleId, meta);
 
     return { success: true, sale_id: saleId, was_duplicate: false };
+  }
+
+  // Mismo criterio de idempotencia que la Sale normal (platform + externalOrderId), pero
+  // contra la tabla de cuarentena — un reintento de DeliveryHub para un pedido que ya
+  // está en PENDING_REVIEW no debe crear una segunda fila.
+  private async quarantine(dto: DeliveryIngestDto, tenantId: string): Promise<DeliveryIngestResult> {
+    const existing = await this.quarantineRepo.findOne({
+      where: { platform: dto.platform, externalOrderId: dto.external_order_id },
+    });
+    if (existing) {
+      return { success: true, sale_id: existing.id, was_duplicate: true, quarantined: true };
+    }
+
+    let q: DeliveryQuarantine;
+    try {
+      q = await this.quarantineRepo.save(
+        this.quarantineRepo.create({
+          tenantId,
+          companyId: dto.company_id,
+          branchId: dto.branch_id,
+          platform: dto.platform,
+          externalOrderId: dto.external_order_id,
+          payload: dto,
+          grossAmount: dto.gross_amount,
+          status: 'PENDING_REVIEW',
+        }),
+      );
+    } catch (error) {
+      // Misma carrera que el catch de 23505 en ingest() sobre Sale — dos webhooks casi
+      // simultáneos para el mismo pedido, protegidos por el índice único de la migración
+      // (platform, externalOrderId), no solo por el findOne de arriba.
+      if ((error as any)?.code === '23505') {
+        const winner = await this.quarantineRepo.findOne({
+          where: { platform: dto.platform, externalOrderId: dto.external_order_id },
+        });
+        if (winner) {
+          return { success: true, sale_id: winner.id, was_duplicate: true, quarantined: true };
+        }
+      }
+      throw error;
+    }
+
+    this.logger.warn(
+      `Pedido ${dto.platform}/${dto.external_order_id} puesto en cuarentena — tenant ${tenantId} sin módulo 'delivery' activo.`,
+    );
+
+    return { success: true, sale_id: q.id, was_duplicate: false, quarantined: true };
+  }
+
+  // Para administration.controller.ts (SOPORTE) — lista lo pendiente de revisar,
+  // opcionalmente filtrado por tenant.
+  async listQuarantine(tenantId?: string, status?: string): Promise<DeliveryQuarantine[]> {
+    const where: any = {};
+    if (tenantId) where.tenantId = tenantId;
+    if (status) where.status = status;
+    return this.quarantineRepo.find({ where, order: { receivedAt: 'DESC' } });
+  }
+
+  // action='activate': asegura el módulo activo (idempotente — activateModule() ya
+  // maneja el caso "ya existe") y reprocesa el payload guardado por el flujo normal de
+  // ingest(), generando la Sale/Bank/Movement real que se hubiera creado en su momento.
+  // action='reject': solo cierra el caso, sin generar nada financiero.
+  async resolveQuarantine(
+    id: string,
+    action: 'activate' | 'reject',
+    resolvedBy: string,
+  ): Promise<DeliveryQuarantine> {
+    const q = await this.quarantineRepo.findOne({ where: { id } });
+    if (!q) throw new NotFoundException(`No existe un pedido en cuarentena con id '${id}'`);
+    if (q.status !== 'PENDING_REVIEW') {
+      throw new BadRequestException(`Este pedido ya fue resuelto (status: ${q.status})`);
+    }
+
+    if (action === 'reject') {
+      q.status = 'REJECTED';
+      q.resolvedAt = new Date();
+      q.resolvedBy = resolvedBy;
+      return this.quarantineRepo.save(q);
+    }
+
+    await this.modulesService.activateModule(q.tenantId, 'delivery', 'manual_support', resolvedBy);
+
+    const dto: DeliveryIngestDto = q.payload;
+    let saleId: string;
+    try {
+      saleId = await this.dataSource.transaction(async (manager) => {
+        const sale = await this.createDeliverySale(manager, dto, q.tenantId);
+        if (dto.status === DeliveryOrderStatus.COMPLETED) {
+          await this.postDeliveryIncome(manager, dto, q.branchId, q.tenantId);
+        }
+        return sale.id;
+      });
+    } catch (error) {
+      if ((error as any)?.code === '23505') {
+        // El pedido ya se procesó por otra vía (ej. otro resolve concurrente, o ya
+        // había entrado normal después de que se activó el módulo por fuera de este
+        // flujo) — no es un error real, solo evita duplicar la Sale.
+        const winner = await this.salesRepo.findOne({
+          where: { platform: dto.platform, externalOrderId: dto.external_order_id },
+        });
+        if (winner) {
+          saleId = winner.id;
+        } else {
+          throw error;
+        }
+      } else {
+        throw error;
+      }
+    }
+
+    await this.logAudit(dto, q.tenantId, saleId, { ip: 'internal', userAgent: `admin-resolve:${resolvedBy}` });
+
+    q.status = 'ACTIVATED_AND_PROCESSED';
+    q.resolvedAt = new Date();
+    q.resolvedBy = resolvedBy;
+    q.resultingSaleId = saleId;
+    return this.quarantineRepo.save(q);
   }
 
   private async createDeliverySale(manager: EntityManager, dto: DeliveryIngestDto, tenantId: string): Promise<Sale> {

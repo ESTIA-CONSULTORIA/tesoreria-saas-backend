@@ -1,7 +1,8 @@
-import { Controller, Get, Post, Put, Body, Param, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Put, Query, Request, UseGuards } from '@nestjs/common';
 import { AdministrationService } from './administration.service';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
+import { DeliveryIngestService } from '../integrations/delivery/delivery-ingest.service';
 
 // Auditoría de seguridad (GoodsHabits, pre-venta): este controller no tenía NINGÚN guard
 // de rol — cualquier ADMIN/GERENTE autenticado de cualquier tenant con suscripción activa
@@ -15,7 +16,10 @@ import { Roles } from '../auth/roles.decorator';
 @Roles('SOPORTE')
 @Controller('administration')
 export class AdministrationController {
-  constructor(private administrationService: AdministrationService) {}
+  constructor(
+    private administrationService: AdministrationService,
+    private deliveryIngestService: DeliveryIngestService,
+  ) {}
 
   @Get('audit-logs')
   getAuditLogs(
@@ -110,5 +114,27 @@ export class AdministrationController {
     limiteSessiones?: number;
   }) {
     return this.administrationService.updateGlobalConfig(data);
+  }
+
+  // Pedidos de Delivery en cuarentena — tenants que mandaron pedidos reales sin tener el
+  // addon 'delivery' activo (ver delivery-ingest.service.ts::quarantine()).
+  @Get('delivery-quarantine')
+  getDeliveryQuarantine(
+    @Query('tenantId') tenantId?: string,
+    @Query('status') status?: string,
+  ) {
+    return this.deliveryIngestService.listQuarantine(tenantId, status);
+  }
+
+  @Post('delivery-quarantine/:id/resolve')
+  resolveDeliveryQuarantine(
+    @Param('id') id: string,
+    @Body() body: { action: 'activate' | 'reject' },
+    @Request() req: any,
+  ) {
+    // resolvedBy sale de la sesión SOPORTE autenticada, no del body — evita que quede
+    // registrado un nombre distinto al de quien realmente ejecutó la acción.
+    const resolvedBy = req?.user?.email || req?.user?.id || 'soporte';
+    return this.deliveryIngestService.resolveQuarantine(id, body.action, resolvedBy);
   }
 }

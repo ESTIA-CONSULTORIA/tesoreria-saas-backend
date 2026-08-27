@@ -2925,6 +2925,11 @@ export async function seedDatabase(dataSource: DataSource) {
     { code: 'apariencia_logo_only', name: 'Apariencia (solo logo)', category: 'apariencia', isAddon: false, defaultPrice: 0 },
     { code: 'white_label',        name: 'White Label',           category: 'apariencia',  isAddon: true,  defaultPrice: 300 },
     { code: 'sat_cfdi',           name: 'SAT CFDI',              category: 'fiscal',      isAddon: true,  defaultPrice: 350 },
+    // Fuera de todos los planes por defecto (no se agrega a plan_modules) — addon manual
+    // vía ModulesService.activateModule() solo para el tenant que lo contrate. Sin esto,
+    // DeliveryIngestService.ingest() pone en cuarentena cualquier pedido de un tenant sin
+    // este código activo en tenant_modules (ver quarantine() ahí).
+    { code: 'delivery',           name: 'Delivery (Agregadores)', category: 'operaciones', isAddon: true,  defaultPrice: 350 },
   ];
 
   try {
