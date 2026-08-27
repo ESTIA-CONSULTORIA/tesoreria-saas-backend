@@ -22,9 +22,15 @@ export class UsersController {
     },
     @Request() req?: any,
   ) {
-    const tenantId = body.tenantId || req?.user?.tenantId;
-    const companyId = body.companyId || req?.user?.companyId;
-    const branchId = body.branchId || req?.user?.branchId;
+    // Auditoría de seguridad (GoodsHabits): el body es controlable por el cliente — antes
+    // se evaluaba ANTES que el JWT, así que un ADMIN de Tenant A podía crear un usuario en
+    // Tenant B mandando tenantId/companyId/branchId a mano en el body (el frontend nunca lo
+    // hace, pero el endpoint lo aceptaba). El JWT va primero, igual que ya hacía GET /users
+    // en este mismo archivo; el body queda como fallback solo para SOPORTE (sin tenantId
+    // propio) creando un usuario en un tenant específico.
+    const tenantId = req?.user?.tenantId || body.tenantId;
+    const companyId = req?.user?.companyId || body.companyId;
+    const branchId = req?.user?.branchId || body.branchId;
     return this.usersService.create(
       body.email,
       body.password,

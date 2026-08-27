@@ -1,6 +1,18 @@
 import { Controller, Get, Post, Put, Body, Param, Query, UseGuards } from '@nestjs/common';
 import { AdministrationService } from './administration.service';
+import { RolesGuard } from '../auth/roles.guard';
+import { Roles } from '../auth/roles.decorator';
 
+// Auditoría de seguridad (GoodsHabits, pre-venta): este controller no tenía NINGÚN guard
+// de rol — cualquier ADMIN/GERENTE autenticado de cualquier tenant con suscripción activa
+// pasaba SubscriptionGuard/PlanModuloGuard (ninguno de los dos exige un rol) y podía listar
+// todos los tenants, cambiar el plan de otro tenant, ver sesiones activas de toda la
+// plataforma, y modificar config global. A nivel de clase (no por método) para que no quede
+// a criterio de quien agregue el próximo endpoint aquí — RolesGuard/@Roles no son guards
+// globales (no están en app.module.ts), hay que aplicarlos explícitamente, igual que ya
+// hace tenants.controller.ts en su POST.
+@UseGuards(RolesGuard)
+@Roles('SOPORTE')
 @Controller('administration')
 export class AdministrationController {
   constructor(private administrationService: AdministrationService) {}

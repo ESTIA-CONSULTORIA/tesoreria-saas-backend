@@ -15,7 +15,10 @@ export class SuppliersController {
     @Headers('x-company-id') headerCompanyId?: string,
     @Req() req?: any,
   ) {
-    const tenantIdFromReq = tenantId || req?.user?.tenantId || req?.tenantId;
+    // Auditoría de seguridad (GoodsHabits): query('tenantId') es controlable por el
+    // cliente — antes se evaluaba ANTES que el JWT (GET /suppliers?tenantId=<otro> filtraba
+    // proveedores de otro tenant). El JWT va primero; el query param queda como fallback.
+    const tenantIdFromReq = req?.user?.tenantId || req?.tenantId || tenantId;
     const userCompanyId = req?.user?.companyId;
     const companyId = userCompanyId || headerCompanyId;
     const isActiveBool = isActive === 'true' ? true : isActive === 'false' ? false : undefined;

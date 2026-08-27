@@ -11,8 +11,13 @@ export class ContractsController {
     @Headers('x-company-id') companyId: string,
     @Request() req: any,
   ) {
-    const tid = tenantId || req?.user?.tenantId;
-    const cid = companyId || req?.user?.companyId;
+    // Auditoría de seguridad (GoodsHabits): el header x-tenant-id/x-company-id es
+    // controlable por el cliente — antes se evaluaba ANTES que el JWT, así que cualquier
+    // usuario autenticado podía leer/generar contratos de otro tenant mandando el header a
+    // mano. El JWT (fuente verificada) va primero; el header queda solo como fallback para
+    // cuando el JWT no trae tenantId (SOPORTE).
+    const tid = req?.user?.tenantId || tenantId;
+    const cid = req?.user?.companyId || companyId;
     return this.contractsService.getTemplates(tid, cid);
   }
 
@@ -23,8 +28,13 @@ export class ContractsController {
     @Headers('x-company-id') companyId: string,
     @Request() req: any,
   ) {
-    const tid = tenantId || req?.user?.tenantId;
-    const cid = companyId || req?.user?.companyId;
+    // Auditoría de seguridad (GoodsHabits): el header x-tenant-id/x-company-id es
+    // controlable por el cliente — antes se evaluaba ANTES que el JWT, así que cualquier
+    // usuario autenticado podía leer/generar contratos de otro tenant mandando el header a
+    // mano. El JWT (fuente verificada) va primero; el header queda solo como fallback para
+    // cuando el JWT no trae tenantId (SOPORTE).
+    const tid = req?.user?.tenantId || tenantId;
+    const cid = req?.user?.companyId || companyId;
     return this.contractsService.uploadTemplate({ ...body, tenantId: tid, companyId: cid });
   }
 
@@ -40,8 +50,13 @@ export class ContractsController {
     @Query('employeeId') employeeId: string,
     @Request() req: any,
   ) {
-    const tid = tenantId || req?.user?.tenantId;
-    const cid = companyId || req?.user?.companyId;
+    // Auditoría de seguridad (GoodsHabits): el header x-tenant-id/x-company-id es
+    // controlable por el cliente — antes se evaluaba ANTES que el JWT, así que cualquier
+    // usuario autenticado podía leer/generar contratos de otro tenant mandando el header a
+    // mano. El JWT (fuente verificada) va primero; el header queda solo como fallback para
+    // cuando el JWT no trae tenantId (SOPORTE).
+    const tid = req?.user?.tenantId || tenantId;
+    const cid = req?.user?.companyId || companyId;
     return this.contractsService.getContracts(tid, employeeId, cid);
   }
 
@@ -52,8 +67,13 @@ export class ContractsController {
     @Headers('x-company-id') companyId: string,
     @Request() req: any,
   ) {
-    const tid = tenantId || req?.user?.tenantId;
-    const cid = companyId || req?.user?.companyId;
+    // Auditoría de seguridad (GoodsHabits): el header x-tenant-id/x-company-id es
+    // controlable por el cliente — antes se evaluaba ANTES que el JWT, así que cualquier
+    // usuario autenticado podía leer/generar contratos de otro tenant mandando el header a
+    // mano. El JWT (fuente verificada) va primero; el header queda solo como fallback para
+    // cuando el JWT no trae tenantId (SOPORTE).
+    const tid = req?.user?.tenantId || tenantId;
+    const cid = req?.user?.companyId || companyId;
     return this.contractsService.generateContract({ ...body, tenantId: tid, companyId: cid });
   }
 
