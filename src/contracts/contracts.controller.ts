@@ -1,6 +1,11 @@
 import { Body, Controller, Delete, Get, Param, Post, Query, Request, Headers } from '@nestjs/common';
 import { ContractsService } from './contracts.service';
+import { Modulo } from '../auth/modulo.decorator';
 
+// Auditoría de seguridad (GoodsHabits, P1): 'rh', no 'contratos'/'expedientes' — no
+// existe ese código en el catálogo (MODULES_CATALOG, seed.ts), Expedientes es parte del
+// mismo addon RH, no un módulo vendible aparte. Confirmado antes de aplicar, no asumido.
+@Modulo('rh')
 @Controller('contracts')
 export class ContractsController {
   constructor(private readonly contractsService: ContractsService) {}

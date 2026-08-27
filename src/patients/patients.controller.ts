@@ -1,6 +1,10 @@
 import { Controller, Get, Post, Put, Param, Body, Query, Request } from '@nestjs/common';
 import { PatientsService } from './patients.service';
+import { Modulo } from '../auth/modulo.decorator';
 
+// Auditoría de seguridad (GoodsHabits, P1): sin @Modulo() un tenant sin el addon
+// Pacientes ($250, catálogo modules.code='pacientes') podía llamar /patients directo.
+@Modulo('pacientes')
 @Controller('patients')
 export class PatientsController {
   constructor(private service: PatientsService) {}

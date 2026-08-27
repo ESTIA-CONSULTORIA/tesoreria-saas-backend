@@ -1,7 +1,11 @@
 import { Controller, Get, Post, Put, Delete, Body, Param, Query, Request } from '@nestjs/common';
 import { ReconciliationService } from './reconciliation.service';
 import { Invoice, InvoiceType, InvoiceStatus, ReconciliationStatus } from './entities/invoice.entity';
+import { Modulo } from '../auth/modulo.decorator';
 
+// Auditoría de seguridad (GoodsHabits, P1): 'tesoreria', mismo criterio que
+// banks.controller.ts — ver esa nota.
+@Modulo('tesoreria')
 @Controller('reconciliation')
 export class ReconciliationController {
   constructor(private reconciliationService: ReconciliationService) {}

@@ -1,6 +1,14 @@
 import { Body, Controller, Delete, Get, Headers, Param, Patch, Post, Put, Query, Request } from '@nestjs/common';
 import { HrService } from './hr.service';
+import { Modulo } from '../auth/modulo.decorator';
 
+// Auditoría de seguridad (GoodsHabits, P1): sin @Modulo() un tenant sin el addon RH
+// ($300, catálogo modules.code='rh') podía llamar /hr/* directo y obtener empleados,
+// asistencia, nómina y expedientes igual. 'rh' es el único código del catálogo que cubre
+// todo RH — no existen 'nomina'/'contratos' como códigos separados (confirmado contra
+// MODULES_CATALOG en seed.ts), por eso payroll.controller.ts y contracts.controller.ts
+// usan el mismo código, no uno propio.
+@Modulo('rh')
 @Controller('hr')
 export class HrController {
   constructor(private readonly service: HrService) {}

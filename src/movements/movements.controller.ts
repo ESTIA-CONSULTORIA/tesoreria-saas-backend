@@ -1,6 +1,10 @@
 import { Body, Controller, ForbiddenException, Get, Headers, Param, Post, Put, Query, Request } from '@nestjs/common';
 import { MovementsService } from './movements.service';
+import { Modulo } from '../auth/modulo.decorator';
 
+// Auditoría de seguridad (GoodsHabits, P1): 'tesoreria', mismo criterio que
+// banks.controller.ts — ver esa nota.
+@Modulo('tesoreria')
 @Controller('movements')
 export class MovementsController {
   constructor(private movementsService: MovementsService) {}

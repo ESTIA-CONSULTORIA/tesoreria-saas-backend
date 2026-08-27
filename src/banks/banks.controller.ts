@@ -1,6 +1,13 @@
 import { Body, Controller, Delete, Get, Headers, Param, Patch, Post, Request } from '@nestjs/common';
 import { BanksService } from './banks.service';
+import { Modulo } from '../auth/modulo.decorator';
 
+// Auditoría de seguridad (GoodsHabits, P1): 'tesoreria', igual que transfers.controller.ts
+// (ya en producción con ese código) — el catálogo lista 'bancos' como entrada propia, pero
+// no hay forma de confirmar contra plan_modules de producción si ese código granular se
+// asigna alguna vez; usar el mismo código que ya funciona en Transferencias es la opción
+// más segura (decisión explícita de Miguel, no asumida).
+@Modulo('tesoreria')
 @Controller('banks')
 export class BanksController {
   constructor(private banksService: BanksService) {}

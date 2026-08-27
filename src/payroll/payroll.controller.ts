@@ -1,6 +1,11 @@
 import { Body, Controller, Delete, Get, Headers, Param, Post, Put, Query, Request } from '@nestjs/common';
 import { PayrollService } from './payroll.service';
+import { Modulo } from '../auth/modulo.decorator';
 
+// Auditoría de seguridad (GoodsHabits, P1): 'rh', no 'nomina' — no existe ese código en
+// el catálogo (MODULES_CATALOG, seed.ts), Nómina es parte del mismo addon RH, no un
+// módulo vendible aparte. Confirmado antes de aplicar, no asumido.
+@Modulo('rh')
 @Controller('payroll')
 export class PayrollController {
   constructor(private readonly payrollService: PayrollService) {}
