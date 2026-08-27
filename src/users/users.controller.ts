@@ -1,6 +1,8 @@
-import { Body, Controller, Delete, Get, Param, Post, Put, Query, Request } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Post, Put, Query, Request, UseGuards } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { Public } from '../auth/public.decorator';
+import { RolesGuard } from '../auth/roles.guard';
+import { Roles } from '../auth/roles.decorator';
 
 @Controller('users')
 export class UsersController {
@@ -71,9 +73,25 @@ export class UsersController {
       roleCode?: string;
       isActive?: boolean;
       executivePin?: string;
+      branchId?: string;
     },
   ) {
     return this.usersService.update(id, body);
+  }
+
+  // Endpoint separado y SOPORTE-only a propósito, no un campo más en PUT /users/:id —
+  // reasignar la empresa de un usuario es un caso de corrección de datos, no una edición
+  // normal de perfil (puede dejar huérfanos registros que ya referencian la empresa
+  // anterior — turnos de POS, ventas, alertas de insumo). RolesGuard/@Roles no son guards
+  // globales, hay que aplicarlos explícitamente (mismo patrón que administration.controller.ts).
+  @UseGuards(RolesGuard)
+  @Roles('SOPORTE')
+  @Put(':id/company')
+  updateCompany(
+    @Param('id') id: string,
+    @Body() body: { companyId: string },
+  ) {
+    return this.usersService.updateCompany(id, body.companyId);
   }
 
   @Delete(':id')
