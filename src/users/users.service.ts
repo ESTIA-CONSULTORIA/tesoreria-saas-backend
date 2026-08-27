@@ -119,21 +119,41 @@ export class UsersService {
     });
   }
 
-  async update(id: string, data: { name?: string; roleId?: string; roleCode?: string; isActive?: boolean; executivePin?: string; password?: string; branchId?: string }) {
-    // companyId a propósito NO es parte de este método — ver updateCompany() (SOPORTE-only,
-    // endpoint separado). El roleCode SÍ se puede cambiar aquí (ya era así antes), así que
-    // hay que validar el estado FINAL (existente + lo que llega), no solo lo que llega en
-    // este request — alguien podría pasar un CAJERO/GERENTE existente sin tocar branchId,
-    // o cambiarle el rol a GERENTE a un usuario que nunca tuvo companyId/branchId.
+  async update(
+    id: string,
+    data: { name?: string; roleId?: string; roleCode?: string; isActive?: boolean; executivePin?: string; password?: string; branchId?: string },
+    requester?: { roleCode?: string; companyId?: string },
+  ) {
+    // companyId sigue sin ser un campo que el body pueda pisar directo — ver
+    // updateCompany() (SOPORTE-only, endpoint separado) para reasignar la empresa de un
+    // usuario que YA tiene una. El roleCode SÍ se puede cambiar aquí (ya era así antes),
+    // así que hay que validar el estado FINAL (existente + lo que llega), no solo lo que
+    // llega en este request — alguien podría pasar un CAJERO/GERENTE existente sin tocar
+    // branchId, o cambiarle el rol a GERENTE a un usuario que nunca tuvo companyId/branchId.
     const existing = await this.usersRepository.findOne({ where: { id } });
     if (!existing) throw new NotFoundException(`No existe un usuario con id '${id}'`);
 
+    // Hallazgo de producto (GoodsHabits): un ADMIN normal (no SOPORTE) nunca elige empresa
+    // a mano — ni al crear (hereda req.user.companyId, ver users.controller.ts::create())
+    // ni al editar (no ve el selector de Empresa, es SOPORTE-only). Eso dejaba sin forma
+    // de completar companyId a usuarios viejos que nunca lo tuvieron (ej. el cajero de
+    // Bocatta) salvo pasando por SOPORTE. Se completa en silencio con la empresa del
+    // propio ADMIN que edita, mismo criterio que ya usa create() — solo si companyId
+    // estaba vacío; si ya existe, nunca se toca acá (reasignar una empresa YA asignada
+    // sigue siendo exclusivo de updateCompany()/SOPORTE).
+    const isSoporteRequester = requester?.roleCode === 'SOPORTE';
+    const companyIdToBackfill =
+      !existing.companyId && !isSoporteRequester && requester?.companyId
+        ? requester.companyId
+        : undefined;
+
     const finalRoleCode = data.roleCode ?? existing.roleCode;
-    const finalCompanyId = existing.companyId; // no editable desde acá
+    const finalCompanyId = companyIdToBackfill ?? existing.companyId;
     const finalBranchId = data.branchId !== undefined ? data.branchId : existing.branchId;
     this.assertCompanyBranchIfRequired(finalRoleCode, finalCompanyId, finalBranchId);
 
-    const toSave = { ...data };
+    const toSave: Record<string, any> = { ...data };
+    if (companyIdToBackfill) toSave.companyId = companyIdToBackfill;
     if (toSave.password) {
       toSave.password = await bcrypt.hash(toSave.password, 10);
     }

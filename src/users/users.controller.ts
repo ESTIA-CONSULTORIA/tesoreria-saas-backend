@@ -75,8 +75,18 @@ export class UsersController {
       executivePin?: string;
       branchId?: string;
     },
+    @Request() req?: any,
   ) {
-    return this.usersService.update(id, body);
+    // Hallazgo de producto (GoodsHabits): un ADMIN normal nunca elige empresa a mano, ni
+    // al crear (ya heredaba req.user.companyId arriba) ni al editar — el selector de
+    // Empresa es SOPORTE-only. Pero eso dejaba sin forma de completar companyId a
+    // usuarios viejos que nunca lo tuvieron (el cajero de Bocatta, por ejemplo) sin pasar
+    // por SOPORTE. usersService.update() rellena companyId automáticamente en ese caso
+    // específico — ver el método, la lógica completa vive ahí, no acá.
+    return this.usersService.update(id, body, {
+      roleCode: req?.user?.roleCode,
+      companyId: req?.user?.companyId,
+    });
   }
 
   // Endpoint separado y SOPORTE-only a propósito, no un campo más en PUT /users/:id —
