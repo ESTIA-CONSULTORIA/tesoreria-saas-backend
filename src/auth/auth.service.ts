@@ -43,9 +43,10 @@ export class AuthService {
     };
   }
 
-  // Compartido por login() y serviceLogin() — mismo bcrypt.compare para ambos, no una
-  // copia. Siempre lanza el mismo mensaje genérico tanto si el email no existe como si
-  // la contraseña es incorrecta, para no filtrar cuáles emails están registrados.
+  // Compartido por login(), serviceLogin() y portalLogin() (portalLogin llama a login())
+  // — mismo bcrypt.compare para todos, no una copia. El mensaje de credenciales
+  // incorrectas es siempre el mismo genérico tanto si el email no existe como si la
+  // contraseña es incorrecta, para no filtrar cuáles emails están registrados.
   private async verifyCredentials(email: string, password: string) {
     const user = await this.usersService.findByEmail(email);
 
@@ -57,6 +58,16 @@ export class AuthService {
 
     if (!isPasswordValid) {
       throw new UnauthorizedException('Credenciales incorrectas');
+    }
+
+    // Auditoría de seguridad (GoodsHabits): isActive:false no bloqueaba nada acá — una
+    // cuenta desactivada seguía autenticando con normalidad mientras la contraseña
+    // siguiera siendo la correcta. Mensaje distinto a propósito (no el genérico de
+    // arriba): a esta altura ya se probó que la contraseña es correcta, así que no hay
+    // nada nuevo que enumerar ocultándolo — y un empleado/soporte real necesita saber
+    // que la cuenta existe pero está desactivada, no adivinar si escribió mal algo.
+    if (user.isActive === false) {
+      throw new UnauthorizedException('Cuenta desactivada');
     }
 
     return user;

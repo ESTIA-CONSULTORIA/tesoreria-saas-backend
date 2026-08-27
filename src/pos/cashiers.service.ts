@@ -17,8 +17,11 @@ export class CashiersService {
   ) {}
 
   async loginWithNip(nip: string, tenantId: string) {
-    // Find all CAJERO users in the tenant to match NIP against each one
-    const where: any = { roleCode: 'CAJERO' };
+    // Auditoría de seguridad (GoodsHabits): antes no filtraba isActive — un cajero
+    // desactivado seguía siendo candidato válido en el loop de bcrypt.compare de abajo,
+    // autenticando con normalidad si el NIP seguía siendo el correcto. Se filtra en el
+    // where, no después del loop — ni siquiera entra a la comparación.
+    const where: any = { roleCode: 'CAJERO', isActive: true };
     if (tenantId) {
       where.tenantId = tenantId;
     }
