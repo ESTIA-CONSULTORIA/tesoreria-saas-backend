@@ -38,6 +38,14 @@ export class Tenant {
   @Column({ default: 'BASIC' })
   plan: string;
 
+  // Auditoría de producto (GoodsHabits, Hallazgo 3): giro de negocio del tenant — determina
+  // qué módulos verticales puede tener, ADEMÁS de lo que ya permite el plan (ver
+  // src/config/module-giro-requirements.config.ts). Distinto del campo "industry" de abajo,
+  // que es texto libre sin validar y sin ningún consumidor real en el código — no se reusa
+  // porque no encaja con el catálogo cerrado que necesita este mecanismo.
+  @Column({ default: 'generico' })
+  giro: string;
+
   @Column({ default: true })
   isActive: boolean;
 

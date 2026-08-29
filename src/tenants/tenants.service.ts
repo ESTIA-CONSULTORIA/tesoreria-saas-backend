@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { ILike, Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
@@ -8,6 +8,7 @@ import { Company } from '../companies/entities/company.entity';
 import { Branch } from '../branches/entities/branch.entity';
 import { SubscriptionsService } from '../subscriptions/subscriptions.service';
 import { ModulesService } from '../modules/modules.service';
+import { DEFAULT_GIRO, isValidGiro } from '../config/giros.config';
 
 @Injectable()
 export class TenantsService {
@@ -32,6 +33,7 @@ export class TenantsService {
     ownerName?: string;
     rfc?: string;
     industry?: string;
+    giro?: string;
     phone?: string;
     city?: string;
     state?: string;
@@ -41,6 +43,13 @@ export class TenantsService {
     const { legalName, tradeName, taxId, plan, email, password, ownerName,
             rfc, industry, phone, city, state, slug, billingCycle } = dto;
 
+    // Auditoría de producto (GoodsHabits, Hallazgo 3): giro inválido rechaza el alta en vez
+    // de guardarse silenciosamente mal — el catálogo es cerrado a propósito.
+    if (dto.giro && !isValidGiro(dto.giro)) {
+      throw new BadRequestException(`Giro inválido: "${dto.giro}"`);
+    }
+    const giro = dto.giro || DEFAULT_GIRO;
+
     // 1. Tenant
     const tenant = await this.tenantsRepository.save(
       this.tenantsRepository.create({
@@ -49,6 +58,7 @@ export class TenantsService {
         taxId: taxId || rfc,
         rfc,
         industry,
+        giro,
         phone,
         city,
         state,
@@ -108,7 +118,7 @@ export class TenantsService {
     // respuesta para que quede visible, no en silencio.
     let modulesWarning: string | undefined;
     try {
-      await this.modulesService.initFromPlan(tenant.id, dto.plan || 'BASIC');
+      await this.modulesService.initFromPlan(tenant.id, dto.plan || 'BASIC', giro);
     } catch (err) {
       this.logger.error(
         `initFromPlan() falló para tenant ${tenant.id} (${legalName}), plan ${dto.plan || 'BASIC'}`,
@@ -144,7 +154,20 @@ export class TenantsService {
     });
   }
 
-  async update(id: string, data: Partial<{ legalName: string; tradeName: string; plan: string; isActive: boolean }>) {
+  async update(id: string, data: Partial<{ legalName: string; tradeName: string; plan: string; isActive: boolean; giro: string }>) {
+    // Auditoría de producto (GoodsHabits, Hallazgo 3): si cambia el giro, re-evalúa los
+    // módulos ACTIVOS del tenant contra el giro nuevo y desactiva los que ya no califiquen
+    // (reconcileGiro no reactiva nada — ver comentario en modules.service.ts). No lo hace
+    // si el giro no viene en el body, para no pagar el costo de esa consulta en cada
+    // edición de nombre/plan que no toca giro.
+    if (data.giro) {
+      if (!isValidGiro(data.giro)) {
+        throw new BadRequestException(`Giro inválido: "${data.giro}"`);
+      }
+      await this.tenantsRepository.update(id, data);
+      await this.modulesService.reconcileGiro(id, data.giro);
+      return this.tenantsRepository.findOne({ where: { id } });
+    }
     await this.tenantsRepository.update(id, data);
     return this.tenantsRepository.findOne({ where: { id } });
   }
