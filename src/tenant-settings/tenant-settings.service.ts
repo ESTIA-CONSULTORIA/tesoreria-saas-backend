@@ -37,6 +37,7 @@ export class TenantSettingsService {
       splashBg?: string;
       theme?: string;
       companyDisplayName?: string;
+      stockPolicy?: 'BLOQUEAR' | 'PERMITIR_NEGATIVO';
     },
   ) {
     const existing = await this.findByTenant(tenantId);
@@ -60,6 +61,7 @@ export class TenantSettingsService {
         secondaryButtonColor: body.secondaryButtonColor || '#64748b',
         buttonBorderRadius: body.buttonBorderRadius || 'rounded',
         customCSS: body.customCSS,
+        stockPolicy: body.stockPolicy || 'PERMITIR_NEGATIVO',
       });
       return this.repo.save(created);
     }

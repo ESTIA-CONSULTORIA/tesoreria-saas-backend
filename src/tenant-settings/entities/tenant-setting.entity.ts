@@ -83,6 +83,18 @@ export class TenantSetting {
     limiteSessiones?: number;
   };
 
+  // Política de stock insuficiente en POS (auditoría GoodsHabits, Punto 1). Columna
+  // dedicada, no dentro de globalConfig — es una regla de negocio operacional, no un
+  // ajuste de display/branding, mezclarla ahí sería confuso. Default PERMITIR_NEGATIVO:
+  // es el que menos se parece a "empezar a rechazar ventas que antes pasaban" para
+  // tenants existentes que nunca configuraron nada — no tronar operación de nadie de un
+  // día para otro. BLOQUEAR: la venta se rechaza ANTES de completarse (sales.service.ts,
+  // chequeo previo a abrir la transacción). PERMITIR_NEGATIVO: se quita el clamp
+  // Math.max(0, ...) que existía antes — ese clamp le mentía al ledger auditable
+  // (InventoryMovement.stockResultante) sobre el déficit real.
+  @Column({ default: 'PERMITIR_NEGATIVO' })
+  stockPolicy: 'BLOQUEAR' | 'PERMITIR_NEGATIVO';
+
   @CreateDateColumn()
   createdAt: Date;
 

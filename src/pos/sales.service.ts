@@ -7,6 +7,7 @@ import { Recipe } from '../costs/entities/recipe.entity';
 import { Insumo } from '../costs/entities/insumo.entity';
 import { InventoryMovement } from '../costs/entities/inventory-movement.entity';
 import { Branch } from '../branches/entities/branch.entity';
+import { TenantSetting } from '../tenant-settings/entities/tenant-setting.entity';
 import { InsumoAlertsService } from './insumo-alerts.service';
 import { resolveEventTimestamp } from '../common/resolve-event-timestamp.util';
 
@@ -28,6 +29,8 @@ export class SalesService {
     private recipeRepo: Repository<Recipe>,
     @InjectRepository(Insumo)
     private insumoRepo: Repository<Insumo>,
+    @InjectRepository(TenantSetting)
+    private tenantSettingRepo: Repository<TenantSetting>,
     private dataSource: DataSource,
     private insumoAlertsService: InsumoAlertsService,
   ) {}
@@ -51,12 +54,18 @@ export class SalesService {
         const recipe = await this.recipeRepo.findOne({ where: { id: product.recipeId } });
         if (recipe?.items) {
           for (const ri of recipe.items) {
-            const insumo = await this.insumoRepo.findOne({ where: { id: ri.insumoId } });
+            const crudo = await this.insumoRepo.findOne({ where: { id: ri.insumoId } });
+            // Punto 2 (GoodsHabits): mismo motivo que deductInsumo() — si el insumo de la
+            // receta ya fue reemplazado, el costoReal de la venta debe reflejar el costo
+            // del insumo vigente, no el descontinuado (quedaría inconsistente con lo que
+            // deductInsumo() realmente descuenta más abajo si no se resuelve acá también).
+            const insumo = crudo ? await this.resolveActiveInsumo(crudo) : null;
             if (insumo) total += Number(insumo.costoUnitario) * ri.cantidad * item.cantidad;
           }
         }
       } else if (product.type === 'SIMPLE' && product.insumoId) {
-        const insumo = await this.insumoRepo.findOne({ where: { id: product.insumoId } });
+        const crudo = await this.insumoRepo.findOne({ where: { id: product.insumoId } });
+        const insumo = crudo ? await this.resolveActiveInsumo(crudo) : null;
         if (insumo) total += Number(insumo.costoUnitario) * item.cantidad;
       }
     }
@@ -87,6 +96,12 @@ export class SalesService {
     // 400 (BadRequestException), no enmascararse como 500 por el catch genérico de la venta.
     const now = resolveEventTimestamp(data.clientTimestamp);
     const costoReal = await this.calculateCostoReal(data.items);
+
+    // Auditoría de producto (GoodsHabits, Punto 1): chequeo de disponibilidad ANTES de
+    // abrir la transacción — si el tenant tiene stockPolicy BLOQUEAR y algo no alcanza,
+    // la venta se rechaza con detalle claro de qué falta, sin tocar la BD. Bajo
+    // PERMITIR_NEGATIVO (default) es un no-op inmediato.
+    await this.checkStockAvailability(data.items, data.tenantId);
 
     let savedSale: Sale;
     let lowStockInsumos: LowStockInsumo[] = [];
@@ -190,6 +205,98 @@ export class SalesService {
     }
   }
 
+  // Auditoría de producto (GoodsHabits, Punto 1): agrega la cantidad total requerida POR
+  // insumo YA RESUELTO (ver resolveActiveInsumo) a través de todo el carrito — dos
+  // productos del mismo ticket pueden compartir insumo, y si uno apunta a un insumo ya
+  // reemplazado, el chequeo debe hacerse contra el insumo vigente, no el descontinuado
+  // (mismo criterio que aplicará deductInsumo() al momento real de descontar).
+  private async checkStockAvailability(items: SaleItem[], tenantId: string): Promise<void> {
+    const setting = await this.tenantSettingRepo.findOne({ where: { tenantId } });
+    if ((setting?.stockPolicy || 'PERMITIR_NEGATIVO') !== 'BLOQUEAR') return;
+
+    const neededByInsumo = new Map<string, { nombre: string; cantidad: number }>();
+
+    const acumular = async (rawInsumoId: string, cantidad: number) => {
+      const crudo = await this.insumoRepo.findOne({ where: { id: rawInsumoId } });
+      if (!crudo) return;
+      const resuelto = await this.resolveActiveInsumo(crudo);
+      const actual = neededByInsumo.get(resuelto.id);
+      neededByInsumo.set(resuelto.id, {
+        nombre: resuelto.nombre,
+        cantidad: (actual?.cantidad || 0) + cantidad,
+      });
+    };
+
+    for (const item of items) {
+      const product = await this.productRepo.findOne({ where: { id: item.productoId } });
+      if (!product) continue;
+
+      if (product.type === 'PREPARADO' && product.recipeId) {
+        const recipe = await this.recipeRepo.findOne({ where: { id: product.recipeId } });
+        if (!recipe?.items) continue;
+        for (const ri of recipe.items) {
+          await acumular(ri.insumoId, ri.cantidad * item.cantidad);
+        }
+      } else if (product.type === 'SIMPLE' && product.insumoId) {
+        await acumular(product.insumoId, item.cantidad);
+      }
+    }
+
+    const faltantes: { insumo: string; disponible: number; requerido: number }[] = [];
+    for (const [insumoId, { nombre, cantidad }] of neededByInsumo) {
+      const insumo = await this.insumoRepo.findOne({ where: { id: insumoId } });
+      if (!insumo) continue;
+      const disponible = Number(insumo.stockActual);
+      if (disponible < cantidad) {
+        faltantes.push({ insumo: nombre, disponible, requerido: cantidad });
+      }
+    }
+
+    if (faltantes.length > 0) {
+      throw new BadRequestException({
+        message: 'Stock insuficiente para completar la venta',
+        faltantes,
+      });
+    }
+  }
+
+  // Auditoría de producto (GoodsHabits, Punto 2): mismo algoritmo que
+  // costs.service.ts::costoUnitarioInsumo() — recorre reemplazadoPorId hasta encontrar un
+  // insumo activo, protegido contra ciclos. NO se reutiliza costoUnitarioInsumo()
+  // directamente a propósito: ese usa this.insumosRepo (fuera de cualquier transacción),
+  // mientras que deductInsumo() opera dentro de la transacción de la venta (mismo motivo
+  // ya documentado en delivery-ingest.service.ts para no reusar MovementsService — leer
+  // por otro canal rompería el aislamiento). `manager` es opcional: se pasa cuando se
+  // llama desde dentro de la transacción (deductInsumo), se omite en el chequeo previo
+  // (checkStockAvailability, que corre ANTES de abrir la transacción).
+  private async resolveActiveInsumo(
+    insumo: Insumo,
+    manager?: EntityManager,
+    visitados: Set<string> = new Set(),
+  ): Promise<Insumo> {
+    if (visitados.has(insumo.id)) {
+      throw new Error(`Referencia circular en la cadena de reemplazo del insumo ${insumo.id}`);
+    }
+    visitados.add(insumo.id);
+
+    if (insumo.isActive) {
+      visitados.delete(insumo.id);
+      return insumo;
+    }
+    if (!insumo.reemplazadoPorId) {
+      throw new BadRequestException(`El insumo "${insumo.nombre}" está inactivo y no tiene reemplazo configurado — no se puede vender.`);
+    }
+    const siguiente = manager
+      ? await manager.findOne(Insumo, { where: { id: insumo.reemplazadoPorId } })
+      : await this.insumoRepo.findOne({ where: { id: insumo.reemplazadoPorId } });
+    if (!siguiente) {
+      throw new BadRequestException(`El insumo de reemplazo de "${insumo.nombre}" no existe.`);
+    }
+    const resuelto = await this.resolveActiveInsumo(siguiente, manager, visitados);
+    visitados.delete(insumo.id);
+    return resuelto;
+  }
+
   private async deductInventory(manager: EntityManager, items: SaleItem[], folio: string, tenantId: string, sucursalId: string): Promise<LowStockInsumo[]> {
     const lowStock: LowStockInsumo[] = [];
     for (const item of items) {
@@ -221,11 +328,19 @@ export class SalesService {
   }
 
   private async deductInsumo(manager: EntityManager, insumoId: string, quantity: number, folio: string, tenantId: string, sucursalId: string): Promise<LowStockInsumo | null> {
-    const insumo = await manager.findOne(Insumo, { where: { id: insumoId } });
-    if (!insumo) return null;
+    const insumoCrudo = await manager.findOne(Insumo, { where: { id: insumoId } });
+    if (!insumoCrudo) return null;
+    // Punto 2: resuelve la cadena de reemplazo — si insumoId apunta a un insumo ya
+    // reemplazado, descuenta del insumo vigente, no del descontinuado.
+    const insumo = await this.resolveActiveInsumo(insumoCrudo, manager);
 
-    const newStock = Math.max(0, Number(insumo.stockActual) - quantity);
-    await manager.update(Insumo, insumoId, { stockActual: newStock });
+    // Punto 1: antes clampaba a 0 con Math.max(0, ...) — le mentía al ledger auditable
+    // (InventoryMovement.stockResultante) sobre el déficit real. checkStockAvailability()
+    // ya rechazó la venta más arriba si el tenant tiene stockPolicy BLOQUEAR y esto no
+    // alcanzaba; si llegamos hasta acá, o el tenant permite negativo, o alcanzaba de
+    // sobra — en ambos casos la resta debe ser honesta, no clampada.
+    const newStock = Number(insumo.stockActual) - quantity;
+    await manager.update(Insumo, insumo.id, { stockActual: newStock });
 
     // Ledger auditable del movimiento — misma transacción que el descuento de stock,
     // a diferencia de las alertas de stock bajo (esas sí son best-effort y van aparte).

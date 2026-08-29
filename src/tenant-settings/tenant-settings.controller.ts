@@ -43,6 +43,7 @@ export class TenantSettingsController {
       primaryButtonColor?: string;
       secondaryButtonColor?: string;
       buttonBorderRadius?: 'square' | 'rounded' | 'pill';
+      stockPolicy?: 'BLOQUEAR' | 'PERMITIR_NEGATIVO';
     },
   ) {
     return this.service.upsert(tenantId, body);

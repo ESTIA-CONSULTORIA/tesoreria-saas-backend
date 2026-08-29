@@ -35,10 +35,11 @@ import { Recipe } from '../costs/entities/recipe.entity';
 import { Insumo } from '../costs/entities/insumo.entity';
 import { User } from '../users/entities/user.entity';
 import { Tenant } from '../tenants/entities/tenant.entity';
+import { TenantSetting } from '../tenant-settings/entities/tenant-setting.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([PosConfig, Product, PosCategory, Area, Table, Sale, Shift, Recipe, Insumo, User, CorteField, InsumoAlert, Tenant]),
+    TypeOrmModule.forFeature([PosConfig, Product, PosCategory, Area, Table, Sale, Shift, Recipe, Insumo, User, CorteField, InsumoAlert, Tenant, TenantSetting]),
     // Mismo secret que AuthModule (JWT_SECRET) — cashiers.service.ts firma/verifica con
     // JwtService en vez del jsonwebtoken crudo que usaba antes de la migración a cookies.
     JwtModule.registerAsync({
