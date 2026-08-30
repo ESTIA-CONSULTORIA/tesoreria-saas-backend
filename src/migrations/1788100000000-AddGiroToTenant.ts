@@ -30,13 +30,17 @@ export class AddGiroToTenant1788100000000 implements MigrationInterface {
         // Reconciliación: 'pacientes' es hoy el único módulo con requisito de giro (ver
         // module-giro-requirements.config.ts) — si esa lista crece, esta migración puntual
         // no necesita saberlo, ya cumplió su propósito una sola vez.
+        //
+        // tenant_modules."tenantId" es varchar, tenant.id es uuid — mismo mismatch ya visto
+        // en este proyecto (seed.ts, banks.service.ts) — cast ::text del lado uuid antes de
+        // comparar, si no Postgres rechaza el IN completo.
         await queryRunner.query(`
             UPDATE "tenant_modules"
             SET "status" = 'inactive'
             WHERE "moduleCode" = 'pacientes'
               AND "status" = 'active'
               AND "tenantId" IN (
-                SELECT "id" FROM "tenant" WHERE "giro" NOT IN ('medico_dental', 'medico_general')
+                SELECT "id"::text FROM "tenant" WHERE "giro" NOT IN ('medico_dental', 'medico_general')
               )
         `);
     }
