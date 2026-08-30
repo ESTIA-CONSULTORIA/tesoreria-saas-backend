@@ -64,7 +64,7 @@ export class ContractsService {
     fileType: string;
     fileBase64: string;
   }) {
-    const fields = this.detectFields(dto.fileBase64, dto.fileType);
+    const fields = await this.detectFields(dto.fileBase64, dto.fileType);
     return this.templateRepo.save({
       ...dto,
       detectedFields: fields,
@@ -80,7 +80,21 @@ export class ContractsService {
     return { deleted: true };
   }
 
-  private detectFields(base64: string, _fileType: string): string[] {
+  // Auditoría de producto (GoodsHabits, Fase 3 — Contratos): para PDF, ahora lee los
+  // nombres reales de los campos del AcroForm en vez de aplicar el mismo regex de
+  // marcadores {campo} que usa DOCX — ese regex nunca fue confiable contra bytes binarios
+  // de un PDF. DOCX no cambia: sigue funcionando porque un .docx guarda su texto sin
+  // comprimir en muchos casos, y esa detección ya está verificada en producción.
+  private async detectFields(base64: string, fileType: string): Promise<string[]> {
+    if (fileType === 'PDF') {
+      try {
+        const pdfDoc = await PDFDocument.load(Buffer.from(base64, 'base64'), { ignoreEncryption: true });
+        const form = pdfDoc.getForm();
+        return form.getFields().map((f) => f.getName());
+      } catch {
+        return []; // sin AcroForm — plantilla PDF sin campos rellenables, válido pero nada que detectar
+      }
+    }
     try {
       const content = Buffer.from(base64, 'base64').toString('utf-8');
       const matches = content.match(/\{([a-z_]+)\}/g) || [];
@@ -179,7 +193,7 @@ export class ContractsService {
     if (fileType === 'DOCX') {
       return this.fillDocxTemplate(base64, employee, company, branch);
     }
-    return this.fillTextInPdf(base64, employee, company);
+    return this.fillPdfFormTemplate(base64, employee, company, branch);
   }
 
   private async fillDocxTemplate(base64: string, employee: any, company: any, branch?: any): Promise<string> {
@@ -208,12 +222,59 @@ export class ContractsService {
     }
   }
 
-  private async fillTextInPdf(base64: string, _employee: any, _company: any): Promise<string> {
+  // Auditoría de producto (GoodsHabits, Fase 3 — Contratos): reemplaza el passthrough que
+  // no llenaba nada. Rellena campos de formulario reales (AcroForm) — el formato que un
+  // despacho legal/RH ya produce desde Acrobat/Word ("Guardar como PDF con campos de
+  // formulario"). Mapea cada campo del PDF por su NOMBRE contra el mismo FIELD_MAP que ya
+  // usa el lado DOCX — una plantilla PDF necesita nombrar sus campos igual que los
+  // marcadores {campo} del lado DOCX (ej. un campo de formulario llamado "nombre_completo").
+  // Al final aplana el formulario (form.flatten()) — el contrato generado queda como texto
+  // fijo, no como un formulario que el empleado podría reabrir y editar antes de firmar.
+  private async fillPdfFormTemplate(base64: string, employee: any, company: any, branch?: any): Promise<string> {
     try {
       const pdfBytes = Buffer.from(base64, 'base64');
-      await PDFDocument.load(pdfBytes, { ignoreEncryption: true });
-      return pdfBytes.toString('base64');
-    } catch {
+      const pdfDoc = await PDFDocument.load(pdfBytes, { ignoreEncryption: true });
+
+      let form;
+      try {
+        form = pdfDoc.getForm();
+      } catch {
+        // Sin AcroForm en el PDF (ej. un PDF escaneado o de solo texto) — no hay nada que
+        // rellenar, se devuelve el original intacto, mismo comportamiento que el
+        // passthrough anterior para este caso.
+        return pdfBytes.toString('base64');
+      }
+
+      const fields = form.getFields();
+      if (fields.length === 0) {
+        return pdfBytes.toString('base64');
+      }
+
+      let filledCount = 0;
+      for (const field of fields) {
+        const fieldName = field.getName();
+        const resolver = FIELD_MAP[fieldName];
+        if (!resolver) continue; // campo del PDF sin marcador correspondiente — se deja como está
+
+        const value = resolver(employee, company, branch);
+        try {
+          const textField = form.getTextField(fieldName);
+          textField.setText(value);
+          filledCount++;
+        } catch {
+          // El campo existe pero no es de texto (checkbox, dropdown...) — fuera de alcance
+          // de esta fase, se deja sin tocar en vez de fallar la generación completa.
+        }
+      }
+
+      if (filledCount > 0) {
+        form.flatten();
+      }
+
+      const filledBytes = await pdfDoc.save();
+      return Buffer.from(filledBytes).toString('base64');
+    } catch (e: any) {
+      console.error('Error llenando plantilla PDF:', e.message);
       return base64;
     }
   }
