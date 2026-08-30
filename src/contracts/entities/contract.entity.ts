@@ -26,26 +26,12 @@ export class Contract {
   @Column()
   signatureLevel: string;
 
-  @Column({ type: 'text', nullable: true })
-  contractPdfBase64: string;
-
-  @Column({ type: 'text', nullable: true })
-  signedPdfBase64: string;
-
-  @Column({ nullable: true })
-  signedPdfUrl: string;
-
-  @Column({ type: 'text', nullable: true })
-  signatureBase64: string;
-
-  @Column({ type: 'text', nullable: true })
-  selfieBase64: string;
-
-  @Column({ type: 'text', nullable: true })
-  ineFrontBase64: string;
-
-  @Column({ type: 'text', nullable: true })
-  ineBackBase64: string;
+  // Auditoría de producto (GoodsHabits, Fase 3): las 6 columnas base64 que vivían aquí
+  // (contractPdfBase64, signedPdfBase64, signedPdfUrl, signatureBase64, selfieBase64,
+  // ineFrontBase64, ineBackBase64) se migraron a StoredFile — ver migración
+  // MigrateContractFilesToStoredFile. Se leen/escriben vía StorageService, filtrando
+  // StoredFile por ownerType: 'contract', ownerId: this.id, role: 'contract_pdf' |
+  // 'signed_pdf' | 'signature' | 'selfie' | 'ine_front' | 'ine_back'.
 
   @Column({ nullable: true })
   signedAt: Date;

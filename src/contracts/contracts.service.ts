@@ -139,7 +139,7 @@ export class ContractsService {
       branch,
     );
 
-    return this.contractRepo.save({
+    const contract = await this.contractRepo.save({
       tenantId: dto.tenantId,
       companyId: dto.companyId,
       employeeId: dto.employeeId,
@@ -147,8 +147,26 @@ export class ContractsService {
       fileType: template.fileType,
       signatureLevel: dto.signatureLevel,
       status: 'PENDIENTE',
-      contractPdfBase64: filledPdf,
     });
+
+    // Auditoría de producto (GoodsHabits, Fase 3): el PDF generado ya no vive en una
+    // columna de Contract — se guarda vía StorageService, StoredFile lo referencia por
+    // ownerId + role. El contrato necesita existir primero para tener un id que usar como
+    // ownerId.
+    await this.storageService.upload({
+      tenantId: dto.tenantId,
+      ownerType: 'contract',
+      ownerId: contract.id,
+      role: 'contract_pdf',
+      data: filledPdf,
+      mimeType: template.fileType === 'DOCX'
+        ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+        : 'application/pdf',
+      folder: `estia/contracts/${contract.id}`,
+      fileName: 'contract_pdf',
+    });
+
+    return contract;
   }
 
   private async fillPdfTemplate(
@@ -213,42 +231,65 @@ export class ContractsService {
     const contract = await this.contractRepo.findOne({ where: { id: dto.contractId } });
     if (!contract) throw new NotFoundException('Contrato no encontrado');
 
-    const signedPdf = await this.generateSignedPdf(contract, dto);
-
-    let signedPdfBase64: string | null = signedPdf;
-    let signedPdfUrl: string | undefined;
-
-    if (process.env.STORAGE_PROVIDER === 'cloudinary') {
-      try {
-        const folder = `estia/contracts/${dto.contractId}`;
-        const result = await this.storageService.uploadBase64(signedPdf, folder, `signed_${dto.contractId}`);
-        signedPdfUrl = result.url;
-        signedPdfBase64 = null;
-      } catch (e) {
-        console.error('Error uploading signed PDF to Cloudinary, falling back to base64:', e);
-      }
+    const contractPdfFile = await this.storageService.getOneByOwner('contract', contract.id, 'contract_pdf');
+    if (!contractPdfFile) throw new NotFoundException('El contrato no tiene un PDF generado');
+    const contractPdfContent = await this.storageService.getContent(contractPdfFile.id);
+    if (!contractPdfContent?.base64) {
+      throw new NotFoundException('No fue posible leer el PDF del contrato');
     }
+
+    const signedPdf = await this.generateSignedPdf(contract, contractPdfContent.base64, dto);
+    const folder = `estia/contracts/${dto.contractId}`;
+
+    // Auditoría de producto (GoodsHabits, Fase 3): cada archivo capturado en la firma se
+    // sube por separado vía StorageService, con su propio role — reemplaza las 5 columnas
+    // base64 (signature/selfie/ineFront/ineBack/signedPdf) que Contract tenía antes.
+    // signatureBase64/selfieBase64/ineFrontBase64/ineBackBase64 solo se guardan si vienen
+    // en el body — la selfie e INE son opcionales según el nivel de firma.
+    const uploads: Array<Promise<unknown>> = [
+      this.storageService.upload({
+        tenantId: contract.tenantId, ownerType: 'contract', ownerId: contract.id, role: 'signature',
+        data: dto.signatureBase64, mimeType: 'image/png', folder, fileName: 'signature',
+      }),
+      this.storageService.upload({
+        tenantId: contract.tenantId, ownerType: 'contract', ownerId: contract.id, role: 'signed_pdf',
+        data: signedPdf, mimeType: 'application/pdf', folder, fileName: `signed_${dto.contractId}`,
+      }),
+    ];
+    if (dto.selfieBase64) {
+      uploads.push(this.storageService.upload({
+        tenantId: contract.tenantId, ownerType: 'contract', ownerId: contract.id, role: 'selfie',
+        data: dto.selfieBase64, mimeType: 'image/jpeg', folder, fileName: 'selfie',
+      }));
+    }
+    if (dto.ineFrontBase64) {
+      uploads.push(this.storageService.upload({
+        tenantId: contract.tenantId, ownerType: 'contract', ownerId: contract.id, role: 'ine_front',
+        data: dto.ineFrontBase64, mimeType: 'image/jpeg', folder, fileName: 'ine_front',
+      }));
+    }
+    if (dto.ineBackBase64) {
+      uploads.push(this.storageService.upload({
+        tenantId: contract.tenantId, ownerType: 'contract', ownerId: contract.id, role: 'ine_back',
+        data: dto.ineBackBase64, mimeType: 'image/jpeg', folder, fileName: 'ine_back',
+      }));
+    }
+    await Promise.all(uploads);
 
     await this.contractRepo.update(dto.contractId, {
       status: 'FIRMADO',
-      signatureBase64: dto.signatureBase64,
-      selfieBase64: dto.selfieBase64,
-      ineFrontBase64: dto.ineFrontBase64,
-      ineBackBase64: dto.ineBackBase64,
       signedAt: new Date(),
       signedIp: dto.ip,
       signedLat: dto.lat,
       signedLng: dto.lng,
-      signedPdfBase64: signedPdfBase64 ?? undefined,
-      signedPdfUrl,
     });
 
     return this.contractRepo.findOne({ where: { id: dto.contractId } });
   }
 
-  private async generateSignedPdf(contract: Contract, signData: any): Promise<string> {
+  private async generateSignedPdf(contract: Contract, contractPdfBase64: string, signData: any): Promise<string> {
     try {
-      const pdfBytes = Buffer.from(contract.contractPdfBase64, 'base64');
+      const pdfBytes = Buffer.from(contractPdfBase64, 'base64');
       const pdfDoc = await PDFDocument.load(pdfBytes, { ignoreEncryption: true });
       const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
       const pages = pdfDoc.getPages();
@@ -314,17 +355,24 @@ export class ContractsService {
       return Buffer.from(signedBytes).toString('base64');
     } catch (e: any) {
       console.error('Error generating signed PDF:', e.message);
-      return contract.contractPdfBase64;
+      return contractPdfBase64;
     }
   }
 
   async getContractPdf(contractId: string) {
     const contract = await this.contractRepo.findOne({ where: { id: contractId } });
     if (!contract) throw new NotFoundException('Contrato no encontrado');
+
+    // Prioridad: PDF firmado si ya existe, si no el generado sin firmar — mismo criterio
+    // que antes (signedPdfBase64 || contractPdfBase64), ahora resuelto vía StoredFile.
+    const signedFile = await this.storageService.getOneByOwner('contract', contract.id, 'signed_pdf');
+    const file = signedFile ?? await this.storageService.getOneByOwner('contract', contract.id, 'contract_pdf');
+    const content = file ? await this.storageService.getContent(file.id) : null;
+
     return {
       id: contract.id,
       status: contract.status,
-      pdf: contract.signedPdfBase64 || contract.contractPdfBase64,
+      pdf: content?.base64 || content?.url || null,
       fileType: 'PDF',
     };
   }
