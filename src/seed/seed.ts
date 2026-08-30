@@ -2936,6 +2936,11 @@ export async function seedDatabase(dataSource: DataSource) {
     // el plan contratado.
     { code: 'dispersion_bancaria', name: 'Dispersión de Nómina (Bancos ERP)', category: 'rh', isAddon: true, defaultPrice: 150 },
     { code: 'dispersion_layout',   name: 'Dispersión de Nómina (Layout Bancario)', category: 'rh', isAddon: true, defaultPrice: 200 },
+    // Auditoría de producto (GoodsHabits, Fase 3 — Firma electrónica): apagado por default
+    // en todos los planes. Hoy solo activa el cómputo de faceMatchScore en signContract()
+    // vía NullFaceMatchProvider (sin proveedor real conectado — decisión explícita) — el
+    // módulo ya está listo para cuando se contrate AWS Rekognition/Azure Face API.
+    { code: 'validacion_facial',  name: 'Validación Facial (Firma Electrónica)', category: 'rh', isAddon: true, defaultPrice: 250 },
   ];
 
   try {

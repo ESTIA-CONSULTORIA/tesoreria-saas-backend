@@ -20,8 +20,11 @@ export class StoredFile {
   @Column()
   ownerId: string;
 
+  // 'signed_pdf': legacy — signContract() ya no la genera (ver Falta 5, Fase 3), solo
+  // queda para contratos firmados antes del cambio. 'evidence_pdf': la reemplaza — PDF de
+  // constancia separado del documento del contrato.
   @Column()
-  role: string; // 'contract_pdf' | 'signed_pdf' | 'signature' | 'selfie' | 'ine_front' | 'ine_back'
+  role: string; // 'contract_pdf' | 'signed_pdf' | 'evidence_pdf' | 'signature' | 'selfie' | 'ine_front' | 'ine_back'
 
   @Column()
   provider: string; // 'base64_postgres' | 'cloudinary' — nombre del StorageProvider que lo guardó

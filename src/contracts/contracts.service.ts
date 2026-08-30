@@ -1,10 +1,13 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { ForbiddenException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository, InjectDataSource } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
 import { ContractTemplate } from './entities/contract-template.entity';
 import { Contract } from './entities/contract.entity';
 import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
 import { StorageService } from '../storage/storage.service';
+import { OcrService } from '../ocr/ocr.service';
+import { ModulesService } from '../modules/modules.service';
+import { FACE_MATCH_PROVIDER, type FaceMatchProvider } from './face-match/face-match-provider.interface';
 
 const FIELD_MAP: Record<string, (emp: any, company?: any, branch?: any) => string> = {
   nombre_completo: (e) => `${e.nombre || ''} ${e.apellidos || ''}`.trim(),
@@ -41,6 +44,10 @@ export class ContractsService {
     @InjectDataSource()
     private dataSource: DataSource,
     private readonly storageService: StorageService,
+    private readonly ocrService: OcrService,
+    private readonly modulesService: ModulesService,
+    @Inject(FACE_MATCH_PROVIDER)
+    private readonly faceMatchProvider: FaceMatchProvider,
   ) {}
 
   async getTemplates(tenantId: string, companyId?: string) {
@@ -292,29 +299,47 @@ export class ContractsService {
     const contract = await this.contractRepo.findOne({ where: { id: dto.contractId } });
     if (!contract) throw new NotFoundException('Contrato no encontrado');
 
-    const contractPdfFile = await this.storageService.getOneByOwner('contract', contract.id, 'contract_pdf');
-    if (!contractPdfFile) throw new NotFoundException('El contrato no tiene un PDF generado');
-    const contractPdfContent = await this.storageService.getContent(contractPdfFile.id);
-    if (!contractPdfContent?.base64) {
-      throw new NotFoundException('No fue posible leer el PDF del contrato');
+    // Auditoría de producto (GoodsHabits, Fase 3 — Firma electrónica): validación facial
+    // opcional — gateada por el módulo 'validacion_facial' (apagado por default en todos
+    // los planes), y solo corre si ambos insumos llegaron. NullFaceMatchProvider (único
+    // proveedor de esta fase) devuelve score: null — el campo se guarda igual, sin
+    // pretender un resultado real.
+    let faceMatchScore: number | null = null;
+    if (dto.selfieBase64 && dto.ineFrontBase64) {
+      const hasFaceMatch = await this.modulesService.hasModule(contract.tenantId, 'validacion_facial');
+      if (hasFaceMatch) {
+        try {
+          const result = await this.faceMatchProvider.compare(
+            this.toBuffer(dto.selfieBase64),
+            this.toBuffer(dto.ineFrontBase64),
+          );
+          faceMatchScore = result.score;
+        } catch (e: any) {
+          console.error('Error en validación facial:', e.message);
+        }
+      }
     }
 
-    const signedPdf = await this.generateSignedPdf(contract, contractPdfContent.base64, dto);
+    const evidencePdf = await this.buildEvidencePdf(contract, dto, faceMatchScore);
     const folder = `estia/contracts/${dto.contractId}`;
 
-    // Auditoría de producto (GoodsHabits, Fase 3): cada archivo capturado en la firma se
-    // sube por separado vía StorageService, con su propio role — reemplaza las 5 columnas
-    // base64 (signature/selfie/ineFront/ineBack/signedPdf) que Contract tenía antes.
-    // signatureBase64/selfieBase64/ineFrontBase64/ineBackBase64 solo se guardan si vienen
-    // en el body — la selfie e INE son opcionales según el nivel de firma.
+    // Auditoría de producto (GoodsHabits, Fase 3 — Firma electrónica): cada archivo
+    // capturado en la firma se sube por separado vía StorageService, con su propio role.
+    // La constancia ('evidence_pdf') es un documento SEPARADO generado desde cero — ya no
+    // se intenta insertar páginas dentro de contractPdfBase64 (que para plantillas DOCX,
+    // la única que funciona hoy, nunca fue un PDF real — ver Falta 5 del diseño: eso
+    // hacía fallar la generación en silencio y guardaba el original sin firma como si
+    // fuera el "firmado"). signatureBase64/selfieBase64/ineFrontBase64/ineBackBase64 solo
+    // se guardan si vienen en el body — la selfie e INE son opcionales según el nivel de
+    // firma.
     const uploads: Array<Promise<unknown>> = [
       this.storageService.upload({
         tenantId: contract.tenantId, ownerType: 'contract', ownerId: contract.id, role: 'signature',
         data: dto.signatureBase64, mimeType: 'image/png', folder, fileName: 'signature',
       }),
       this.storageService.upload({
-        tenantId: contract.tenantId, ownerType: 'contract', ownerId: contract.id, role: 'signed_pdf',
-        data: signedPdf, mimeType: 'application/pdf', folder, fileName: `signed_${dto.contractId}`,
+        tenantId: contract.tenantId, ownerType: 'contract', ownerId: contract.id, role: 'evidence_pdf',
+        data: evidencePdf, mimeType: 'application/pdf', folder, fileName: `evidencia_${dto.contractId}`,
       }),
     ];
     if (dto.selfieBase64) {
@@ -343,81 +368,83 @@ export class ContractsService {
       signedIp: dto.ip,
       signedLat: dto.lat,
       signedLng: dto.lng,
+      faceMatchScore: faceMatchScore ?? undefined,
     });
 
     return this.contractRepo.findOne({ where: { id: dto.contractId } });
   }
 
-  private async generateSignedPdf(contract: Contract, contractPdfBase64: string, signData: any): Promise<string> {
-    try {
-      const pdfBytes = Buffer.from(contractPdfBase64, 'base64');
-      const pdfDoc = await PDFDocument.load(pdfBytes, { ignoreEncryption: true });
-      const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
-      const pages = pdfDoc.getPages();
-      const lastPage = pages[pages.length - 1];
-      const { width, height } = lastPage.getSize();
+  // Acepta tanto un data URI completo (canvas.toDataURL(), FileReader.readAsDataURL()) como
+  // base64 puro — mismo criterio que Base64PostgresProvider.toBase64().
+  private toBuffer(base64OrDataUrl: string): Buffer {
+    const match = base64OrDataUrl.match(/^data:([^;]+);base64,(.+)$/s);
+    return Buffer.from(match ? match[2] : base64OrDataUrl, 'base64');
+  }
 
-      let signatureImage: any;
-      try {
-        const sigBytes = Buffer.from(
-          signData.signatureBase64.replace(/^data:image\/\w+;base64,/, ''),
-          'base64',
-        );
-        signatureImage = await pdfDoc.embedPng(sigBytes);
-      } catch { /* firma no embebible */ }
+  // Auditoría de producto (GoodsHabits, Fase 3 — Firma electrónica): PDF de evidencia
+  // SEPARADO del contrato — decisión explícita tras el bug de Falta 5. Se genera desde
+  // cero (PDFDocument.create()), nunca carga/modifica el documento del contrato — así
+  // funciona igual sin importar si la plantilla original era DOCX o PDF.
+  private async buildEvidencePdf(
+    contract: Contract,
+    signData: { ip: string; lat?: number; lng?: number; signatureBase64: string; selfieBase64?: string },
+    faceMatchScore: number | null,
+  ): Promise<string> {
+    const pdfDoc = await PDFDocument.create();
+    const page = pdfDoc.addPage([612, 792]);
+    const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+    const bold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+    let y = 740;
 
-      const evidencePage = pdfDoc.addPage([width, height]);
-      let y = height - 60;
-
-      evidencePage.drawText('CONSTANCIA DE FIRMA ELECTRÓNICA', {
-        x: 50, y, font, size: 14, color: rgb(0, 0, 0),
+    const draw = (text: string, opts: { size?: number; b?: boolean; color?: [number, number, number] } = {}) => {
+      page.drawText(text, {
+        x: 50, y, size: opts.size ?? 10, font: opts.b ? bold : font,
+        color: rgb(...(opts.color ?? [0, 0, 0])),
       });
-      y -= 30;
+      y -= (opts.size ?? 10) + 8;
+    };
 
-      const meta = [
-        `Fecha y hora: ${new Date().toLocaleString('es-MX')}`,
-        `IP: ${signData.ip || 'N/D'}`,
-        `Geolocalización: ${signData.lat ? `${signData.lat}, ${signData.lng}` : 'N/D'}`,
-        `Nivel de firma: ${contract.signatureLevel}`,
-      ];
-
-      for (const line of meta) {
-        evidencePage.drawText(line, { x: 50, y, font, size: 10, color: rgb(0.2, 0.2, 0.2) });
-        y -= 20;
-      }
-
-      if (signatureImage) {
-        y -= 20;
-        evidencePage.drawText('Firma del empleado:', { x: 50, y, font, size: 10, color: rgb(0.2, 0.2, 0.2) });
-        y -= 80;
-        evidencePage.drawImage(signatureImage, { x: 50, y, width: 200, height: 70 });
-      }
-
-      if (signData.selfieBase64) {
-        try {
-          const selfieBytes = Buffer.from(
-            signData.selfieBase64.replace(/^data:image\/\w+;base64,/, ''),
-            'base64',
-          );
-          let selfieImg: any;
-          try {
-            selfieImg = await pdfDoc.embedJpg(selfieBytes);
-          } catch {
-            selfieImg = await pdfDoc.embedPng(selfieBytes);
-          }
-          y -= 100;
-          evidencePage.drawText('Fotografía del firmante:', { x: 50, y, font, size: 10, color: rgb(0.2, 0.2, 0.2) });
-          y -= 90;
-          evidencePage.drawImage(selfieImg, { x: 50, y, width: 80, height: 80 });
-        } catch { /* selfie no embebible */ }
-      }
-
-      const signedBytes = await pdfDoc.save();
-      return Buffer.from(signedBytes).toString('base64');
-    } catch (e: any) {
-      console.error('Error generating signed PDF:', e.message);
-      return contractPdfBase64;
+    draw('CONSTANCIA DE FIRMA ELECTRÓNICA', { size: 16, b: true });
+    y -= 4;
+    draw(`Contrato: ${contract.id}`, { size: 9, color: [0.4, 0.4, 0.4] });
+    draw(`Fecha y hora: ${new Date().toLocaleString('es-MX')}`);
+    draw(`IP: ${signData.ip || 'N/D'}`);
+    draw(`Geolocalización: ${signData.lat ? `${signData.lat}, ${signData.lng}` : 'N/D'}`);
+    draw(`Nivel de firma: ${contract.signatureLevel}`);
+    if (faceMatchScore !== null) {
+      draw(`Validación facial (score): ${faceMatchScore}`);
     }
+    y -= 12;
+
+    try {
+      const sigImg = await pdfDoc.embedPng(this.toBuffer(signData.signatureBase64));
+      draw('Firma del empleado:', { b: true });
+      y -= 80;
+      page.drawImage(sigImg, { x: 50, y, width: 200, height: 70 });
+      y -= 10;
+    } catch (e: any) {
+      console.error('Firma no embebible en la constancia:', e.message);
+    }
+
+    if (signData.selfieBase64) {
+      try {
+        const selfieBytes = this.toBuffer(signData.selfieBase64);
+        let selfieImg;
+        try {
+          selfieImg = await pdfDoc.embedJpg(selfieBytes);
+        } catch {
+          selfieImg = await pdfDoc.embedPng(selfieBytes);
+        }
+        draw('Fotografía del firmante:', { b: true });
+        y -= 90;
+        page.drawImage(selfieImg, { x: 50, y, width: 80, height: 80 });
+      } catch (e: any) {
+        console.error('Selfie no embebible en la constancia:', e.message);
+      }
+    }
+
+    const bytes = await pdfDoc.save();
+    return Buffer.from(bytes).toString('base64');
   }
 
   async getContractPdf(contractId: string) {
@@ -436,5 +463,79 @@ export class ContractsService {
       pdf: content?.base64 || content?.url || null,
       fileType: 'PDF',
     };
+  }
+
+  async getEvidencePdf(contractId: string) {
+    const contract = await this.contractRepo.findOne({ where: { id: contractId } });
+    if (!contract) throw new NotFoundException('Contrato no encontrado');
+    const file = await this.storageService.getOneByOwner('contract', contract.id, 'evidence_pdf');
+    if (!file) throw new NotFoundException('Este contrato no tiene constancia de firma generada');
+    const content = await this.storageService.getContent(file.id);
+    return { id: contract.id, pdf: content?.base64 || content?.url || null, fileType: 'PDF' };
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // Portal del empleado — Fase 3, Firma electrónica
+  // ═══════════════════════════════════════════════════════════════
+
+  // Mismo patrón que HrService.findEmployeeByUserId() — Employee.userId es el vínculo con
+  // la sesión del Portal. Repositorio directo vía dataSource, no un import de HrModule
+  // completo (evita acoplar ContractsModule a RH más de lo que ya está por convención).
+  async resolveEmployeeIdFromUser(userId: string): Promise<string | null> {
+    if (!userId) return null;
+    const employeeRepo = this.dataSource.getRepository('Employee');
+    const emp = await employeeRepo.findOne({ where: { userId } });
+    return emp?.id ?? null;
+  }
+
+  getPortalContracts(employeeId: string) {
+    return this.contractRepo.find({
+      where: { employeeId },
+      select: ['id', 'templateId', 'status', 'signatureLevel', 'signedAt', 'createdAt'],
+      order: { createdAt: 'DESC' },
+    });
+  }
+
+  // Auditoría de producto (GoodsHabits, Fase 3 — Firma electrónica): compara el INE que el
+  // empleado sube por el Portal contra su expediente YA existente — a diferencia de
+  // hr.service.ts::ocrDocument()/confirmOcr(), que llenan el expediente desde cero. Nunca
+  // escribe en Employee — solo reporta discrepancias para que la firma quede bloqueada
+  // hasta revisión humana si algo no coincide.
+  async verifyIneForEmployee(employeeId: string, ineFrontBase64: string, tipo = 'INE') {
+    const employeeRepo = this.dataSource.getRepository('Employee');
+    const employee: any = await employeeRepo.findOne({ where: { id: employeeId } });
+    if (!employee) throw new NotFoundException('Empleado no encontrado');
+
+    const matches = ineFrontBase64.match(/^data:([^;]+);base64,(.+)$/s);
+    const mimetype = matches?.[1] || 'image/jpeg';
+    const buffer = this.toBuffer(ineFrontBase64);
+
+    const rawText = await this.ocrService.extractTextFromBuffer(buffer, mimetype);
+    const extracted = this.ocrService.extractHrFields(rawText, tipo);
+    const comparison = this.ocrService.compareToEmployee(extracted, employee);
+
+    return { extracted, comparison, allMatch: comparison.every((c) => c.match) };
+  }
+
+  async signContractAsEmployee(dto: Parameters<ContractsService['signContract']>[0] & { employeeId: string }) {
+    const contract = await this.contractRepo.findOne({ where: { id: dto.contractId } });
+    if (!contract) throw new NotFoundException('Contrato no encontrado');
+    // Auditoría de seguridad (GoodsHabits, Fase 3 — Firma electrónica, Falta 4):
+    // signContract() nunca validó dueño porque solo lo llamaba RH (admin, supervisando o
+    // firmando en nombre de). Expuesto al Portal, un empleado no debe poder firmar el
+    // contrato de otro cambiando el :id en la URL.
+    if (contract.employeeId !== dto.employeeId) {
+      throw new ForbiddenException('No puedes firmar el contrato de otro empleado');
+    }
+    return this.signContract(dto);
+  }
+
+  async getEvidencePdfForEmployee(contractId: string, employeeId: string) {
+    const contract = await this.contractRepo.findOne({ where: { id: contractId } });
+    if (!contract) throw new NotFoundException('Contrato no encontrado');
+    if (contract.employeeId !== employeeId) {
+      throw new ForbiddenException('No puedes ver la constancia de firma de otro empleado');
+    }
+    return this.getEvidencePdf(contractId);
   }
 }

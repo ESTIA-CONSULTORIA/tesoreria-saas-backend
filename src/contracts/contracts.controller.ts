@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Post, Query, Request, Headers } from '@nestjs/common';
+import { Body, Controller, Delete, Get, NotFoundException, Param, Post, Query, Request, Headers } from '@nestjs/common';
 import { ContractsService } from './contracts.service';
 import { Modulo } from '../auth/modulo.decorator';
 
@@ -95,5 +95,54 @@ export class ContractsController {
   @Get(':id/pdf')
   getContractPdf(@Param('id') id: string) {
     return this.contractsService.getContractPdf(id);
+  }
+
+  @Get(':id/evidence')
+  getEvidencePdf(@Param('id') id: string) {
+    return this.contractsService.getEvidencePdf(id);
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // Portal del empleado — Fase 3, Firma electrónica
+  // ═══════════════════════════════════════════════════════════════
+
+  @Get('portal/pending')
+  async getPortalContracts(@Request() req: any) {
+    const employeeId = await this.contractsService.resolveEmployeeIdFromUser(req?.user?.id);
+    if (!employeeId) return [];
+    return this.contractsService.getPortalContracts(employeeId);
+  }
+
+  @Post('portal/:id/verify-ine')
+  async verifyIne(
+    @Param('id') _contractId: string,
+    @Body() body: { ineFrontBase64: string; tipo?: string },
+    @Request() req: any,
+  ) {
+    const employeeId = await this.contractsService.resolveEmployeeIdFromUser(req?.user?.id);
+    if (!employeeId) throw new NotFoundException('Empleado no encontrado');
+    return this.contractsService.verifyIneForEmployee(employeeId, body.ineFrontBase64, body.tipo);
+  }
+
+  // Auditoría de seguridad (GoodsHabits, Fase 3 — Firma electrónica): employeeId se
+  // resuelve del JWT del Portal (req.user.id → Employee.userId), nunca del body — un
+  // empleado no puede mandar el employeeId de alguien más para firmar en su nombre.
+  @Post('portal/:id/sign')
+  async signContractAsEmployee(
+    @Param('id') contractId: string,
+    @Body() body: any,
+    @Request() req: any,
+  ) {
+    const employeeId = await this.contractsService.resolveEmployeeIdFromUser(req?.user?.id);
+    if (!employeeId) throw new NotFoundException('Empleado no encontrado');
+    const ip = req?.ip || req?.headers?.['x-forwarded-for'] || 'N/D';
+    return this.contractsService.signContractAsEmployee({ ...body, contractId, ip, employeeId });
+  }
+
+  @Get('portal/:id/evidence')
+  async getPortalEvidence(@Param('id') id: string, @Request() req: any) {
+    const employeeId = await this.contractsService.resolveEmployeeIdFromUser(req?.user?.id);
+    if (!employeeId) throw new NotFoundException('Empleado no encontrado');
+    return this.contractsService.getEvidencePdfForEmployee(id, employeeId);
   }
 }

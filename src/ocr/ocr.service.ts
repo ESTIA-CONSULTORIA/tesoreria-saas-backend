@@ -320,4 +320,27 @@ export class OcrService {
 
     return fields;
   }
+
+  // Auditoría de producto (GoodsHabits, Fase 3 — Firma electrónica): extractHrFields()
+  // hoy solo alimenta el flujo de RH capturando un expediente nuevo (llenar Employee desde
+  // el OCR). Firma electrónica necesita lo inverso — el empleado ya tiene expediente, sube
+  // su INE por el Portal, y hay que COMPARAR lo extraído contra lo que ya está guardado, no
+  // sobreescribirlo. Reutiliza extractHrFields() al 100%, esto solo compara.
+  compareToEmployee(
+    extracted: Record<string, string>,
+    employee: Record<string, any>,
+  ): { field: string; expected: string; found: string; match: boolean }[] {
+    // Campos con suficiente señal como para bloquear la firma si no coinciden — nombre y
+    // domicilio varían demasiado en formato/abreviación entre el expediente y un OCR real
+    // como para compararlos con igualdad exacta sin generar falsos negativos constantes.
+    const comparable = ['curp', 'rfc', 'numeroIne', 'fechaNacimiento'];
+
+    return comparable
+      .filter((field) => extracted[field])
+      .map((field) => {
+        const found = String(extracted[field]).trim().toUpperCase();
+        const expected = String(employee[field] ?? '').trim().toUpperCase();
+        return { field, expected, found, match: expected.length > 0 && expected === found };
+      });
+  }
 }

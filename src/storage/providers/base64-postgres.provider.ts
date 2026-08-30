@@ -17,7 +17,13 @@ export class Base64PostgresProvider implements StorageProvider {
   }
 
   async get(providerRef: string): Promise<RetrievedFile> {
-    return { data: Buffer.from(providerRef, 'base64') };
+    // Auditoría de producto (GoodsHabits, Fase 3 — Firma electrónica, Falta 6): defensa
+    // contra filas históricas (migradas antes de este refactor) que guardaron el data-URL
+    // completo del frontend (canvas.toDataURL()/FileReader.readAsDataURL()) en vez de
+    // base64 puro — despoja el prefijo si aparece, en vez de decodificar basura en
+    // silencio. toBase64() ya evita que esto pase para escritura nueva; esto es solo para
+    // lo heredado que no se limpió en la migración de datos.
+    return { data: Buffer.from(this.toBase64(providerRef), 'base64') };
   }
 
   async delete(_providerRef: string): Promise<void> {
