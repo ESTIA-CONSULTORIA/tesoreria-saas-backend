@@ -2930,6 +2930,12 @@ export async function seedDatabase(dataSource: DataSource) {
     // DeliveryIngestService.ingest() pone en cuarentena cualquier pedido de un tenant sin
     // este código activo en tenant_modules (ver quarantine() ahí).
     { code: 'delivery',           name: 'Delivery (Agregadores)', category: 'operaciones', isAddon: true,  defaultPrice: 350 },
+    // Auditoría de producto (GoodsHabits, Fase 3 — Nómina): dos addons independientes, NO
+    // excluyentes entre sí — mismo patrón que 'delivery' arriba. Ninguno amarrado a un plan
+    // fijo; tenant_modules (vía activateModule()) decide qué tenant los tiene, sin importar
+    // el plan contratado.
+    { code: 'dispersion_bancaria', name: 'Dispersión de Nómina (Bancos ERP)', category: 'rh', isAddon: true, defaultPrice: 150 },
+    { code: 'dispersion_layout',   name: 'Dispersión de Nómina (Layout Bancario)', category: 'rh', isAddon: true, defaultPrice: 200 },
   ];
 
   try {

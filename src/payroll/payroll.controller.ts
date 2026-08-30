@@ -63,6 +63,43 @@ export class PayrollController {
     return this.payrollService.confirmPayment(id, body.bankId, tenantId);
   }
 
+  // Auditoría de producto (GoodsHabits, Fase 3 — Nómina): addon 'dispersion_bancaria' —
+  // NO amarrado a un plan fijo, tenant_modules decide vía activateModule() (mismo patrón
+  // que 'delivery'). @Modulo() a nivel de método sobreescribe el 'rh' de la clase.
+  @Modulo('dispersion_bancaria')
+  @Put('runs/:id/confirm-payment-per-employee')
+  confirmPaymentPerEmployee(
+    @Param('id') id: string,
+    @Body() body: { bankId: string },
+    @Headers('x-tenant-id') headerTenantId?: string,
+    @Request() req?: any,
+  ) {
+    const tenantId = req?.user?.tenantId || headerTenantId;
+    return this.payrollService.confirmPaymentPerEmployee(id, body.bankId, tenantId);
+  }
+
+  // Addon 'dispersion_layout' — genera el archivo, no cambia el status de la corrida.
+  @Modulo('dispersion_layout')
+  @Get('runs/:id/dispersion-file')
+  generateLayoutFile(@Param('id') id: string, @Query('bankCode') bankCode: string) {
+    return this.payrollService.generateLayoutFile(id, bankCode || 'GENERIC');
+  }
+
+  @Get('dispersion/banks')
+  getRegisteredBanks() {
+    return this.payrollService.getRegisteredBanks();
+  }
+
+  @Post('runs/:id/generate-receipts')
+  generateReceipts(
+    @Param('id') id: string,
+    @Headers('x-tenant-id') headerTenantId?: string,
+    @Request() req?: any,
+  ) {
+    const tenantId = req?.user?.tenantId || headerTenantId;
+    return this.payrollService.generateReceipts(id, tenantId);
+  }
+
   @Put('entries/:id')
   updatePayrollEntry(
     @Param('id') id: string,
