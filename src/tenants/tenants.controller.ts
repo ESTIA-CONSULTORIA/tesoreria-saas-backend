@@ -47,10 +47,21 @@ export class TenantsController {
     return this.tenantsService.findAll();
   }
 
+  // Auditoría de seguridad (Hallazgo 1c, GoodsHabits): este endpoint es público (lo usan
+  // LoginPage.tsx / CorteCajaLite.tsx / ExecutiveLogin.tsx para resolver un slug antes de
+  // tener sesión) y devolvía el registro COMPLETO del tenant — rfc, taxId, phone,
+  // billingCycle, plan — a cualquiera que conociera o adivinara el nombre/slug. Se limita
+  // el shape a lo que los 3 consumidores realmente usan: id (para armar el login) y
+  // legalName/tradeName (solo para mostrar el nombre de la empresa en pantalla). Nada
+  // fiscal ni de facturación sale de aquí. El entity no tiene un campo "tenantId" separado
+  // de "id" — el propio id ES el tenantId.
   @Public()
   @Get('resolve/:slug')
-  resolveBySlug(@Param('slug') slug: string) {
-    return this.tenantsService.findBySlug(slug);
+  async resolveBySlug(@Param('slug') slug: string) {
+    const tenant = await this.tenantsService.findBySlug(slug);
+    if (!tenant) return null;
+    const { id, legalName, tradeName } = tenant;
+    return { id, legalName, tradeName };
   }
 
   @Get(':id')

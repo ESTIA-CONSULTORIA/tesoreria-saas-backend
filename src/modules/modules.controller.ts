@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Delete, Param, Body, Request, UseGuards } from '@nestjs/common';
+import { Controller, ForbiddenException, Get, Post, Delete, Param, Body, Request, UseGuards } from '@nestjs/common';
 import { ModulesService } from './modules.service';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
@@ -12,8 +12,16 @@ export class ModulesController {
     return this.service.getAllModules();
   }
 
+  // Auditoría de seguridad (Hallazgo 1a, GoodsHabits): no validaba que el tenantId de la URL
+  // fuera el del usuario autenticado — cualquier usuario podía consultar qué módulos tiene
+  // activos OTRO tenant con solo cambiar el parámetro. Solo lectura, pero es una fuga de
+  // información de negocio ajeno. SOPORTE sí puede consultar cualquier tenant (panel de
+  // soporte lo necesita); el resto solo el propio.
   @Get('tenant/:tenantId')
-  getTenantModules(@Param('tenantId') tenantId: string) {
+  getTenantModules(@Param('tenantId') tenantId: string, @Request() req: any) {
+    if (req.user?.roleCode !== 'SOPORTE' && req.user?.tenantId !== tenantId) {
+      throw new ForbiddenException('No tienes permiso para consultar los módulos de otro tenant');
+    }
     return this.service.getTenantModules(tenantId);
   }
 
