@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, InternalServerErrorException, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { Repository, DataSource, In } from 'typeorm';
@@ -478,7 +478,7 @@ export class PayrollService {
         }
       }
 
-      await docRepo.save(
+      const savedDoc = await docRepo.save(
         docRepo.create({
           employeeId: emp.id,
           tipo: 'RECIBO_NOMINA',
@@ -487,6 +487,23 @@ export class PayrollService {
           url,
         }),
       );
+
+      // Auditoría de producto (GoodsHabits): hallazgo real confirmado en producción — este
+      // endpoint respondió 200 con receiptsGenerated:1 (y el PDF de lista de raya se generó
+      // con datos correctos) pero la fila nunca quedó en hr_document. Descartado a nivel de
+      // código: no existe ningún camino donde receiptsGenerated++ corra sin que el
+      // docRepo.save() de arriba se complete sin lanzar (JS/await lo garantiza) — la causa
+      // raíz real sigue sin identificarse (posible STORAGE_PROVIDER/entorno de producción,
+      // bajo investigación aparte). Mientras tanto, esta relectura convierte el modo de
+      // falla de silencioso (200 engañoso) a ruidoso (500 inmediato) — nunca más se debe
+      // reportar éxito sin confirmar que la fila realmente quedó ahí.
+      const verify = await docRepo.findOne({ where: { id: savedDoc.id } });
+      if (!verify) {
+        throw new InternalServerErrorException(
+          `El recibo de nómina para el empleado ${emp.id} no se persistió en hr_document pese a que docRepo.save() no lanzó error (documentId esperado: ${savedDoc.id}, corrida ${runId}).`,
+        );
+      }
+
       receiptsGenerated++;
     }
 
