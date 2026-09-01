@@ -1,4 +1,4 @@
-import { ForbiddenException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository, InjectDataSource } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
 import { ContractTemplate } from './entities/contract-template.entity';
@@ -527,6 +527,42 @@ export class ContractsService {
     if (contract.employeeId !== dto.employeeId) {
       throw new ForbiddenException('No puedes firmar el contrato de otro empleado');
     }
+
+    // Auditoría de seguridad (GoodsHabits, Fase 3 — Firma electrónica, Punto 4c): verify-ine
+    // (llamado por el wizard del Portal ANTES de este endpoint, ver contracts.controller.ts
+    // POST portal/:id/verify-ine) nunca dejó rastro server-side — un cliente que se saltara
+    // esa llamada, o la llamara e ignorara un mismatch, firmaba igual. Se re-corre AQUÍ, en
+    // el único punto que de verdad importa (el momento de firmar), con el mismo
+    // ineFrontBase64 que ya viaja en el body — nunca se confía en que el frontend haya
+    // bloqueado nada, mismo criterio que el chequeo de dueño de arriba.
+    //
+    // Dos causas de bloqueo, con código distinto porque el remedio es distinto:
+    // IDENTITY_UNVERIFIED (no llegó foto, o el OCR no pudo leer ningún campo comparable) →
+    // "vuelve a intentar con otra foto", probablemente un problema de imagen, no de
+    // identidad. IDENTITY_MISMATCH (sí se comparó, y no coincide) → "contacta a RH", es una
+    // discrepancia real que alguien humano debe resolver. Decisión de producto confirmada:
+    // comparison vacío BLOQUEA (no se firma "porque no se pudo verificar nada") — un KYC que
+    // deja pasar cuando no verificó nada no está cumpliendo su función.
+    if (!dto.ineFrontBase64) {
+      throw new BadRequestException({
+        code: 'IDENTITY_UNVERIFIED',
+        message: 'No se puede firmar sin verificar tu identidad — falta la foto de tu INE.',
+      });
+    }
+    const { comparison, allMatch } = await this.verifyIneForEmployee(dto.employeeId, dto.ineFrontBase64);
+    if (comparison.length === 0) {
+      throw new BadRequestException({
+        code: 'IDENTITY_UNVERIFIED',
+        message: 'No pudimos verificar tu identidad a partir de la foto de tu INE. Vuelve a intentar con mejor luz y enfoque.',
+      });
+    }
+    if (!allMatch) {
+      throw new BadRequestException({
+        code: 'IDENTITY_MISMATCH',
+        message: 'Los datos de tu INE no coinciden con tu expediente. Contacta a Recursos Humanos antes de continuar.',
+      });
+    }
+
     return this.signContract(dto);
   }
 
