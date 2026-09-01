@@ -138,44 +138,84 @@ export class HrService {
   }
 
   // --- Documents ---
+  //
+  // Auditoría de producto (GoodsHabits, Fase 3 — Storage, Frente 2): HrDocument ya no
+  // guarda fileData/url en sus propias columnas — viven en StoredFile, ownerType:
+  // 'hr_document', ownerId: doc.id, role: 'file' (constante, ver
+  // MigrateHrDocumentFilesToStoredFile). Todo lo que antes ramificaba por
+  // STORAGE_PROVIDER === 'cloudinary' ahora pasa siempre por storageService.upload(), que ya
+  // decide el proveedor internamente — un solo camino de escritura para ambos providers.
 
-  findDocsByEmployee(employeeId: string, tenantId?: string): Promise<HrDocument[]> {
-    return this.docRepo.find({ where: { employeeId }, order: { uploadedAt: 'DESC' } });
+  // Adjunta a cada HrDocument su contenido resuelto (url o fileData como data-URI) en una
+  // sola query batch — mantiene el mismo contrato HTTP que ya consumen HRPage.tsx y
+  // EmployeeDocuments.tsx (doc.url / doc.fileData) sin un round-trip a StoredFile por
+  // documento.
+  private async attachContent(docs: HrDocument[]): Promise<(HrDocument & { url?: string; fileData?: string })[]> {
+    if (!docs.length) return docs;
+    const contentByDoc = await this.storageService.getContentByOwners(
+      'hr_document',
+      docs.map((d) => d.id),
+      'file',
+    );
+    return docs.map((doc) => {
+      const content = contentByDoc.get(doc.id);
+      if (!content) return doc;
+      if (content.url) return { ...doc, url: content.url };
+      if (content.base64) {
+        return { ...doc, fileData: `data:${content.mimeType || 'application/octet-stream'};base64,${content.base64}` };
+      }
+      return doc;
+    });
+  }
+
+  async findDocsByEmployee(employeeId: string, tenantId?: string): Promise<HrDocument[]> {
+    const docs = await this.docRepo.find({ where: { employeeId }, order: { uploadedAt: 'DESC' } });
+    return this.attachContent(docs);
+  }
+
+  private mimeTypeFromDataUrl(value: string): string | undefined {
+    return value.match(/^data:([^;]+);base64,/)?.[1];
   }
 
   async addDocument(employeeId: string, data: any): Promise<HrDocument> {
-    let url = '';
-    let fileData = data.fileData ?? null;
+    // fileData/url ya no son columnas de HrDocument — se destructuran fuera para no
+    // intentar guardarlas por accidente vía el spread; fileData (si viene) se sube aparte.
+    const { fileData, url: _ignoredUrl, ...rest } = data;
+    // Tipado explícito: docRepo.create() con un objeto `any` puro resuelve al overload de
+    // array (create(entityLikeArray): T[]) en vez del de un solo registro — mismo problema
+    // que ya resolvía el `as unknown as Promise<HrDocument>` de la versión anterior de este
+    // método.
+    const docData: Partial<HrDocument> = { ...rest, employeeId };
+    const doc = await this.docRepo.save(this.docRepo.create(docData));
 
-    if (data.fileData && process.env.STORAGE_PROVIDER === 'cloudinary') {
-      try {
-        const folder = `estia/employees/${employeeId}/documents`;
-        const publicId = `${data.tipo || 'doc'}_${Date.now()}`;
-        const result = await this.storageService.uploadBase64(data.fileData, folder, publicId);
-        url = result.url;
-        fileData = null;
-      } catch (e) {
-        console.error('Error uploading to Cloudinary, falling back to base64:', e);
-      }
+    if (fileData) {
+      const emp = await this.empRepo.findOne({ where: { id: employeeId } });
+      await this.storageService.upload({
+        tenantId: emp?.tenantId ?? '',
+        ownerType: 'hr_document',
+        ownerId: doc.id,
+        role: 'file',
+        data: fileData,
+        mimeType: this.mimeTypeFromDataUrl(fileData),
+        folder: `estia/employees/${employeeId}/documents`,
+        fileName: `${data.tipo || 'doc'}_${doc.id}`,
+      });
     }
 
-    const doc = this.docRepo.create({ ...data, employeeId, fileData: fileData ?? undefined, url });
-    return this.docRepo.save(doc) as unknown as Promise<HrDocument>;
+    return doc;
   }
 
   async removeDocument(id: string): Promise<void> {
-    const doc = await this.docRepo.findOne({ where: { id } });
-    if (doc?.url && process.env.STORAGE_PROVIDER === 'cloudinary') {
+    const file = await this.storageService.getOneByOwner('hr_document', id, 'file');
+    if (file) {
       try {
-        const urlParts = doc.url.split('/');
-        const uploadIndex = urlParts.indexOf('upload');
-        if (uploadIndex !== -1) {
-          const publicIdWithExt = urlParts.slice(uploadIndex + 2).join('/');
-          const publicId = publicIdWithExt.replace(/\.[^/.]+$/, '');
-          await this.storageService.deleteFile(publicId);
-        }
+        // Best-effort: si el proveedor externo (Cloudinary) falla al borrar, no se bloquea
+        // el borrado del documento — mismo criterio que el try/catch que reemplaza (antes
+        // envolvía la llamada a Cloudinary directo). Puede dejar una fila stored_file
+        // huérfana en ese caso raro; se prefiere eso a un 500 en un borrado normal.
+        await this.storageService.deleteStoredFile(file.id);
       } catch (e) {
-        console.error('Error deleting from Cloudinary:', e);
+        console.error('Error eliminando archivo de documento de RH:', e);
       }
     }
     await this.docRepo.delete(id);
@@ -187,10 +227,23 @@ export class HrService {
       where: { employeeId: In(employeeIds), tipo: 'FOTO' },
       order: { uploadedAt: 'DESC' },
     });
+    const contentByDoc = await this.storageService.getContentByOwners(
+      'hr_document',
+      docs.map((d) => d.id),
+      'file',
+    );
     const result: Record<string, string> = {};
     for (const doc of docs) {
-      if (!result[doc.employeeId] && doc.fileData) {
-        result[doc.employeeId] = doc.fileData;
+      if (result[doc.employeeId]) continue;
+      const content = contentByDoc.get(doc.id);
+      if (!content) continue;
+      // Antes solo fileData (base64) producía avatar — una FOTO subida vía Cloudinary nunca
+      // se mostraba. content.url funciona igual de bien como src de <img>, así que se
+      // atiende también ese caso en vez de mantener el hueco.
+      if (content.base64) {
+        result[doc.employeeId] = `data:${content.mimeType || 'image/jpeg'};base64,${content.base64}`;
+      } else if (content.url) {
+        result[doc.employeeId] = content.url;
       }
     }
     return result;
@@ -241,32 +294,26 @@ export class HrService {
     console.log('=== OCR RAW TEXT END ===');
     const extractedFields = this.ocrService.extractHrFields(rawText, tipo);
 
-    let storedFileData: string | null = fileData;
-    let url = '';
-
-    if (process.env.STORAGE_PROVIDER === 'cloudinary') {
-      try {
-        const folder = `estia/employees/${employeeId}/documents`;
-        const publicId = `${tipo}_${Date.now()}`;
-        const result = await this.storageService.uploadBase64(fileData, folder, publicId);
-        url = result.url;
-        storedFileData = null;
-      } catch (e) {
-        console.error('Error uploading to Cloudinary:', e);
-      }
-    }
-
-    const doc = await (this.docRepo.save(
+    const doc = await this.docRepo.save(
       this.docRepo.create({
         employeeId,
         tipo,
         nombre: tipo,
-        fileData: storedFileData ?? undefined,
-        url,
         ocrExtracted: extractedFields,
         ocrConfirmed: false,
       }),
-    ) as Promise<HrDocument>);
+    );
+
+    await this.storageService.upload({
+      tenantId: emp.tenantId ?? '',
+      ownerType: 'hr_document',
+      ownerId: doc.id,
+      role: 'file',
+      data: fileData,
+      mimeType: mimetype,
+      folder: `estia/employees/${employeeId}/documents`,
+      fileName: `${tipo}_${doc.id}`,
+    });
 
     return { documentId: doc.id, extractedFields };
   }

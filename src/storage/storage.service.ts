@@ -1,7 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { v2 as cloudinary } from 'cloudinary';
+import { In, Repository } from 'typeorm';
 import { StoredFile } from './entities/stored-file.entity';
 import { Base64PostgresProvider } from './providers/base64-postgres.provider';
 import { CloudinaryProvider } from './providers/cloudinary.provider';
@@ -14,17 +13,16 @@ interface UploadFileInput extends UploadInput {
   role: string;
 }
 
-// Auditoría de producto (GoodsHabits, Fase 3): fachada — todo caller nuevo (Contratos, y
-// luego Nómina/Firma) pasa por upload()/getContent()/deleteStoredFile(), nunca por el
-// proveedor concreto ni por base64/Cloudinary directo. El proveedor activo se decide una
-// sola vez aquí, por STORAGE_PROVIDER — cambiarlo a S3 el día de mañana es agregar una
-// clase que implemente StorageProvider y sumarla al switch de abajo, sin tocar
-// Contratos/Nómina/Firma.
+// Auditoría de producto (GoodsHabits, Fase 3): fachada — todo caller (Contratos, Nómina,
+// Firma, RH) pasa por upload()/getContent()/deleteStoredFile(), nunca por el proveedor
+// concreto ni por base64/Cloudinary directo. El proveedor activo se decide una sola vez
+// aquí, por STORAGE_PROVIDER — cambiarlo a S3 el día de mañana es agregar una clase que
+// implemente StorageProvider y sumarla al switch de abajo, sin tocar ningún caller.
 //
-// Los métodos uploadBase64()/deleteFile()/getSignedUrl() al final del archivo son el API
-// ANTERIOR a este refactor — se mantienen con el mismo nombre, firma y comportamiento
-// porque hr.service.ts (expedientes de RH, todavía sin migrar a StoredFile) los sigue
-// llamando. No se tocan en este frente.
+// El API legacy (uploadBase64()/deleteFile()/getSignedUrl()) que vivía al final de este
+// archivo se retiró junto con la migración de HrDocument (Frente 2, ver
+// MigrateHrDocumentFilesToStoredFile) — era el último caller que quedaba sin pasar por
+// upload()/getContent().
 @Injectable()
 export class StorageService {
   private readonly provider: StorageProvider;
@@ -68,6 +66,33 @@ export class StorageService {
     return { base64: content.data?.toString('base64'), url: content.url, mimeType: file.mimeType };
   }
 
+  // Auditoría de producto (GoodsHabits, Fase 3 — Storage, Frente 2 / HrDocument): versión en
+  // lote de getContent() — para listados (findDocsByEmployee, getEmployeePhotos) que antes
+  // leían fileData/url directo de la fila y ahora necesitan resolverlos vía StoredFile sin
+  // caer en un round-trip a BD por documento. Una sola query con IN(...); asume relación 1:1
+  // ownerId↔role igual que el resto de este frente (role='file' constante para HrDocument),
+  // así que devuelve como mucho un resultado por ownerId — si algún ownerId tuviera más de
+  // una fila para ese role, se queda con la última que procese el Map.
+  async getContentByOwners(
+    ownerType: string,
+    ownerIds: string[],
+    role: string,
+  ): Promise<Map<string, { base64?: string; url?: string; mimeType?: string }>> {
+    const result = new Map<string, { base64?: string; url?: string; mimeType?: string }>();
+    if (!ownerIds.length) return result;
+
+    const files = await this.fileRepo.find({ where: { ownerType, ownerId: In(ownerIds), role } });
+    for (const file of files) {
+      if (file.url) {
+        result.set(file.ownerId, { url: file.url, mimeType: file.mimeType });
+        continue;
+      }
+      const content = await this.providerFor(file.provider).get(file.providerRef);
+      result.set(file.ownerId, { base64: content.data?.toString('base64'), url: content.url, mimeType: file.mimeType });
+    }
+    return result;
+  }
+
   getByOwner(ownerType: string, ownerId: string, role?: string): Promise<StoredFile[]> {
     const where: any = { ownerType, ownerId };
     if (role) where.role = role;
@@ -83,48 +108,5 @@ export class StorageService {
     if (!file) return;
     await this.providerFor(file.provider).delete(file.providerRef);
     await this.fileRepo.delete(fileId);
-  }
-
-  // ═══════════════════════════════════════════════════════════════
-  // API legacy — sin cambios de comportamiento, ver nota arriba.
-  // ═══════════════════════════════════════════════════════════════
-
-  async uploadBase64(
-    base64: string,
-    folder: string,
-    publicId?: string,
-  ): Promise<{ url: string; publicId: string }> {
-    const provider = process.env.STORAGE_PROVIDER || 'base64';
-
-    if (provider === 'cloudinary') {
-      const dataUri = base64.startsWith('data:') ? base64 : `data:application/octet-stream;base64,${base64}`;
-      const result = await cloudinary.uploader.upload(dataUri, {
-        folder,
-        public_id: publicId,
-        resource_type: 'auto',
-      });
-      return { url: result.secure_url, publicId: result.public_id };
-    }
-
-    return { url: '', publicId: publicId || '' };
-  }
-
-  async deleteFile(publicId: string): Promise<void> {
-    const provider = process.env.STORAGE_PROVIDER || 'base64';
-    if (provider === 'cloudinary') {
-      await cloudinary.uploader.destroy(publicId, { resource_type: 'auto' });
-    }
-  }
-
-  async getSignedUrl(publicId: string, expiresInSeconds = 3600): Promise<string> {
-    const provider = process.env.STORAGE_PROVIDER || 'base64';
-    if (provider === 'cloudinary') {
-      return cloudinary.url(publicId, {
-        sign_url: true,
-        expires_at: Math.floor(Date.now() / 1000) + expiresInSeconds,
-        resource_type: 'auto',
-      });
-    }
-    return '';
   }
 }

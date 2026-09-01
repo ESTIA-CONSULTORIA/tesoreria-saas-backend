@@ -432,9 +432,10 @@ export class PayrollService {
   // PayrollPrint.tsx: montos, conceptos libres, sin retenciones calculadas ni folio fiscal.
   // Se guarda como HrDocument (tipo RECIBO_NOMINA) — reutiliza el mecanismo que ya alimenta
   // GET /hr/portal/documents, así que el empleado lo ve en "Mis Documentos" sin tocar esa
-  // pantalla. Se usa el mismo patrón de persistencia que ya tiene HrDocument hoy
-  // (uploadBase64 si Cloudinary, si no fileData directo) — no se migra a StoredFile en este
-  // frente, eso quedó fuera de lo decidido para Contract específicamente.
+  // pantalla. Auditoría de producto (GoodsHabits, Fase 3 — Storage, Frente 2): HrDocument ya
+  // migró a StoredFile (ver MigrateHrDocumentFilesToStoredFile) — esta es la otra mitad de
+  // ese mismo trabajo, así que ahora escribe vía storageService.upload() igual que Contratos,
+  // no queda como la única ruta nueva usando el patrón legacy que se está retirando.
   //
   // El PDF combinado (lista de raya completa) se genera y se devuelve en la respuesta para
   // descarga inmediata del administrador — a propósito NO se guarda como HrDocument de
@@ -465,28 +466,24 @@ export class PayrollService {
 
       const pdfBase64 = await this.buildReceiptPdf(entry, run, emp, company, branch);
 
-      let fileData: string | null = pdfBase64;
-      let url = '';
-      if (process.env.STORAGE_PROVIDER === 'cloudinary') {
-        try {
-          const folder = `estia/employees/${emp.id}/payroll`;
-          const result = await this.storageService.uploadBase64(pdfBase64, folder, `recibo_${entry.id}`);
-          url = result.url;
-          fileData = null;
-        } catch (e) {
-          console.error('Error subiendo recibo a Cloudinary, se guarda en base64:', e);
-        }
-      }
-
       const savedDoc = await docRepo.save(
         docRepo.create({
           employeeId: emp.id,
           tipo: 'RECIBO_NOMINA',
           nombre: `Recibo de nómina ${run.periodStart} al ${run.periodEnd}`,
-          fileData: fileData ?? undefined,
-          url,
         }),
       );
+
+      await this.storageService.upload({
+        tenantId,
+        ownerType: 'hr_document',
+        ownerId: savedDoc.id,
+        role: 'file',
+        data: pdfBase64,
+        mimeType: 'application/pdf',
+        folder: `estia/employees/${emp.id}/payroll`,
+        fileName: `recibo_${entry.id}`,
+      });
 
       // Auditoría de producto (GoodsHabits): hallazgo real confirmado en producción — este
       // endpoint respondió 200 con receiptsGenerated:1 (y el PDF de lista de raya se generó

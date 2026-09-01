@@ -2371,16 +2371,20 @@ export async function seedDatabase(dataSource: DataSource) {
       }
 
       // ─── 3 Documentos por empleado ────────────────────────────────
+      // Auditoría de producto (GoodsHabits, Fase 3 — Storage, Frente 2): HrDocument ya no
+      // tiene columna url (ver MigrateHrDocumentFilesToStoredFile) — estas filas de demo se
+      // crean sin archivo real detrás, mismo criterio que antes (el placeholder
+      // "https://example.com/doc-*.pdf" tampoco apuntaba a un archivo real).
       const docTemplates = [
-        { tipo: 'INE', nombre: 'INE Vigente', notas: 'Copia frontal y trasera', url: 'https://example.com/doc-ine.pdf' },
-        { tipo: 'CURP', nombre: 'CURP Oficial', notas: null, url: 'https://example.com/doc-curp.pdf' },
-        { tipo: 'CONTRATO', nombre: 'Contrato Indefinido', notas: 'Firmado digitalmente', url: 'https://example.com/doc-contrato.pdf' },
+        { tipo: 'INE', nombre: 'INE Vigente', notas: 'Copia frontal y trasera' },
+        { tipo: 'CURP', nombre: 'CURP Oficial', notas: null },
+        { tipo: 'CONTRATO', nombre: 'Contrato Indefinido', notas: 'Firmado digitalmente' },
       ];
       for (const emp of savedEmps) {
         for (const tpl of docTemplates) {
           const existsDoc = await docRepo.findOne({ where: { employeeId: emp.id, tipo: tpl.tipo } });
           if (!existsDoc) {
-            await docRepo.save({ employeeId: emp.id, tipo: tpl.tipo, nombre: tpl.nombre, notas: tpl.notas, url: tpl.url });
+            await docRepo.save({ employeeId: emp.id, tipo: tpl.tipo, nombre: tpl.nombre, notas: tpl.notas });
           }
         }
       }
