@@ -1,6 +1,8 @@
-import { Controller, Get, Post, Put, Delete, Body, Param, Query, Headers, Request } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Body, Param, Query, Headers, Request, UseGuards } from '@nestjs/common';
 import { PurchasesService } from './purchases.service';
 import { Modulo } from '../auth/modulo.decorator';
+import { RolesGuard } from '../auth/roles.guard';
+import { Roles } from '../auth/roles.decorator';
 
 @Controller('purchases')
 @Modulo('compras')
@@ -57,6 +59,14 @@ export class PurchasesController {
     return this.purchasesService.requestCancellation(id, data.motivo, data.userId);
   }
 
+  // Auditoría de seguridad (GoodsHabits, verificación PurchasesPage/useAuthStore, Hallazgo
+  // 1): no tenía ningún guard de rol — cualquier usuario autenticado del tenant con módulo
+  // 'compras' activo podía aprobar una cancelación directo por API, aunque el frontend
+  // (PurchasesPage.tsx) solo muestra el botón "Aprobar" a ADMIN/SOPORTE. Confirmado con
+  // curl real contra producción antes de este cambio: una cuenta GERENTE aprobaba sin
+  // problema. Mismo patrón que el resto de los guards de esta auditoría.
+  @UseGuards(RolesGuard)
+  @Roles('ADMIN', 'SOPORTE')
   @Post('orders/:id/approve-cancellation')
   async approveCancellation(@Param('id') id: string, @Body() data: { userId: string }) {
     return this.purchasesService.approveCancellation(id, data.userId);

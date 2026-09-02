@@ -205,6 +205,12 @@ export class PurchasesService {
 
     try {
       // Crear movimiento de egreso en la cuenta bancaria
+      // Auditoría de seguridad (GoodsHabits, verificación PurchasesPage/useAuthStore,
+      // Hallazgo 2): data.userId (viene de useAuthStore.getState().user?.id en el frontend,
+      // no de un JWT decodificado a mano) antes se recibía y se descartaba — Purchase no
+      // tiene columna para esto y MovementsService.create() no aceptaba el parámetro. Ahora
+      // se persiste en Movement.createdBy, el registro individual del pago — no en Purchase
+      // (una factura puede tener varios pagos parciales de personas distintas).
       await this.movementsService.create(
         data.accountId,
         'EXPENSE',
@@ -212,6 +218,7 @@ export class PurchasesService {
         `Pago factura ${purchase.numero} - ${data.notas || ''}`,
         data.amount,
         data.referencia,
+        data.userId,
       );
     } catch (error: any) {
       throw new Error(`Error al crear movimiento: ${error.message}`);

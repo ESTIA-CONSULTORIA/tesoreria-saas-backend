@@ -21,6 +21,8 @@ export class MovementsService {
     private dataSource: DataSource,
   ) {}
 
+  // createdBy: opcional a propósito — POST /movements directo (MovementsController) todavía
+  // no lo manda, solo PurchasesService.registerPayment() lo pasa hoy (ver Movement.createdBy).
   async create(
     accountId: string,
     type: string,
@@ -28,6 +30,7 @@ export class MovementsService {
     concept: string,
     amount: number,
     reference?: string,
+    createdBy?: string,
   ) {
     const normalizedType =
       type === 'INGRESO' ? 'INCOME' : type === 'EGRESO' ? 'EXPENSE' : type;
@@ -67,6 +70,7 @@ export class MovementsService {
       reference,
       amount: numericAmount,
       status: requiresApproval ? 'PENDING_APPROVAL' : 'APPROVED',
+      createdBy,
     });
 
     return this.movementsRepository.save(movement);
