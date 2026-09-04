@@ -64,7 +64,7 @@ export class SubscriptionsService {
   async createForTenant(tenantId: string, planCode: string, billingCycle = 'monthly') {
     const PRICES: Record<string, number> = {
       LITE_CORTE: 650, LITE_POS: 650,
-      BASIC: 890, PRO: 1490,
+      BASIC: 890, PRO: 1100,
       BUSINESS: 1980, ENTERPRISE: 0,
     };
 
