@@ -70,13 +70,52 @@ export class CostsService {
     return this.insumosRepo.findOne({ where: { id } });
   }
 
+  // Auditoría de seguridad (GoodsHabits, portabilidad Costos standalone): adaptado de
+  // estia-costos-api/src/insumos/insumos.service.ts (InsumosService.calcularCostoUnitario).
+  // Misma fórmula, un solo cambio de nombre: ahí el multiplicador de presentación es
+  // cantidadPresentacion, aquí es factorConversion (ver comentario en insumo.entity.ts sobre
+  // por qué cantidadPresentacion queda deprecado en vez de reusarse).
+  private calcularCostoUnitario(precioCompra: number, factorConversion: number, merma: number): number {
+    const factor = Number(factorConversion) > 0 ? Number(factorConversion) : 1;
+    const denom = factor * (1 - Number(merma || 0) / 100);
+    if (denom <= 0) return 0;
+    return Number(precioCompra) / denom;
+  }
+
   createInsumo(data: Partial<Insumo>) {
-    const insumo = this.insumosRepo.create(data);
+    const payload: Partial<Insumo> = { ...data };
+    // Se recalcula SIEMPRE aquí, nunca se confía en un costoUnitario que llegue del cliente
+    // — pero solo cuando hay precioCompra que convertir. Sin precioCompra (insumo capturado
+    // a mano, sin flujo de compra con presentación) se respeta el costoUnitario tal cual
+    // llegue, por compatibilidad con los insumos que ya existen en producción hoy.
+    if (payload.precioCompra !== undefined && payload.precioCompra !== null) {
+      payload.costoUnitario = this.calcularCostoUnitario(
+        Number(payload.precioCompra),
+        payload.factorConversion !== undefined ? Number(payload.factorConversion) : 1,
+        payload.merma !== undefined ? Number(payload.merma) : 0,
+      );
+    }
+    const insumo = this.insumosRepo.create(payload);
     return this.insumosRepo.save(insumo);
   }
 
   async updateInsumo(id: string, data: Partial<Insumo>) {
-    await this.insumosRepo.update(id, { ...data, updatedAt: new Date() });
+    const existing = await this.insumosRepo.findOne({ where: { id } });
+    const payload: Partial<Insumo> = { ...data, updatedAt: new Date() };
+    // Mismo criterio que createInsumo(), pero mezclado con lo que ya había guardado — un
+    // update que solo cambia factorConversion (sin volver a mandar precioCompra) debe
+    // recalcular igual, usando el precioCompra ya existente en el registro.
+    const precioCompra = payload.precioCompra !== undefined ? payload.precioCompra : existing?.precioCompra;
+    if (precioCompra !== undefined && precioCompra !== null) {
+      const factorConversion = payload.factorConversion !== undefined ? payload.factorConversion : existing?.factorConversion;
+      const merma = payload.merma !== undefined ? payload.merma : existing?.merma;
+      payload.costoUnitario = this.calcularCostoUnitario(
+        Number(precioCompra),
+        factorConversion !== undefined && factorConversion !== null ? Number(factorConversion) : 1,
+        merma !== undefined && merma !== null ? Number(merma) : 0,
+      );
+    }
+    await this.insumosRepo.update(id, payload);
     return this.insumosRepo.findOne({ where: { id } });
   }
 

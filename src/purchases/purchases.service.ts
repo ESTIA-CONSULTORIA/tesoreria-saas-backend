@@ -169,8 +169,15 @@ export class PurchasesService {
         if (item.insumoId && item.cantidad) {
           const insumo = await this.costsService.findOneInsumo(item.insumoId);
           if (insumo) {
+            // Auditoría de seguridad (GoodsHabits, portabilidad Costos standalone):
+            // item.cantidad es la cantidad comprada en la PRESENTACIÓN DE COMPRA (ej. "1"
+            // caja), no en la unidad de consumo del stock — antes se sumaba directo, así que
+            // comprar "1 caja de 24" solo sumaba +1 al stock en vez de +24.
+            // insumo.factorConversion es cuántas unidades de consumo rinde esa presentación
+            // (default 1 para insumos que compran y consumen en la misma unidad, sin caja de
+            // por medio — comportamiento sin cambio para esos).
             await this.costsService.updateInsumo(item.insumoId, {
-              stockActual: Number(insumo.stockActual) + Number(item.cantidad),
+              stockActual: Number(insumo.stockActual) + Number(item.cantidad) * Number(insumo.factorConversion || 1),
             });
           }
         }
