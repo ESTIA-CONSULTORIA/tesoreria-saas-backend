@@ -16,7 +16,7 @@ export class CashiersService {
     private jwtService: JwtService,
   ) {}
 
-  async loginWithNip(nip: string, tenantId: string) {
+  async loginWithNip(nip: string, tenantId?: string) {
     // Auditoría de seguridad (GoodsHabits): antes no filtraba isActive — un cajero
     // desactivado seguía siendo candidato válido en el loop de bcrypt.compare de abajo,
     // autenticando con normalidad si el NIP seguía siendo el correcto. Se filtra en el
