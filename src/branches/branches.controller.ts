@@ -16,7 +16,11 @@ export class BranchesController {
       city?: string;
       state?: string;
     },
+    @Request() req?: any,
   ) {
+    // Auditoría de seguridad (GoodsHabits, hallazgo #2 BUSINESS): tenantId siempre del JWT,
+    // mismo criterio que companies.controller.ts::create().
+    const tenantId = req?.user?.tenantId;
     return this.branchesService.create(
       body.companyId,
       body.code,
@@ -24,6 +28,7 @@ export class BranchesController {
       body.address,
       body.city,
       body.state,
+      tenantId,
     );
   }
 
@@ -38,12 +43,12 @@ export class BranchesController {
 
     // If user has companyId in JWT, use it and ignore everything else
     if (userCompanyId) {
-      return this.branchesService.findByCompany(userCompanyId);
+      return this.branchesService.findByCompany(userCompanyId, tenantId);
     }
 
     // If query param companyId is present, use it
     if (queryCompanyId) {
-      return this.branchesService.findByCompany(queryCompanyId);
+      return this.branchesService.findByCompany(queryCompanyId, tenantId);
     }
 
     // If user has tenantId in JWT, filter by tenant
@@ -53,15 +58,18 @@ export class BranchesController {
 
     // Otherwise, use header if present
     if (headerCompanyId) {
-      return this.branchesService.findByCompany(headerCompanyId);
+      return this.branchesService.findByCompany(headerCompanyId, tenantId);
     }
 
     return this.branchesService.findAll();
   }
 
   @Get('company/:companyId')
-  findByCompany(@Param('companyId') companyId: string) {
-    return this.branchesService.findByCompany(companyId);
+  findByCompany(@Param('companyId') companyId: string, @Request() req?: any) {
+    // Auditoría de seguridad (GoodsHabits, hallazgo #2 BUSINESS): sin esto, cualquier usuario
+    // autenticado podía listar las sucursales de una empresa ajena solo sabiendo su companyId.
+    const tenantId = req?.user?.tenantId;
+    return this.branchesService.findByCompany(companyId, tenantId);
   }
 
   @Patch(':id')
@@ -77,12 +85,15 @@ export class BranchesController {
       state?: string;
       isActive?: boolean;
     },
+    @Request() req?: any,
   ) {
-    return this.branchesService.update(id, body);
+    const tenantId = req?.user?.tenantId;
+    return this.branchesService.update(id, body, tenantId);
   }
 
   @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.branchesService.remove(id);
+  remove(@Param('id') id: string, @Request() req?: any) {
+    const tenantId = req?.user?.tenantId;
+    return this.branchesService.remove(id, tenantId);
   }
 }

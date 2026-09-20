@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
+import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Company } from './entities/company.entity';
 import { Tenant } from '../tenants/entities/tenant.entity';
@@ -50,16 +50,36 @@ export class CompaniesService {
     });
   }
 
-  async update(id: string, data: { legalName?: string; tradeName?: string; taxId?: string; baseCurrency?: string; isActive?: boolean }) {
+  // Auditoría BUSINESS (hallazgo #2, transversal #6): update()/remove()/findOne() no
+  // filtraban por tenant en absoluto — cualquier usuario autenticado de cualquier tenant que
+  // conociera el id de una empresa ajena podía leerla, editarla o borrarla. Mismo criterio
+  // que banks.service.ts::findOne(id, tenantId) — opcional para no romper a SOPORTE
+  // (tenantId null en su JWT).
+  async update(
+    id: string,
+    data: { legalName?: string; tradeName?: string; taxId?: string; baseCurrency?: string; isActive?: boolean },
+    tenantId?: string,
+  ) {
+    const existing = await this.findOne(id, tenantId);
+    if (!existing) {
+      throw new NotFoundException('Empresa no encontrada');
+    }
     await this.companiesRepository.update(id, data);
-    return this.companiesRepository.findOne({ where: { id } });
+    return this.findOne(id, tenantId);
   }
 
-  async remove(id: string) {
+  async remove(id: string, tenantId?: string) {
+    const existing = await this.findOne(id, tenantId);
+    if (!existing) {
+      throw new NotFoundException('Empresa no encontrada');
+    }
     await this.companiesRepository.delete(id);
+    return { deleted: true };
   }
 
-  async findOne(id: string) {
-    return this.companiesRepository.findOne({ where: { id } });
+  async findOne(id: string, tenantId?: string) {
+    return this.companiesRepository.findOne({
+      where: tenantId ? { id, tenantId } : { id },
+    });
   }
 }
