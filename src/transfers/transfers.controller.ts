@@ -52,12 +52,14 @@ export class TransfersController {
     if (!['ADMIN'].includes(roleCode)) {
       throw new ForbiddenException('Solo los administradores pueden autorizar transferencias');
     }
-    return this.transfersService.authorize(id);
+    const tenantId = req.user?.tenantId || req.tenantId;
+    return this.transfersService.authorize(id, tenantId);
   }
 
   @Put(':id/reject')
   @Modulo('tesoreria')
-  reject(@Param('id') id: string, @Body() body: { motivo: string }) {
-    return this.transfersService.reject(id, body.motivo);
+  reject(@Param('id') id: string, @Body() body: { motivo: string }, @Req() req: any) {
+    const tenantId = req.user?.tenantId || req.tenantId;
+    return this.transfersService.reject(id, body.motivo, tenantId);
   }
 }

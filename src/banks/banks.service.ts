@@ -96,18 +96,23 @@ export class BanksService {
       type: string;
       isActive: boolean;
     }>,
+    tenantId?: string,
   ) {
-    const existing = await this.findOne(id);
+    // Auditoría BUSINESS (hallazgo #1, transversal #6): a diferencia de findOne(), esto no
+    // filtraba por tenant — cualquier usuario autenticado podía editar la cuenta bancaria de
+    // OTRO tenant conociendo su id. findOne(id, tenantId) ya soporta el filtro, solo faltaba
+    // pasárselo.
+    const existing = await this.findOne(id, tenantId);
     if (!existing) {
       throw new NotFoundException('Cuenta bancaria no encontrada');
     }
 
     await this.banksRepository.update(id, body);
-    return this.findOne(id);
+    return this.findOne(id, tenantId);
   }
 
-  async remove(id: string) {
-    const existing = await this.findOne(id);
+  async remove(id: string, tenantId?: string) {
+    const existing = await this.findOne(id, tenantId);
     if (!existing) {
       throw new NotFoundException('Cuenta bancaria no encontrada');
     }

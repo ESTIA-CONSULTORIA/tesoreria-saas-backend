@@ -20,7 +20,11 @@ export class MovementsController {
       reference?: string;
       amount: number;
     },
+    @Request() req?: any,
   ) {
+    // Auditoría de seguridad (GoodsHabits, hallazgo #1 BUSINESS): tenantId siempre del JWT,
+    // nunca del body — mismo criterio que users.controller.ts/suppliers.controller.ts.
+    const tenantId = req?.user?.tenantId;
     return this.movementsService.create(
       body.accountId,
       body.type,
@@ -28,6 +32,8 @@ export class MovementsController {
       body.concept,
       body.amount,
       body.reference,
+      undefined,
+      tenantId,
     );
   }
 
@@ -82,8 +88,9 @@ export class MovementsController {
   }
 
   @Get('account/:accountId')
-  findByAccount(@Param('accountId') accountId: string) {
-    return this.movementsService.findByAccount(accountId);
+  findByAccount(@Param('accountId') accountId: string, @Request() req?: any) {
+    const tenantId = req?.user?.tenantId;
+    return this.movementsService.findByAccount(accountId, tenantId);
   }
 
   @Put(':id/approve')
@@ -96,7 +103,8 @@ export class MovementsController {
       throw new ForbiddenException('No tienes permisos para aprobar movimientos');
     }
     const approvedBy = req?.user?.email ?? req?.user?.name ?? 'admin';
-    return this.movementsService.approve(id, approvedBy);
+    const tenantId = req?.user?.tenantId;
+    return this.movementsService.approve(id, approvedBy, tenantId);
   }
 
   @Put(':id/reject')
@@ -110,6 +118,7 @@ export class MovementsController {
       throw new ForbiddenException('No tienes permisos para rechazar movimientos');
     }
     const approvedBy = req?.user?.email ?? req?.user?.name ?? 'admin';
-    return this.movementsService.reject(id, approvedBy, body.reason ?? '');
+    const tenantId = req?.user?.tenantId;
+    return this.movementsService.reject(id, approvedBy, body.reason ?? '', tenantId);
   }
 }

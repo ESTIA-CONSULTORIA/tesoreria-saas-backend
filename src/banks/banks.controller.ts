@@ -85,12 +85,16 @@ export class BanksController {
       type?: string;
       isActive?: boolean;
     },
+    @Request() req?: any,
   ) {
-    return this.banksService.update(id, body);
+    // Auditoría de seguridad (GoodsHabits, hallazgo #1 BUSINESS): tenantId siempre del JWT.
+    const tenantId = req?.user?.tenantId;
+    return this.banksService.update(id, body, tenantId);
   }
 
   @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.banksService.remove(id);
+  remove(@Param('id') id: string, @Request() req?: any) {
+    const tenantId = req?.user?.tenantId;
+    return this.banksService.remove(id, tenantId);
   }
 }

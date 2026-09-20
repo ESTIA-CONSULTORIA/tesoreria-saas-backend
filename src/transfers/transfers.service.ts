@@ -10,8 +10,30 @@ export class TransfersService {
   constructor(
     @InjectRepository(Transfer)
     private transferRepo: Repository<Transfer>,
+    @InjectRepository(Bank)
+    private banksRepo: Repository<Bank>,
     private dataSource: DataSource,
   ) {}
+
+  // Auditoría BUSINESS (hallazgo #1, transversal #6): antes create() no verificaba que
+  // fromAccountId/toAccountId fueran cuentas del tenant que transfiere — un tenant con
+  // 'tesoreria' activo podía mover dinero desde/hacia la cuenta bancaria de OTRO tenant.
+  // Mismo mensaje que "cuenta no encontrada" (más abajo en el flujo INTERNA) para no revelar
+  // si el id existe en otro tenant.
+  private async assertAccountsBelongToTenant(
+    fromAccountId: string,
+    toAccountId: string,
+    tenantId?: string,
+  ): Promise<void> {
+    if (!tenantId) return; // SOPORTE (tenantId null en su JWT) conserva acceso total.
+    const [fromAccount, toAccount] = await Promise.all([
+      this.banksRepo.findOne({ where: { id: fromAccountId, tenantId } }),
+      this.banksRepo.findOne({ where: { id: toAccountId, tenantId } }),
+    ]);
+    if (!fromAccount || !toAccount) {
+      throw new BadRequestException('Cuenta no encontrada');
+    }
+  }
 
   async create(
     fromAccountId: string,
@@ -38,6 +60,8 @@ export class TransfersService {
     if (tipo === 'INTERCOMPAÑIA' && (!empresaOrigenId || !empresaDestinoId)) {
       throw new BadRequestException('Para transferencias intercompañía se requieren las empresas origen y destino');
     }
+
+    await this.assertAccountsBelongToTenant(fromAccountId, toAccountId, tenantId);
 
     if (tipo === 'INTERCOMPAÑIA') {
       // Intercompañía: Create transfer with PENDIENTE status, no movements yet
@@ -120,8 +144,14 @@ export class TransfersService {
     });
   }
 
-  async authorize(id: string) {
-    const transfer = await this.transferRepo.findOne({ where: { id } });
+  async authorize(id: string, tenantId?: string) {
+    // Auditoría BUSINESS (hallazgo #1, transversal #6): antes buscaba la transferencia solo
+    // por id — un ADMIN de cualquier tenant podía autorizar (y mover el dinero real de) una
+    // transferencia INTERCOMPAÑIA de OTRO tenant. Las transferencias INTERCOMPAÑIA siempre
+    // guardan tenantId al crearse (ver create()), así que el filtro es directo.
+    const transfer = await this.transferRepo.findOne({
+      where: tenantId ? { id, tenantId } : { id },
+    });
     if (!transfer) {
       throw new BadRequestException('Transferencia no encontrada');
     }
@@ -185,11 +215,13 @@ export class TransfersService {
     });
   }
 
-  async reject(id: string, motivo: string) {
+  async reject(id: string, motivo: string, tenantId?: string) {
     if (!motivo || !motivo.trim()) {
       throw new BadRequestException('El motivo del rechazo es obligatorio');
     }
-    const transfer = await this.transferRepo.findOne({ where: { id } });
+    const transfer = await this.transferRepo.findOne({
+      where: tenantId ? { id, tenantId } : { id },
+    });
     if (!transfer) {
       throw new BadRequestException('Transferencia no encontrada');
     }
