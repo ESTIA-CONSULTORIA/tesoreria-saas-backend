@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
 import { Invoice, InvoiceStatus, ReconciliationStatus, InvoiceType } from './entities/invoice.entity';
@@ -53,12 +53,26 @@ export class ReconciliationService {
     return this.invoicesRepo.save(invoice);
   }
 
-  async updateInvoiceStatus(id: string, status: ReconciliationStatus) {
+  // Auditoría BUSINESS (hallazgo transversal #6): Invoice sí tiene tenantId propio (a
+  // diferencia de Movement) — mismo mensaje que "no encontrada" a propósito para no revelar
+  // si el id existe en otro tenant. Opcional para no romper a SOPORTE.
+  private async assertOwnedInvoice(id: string, tenantId?: string): Promise<Invoice> {
+    const invoice = await this.invoicesRepo.findOne({ where: { id } });
+    if (!invoice) throw new NotFoundException('Factura no encontrada');
+    if (tenantId && invoice.tenantId !== tenantId) {
+      throw new NotFoundException('Factura no encontrada');
+    }
+    return invoice;
+  }
+
+  async updateInvoiceStatus(id: string, status: ReconciliationStatus, tenantId?: string) {
+    await this.assertOwnedInvoice(id, tenantId);
     await this.invoicesRepo.update(id, { reconciliationStatus: status });
     return this.invoicesRepo.findOne({ where: { id } });
   }
 
-  async markForManualReview(id: string) {
+  async markForManualReview(id: string, tenantId?: string) {
+    await this.assertOwnedInvoice(id, tenantId);
     await this.invoicesRepo.update(id, { needsManualReview: true });
     return this.invoicesRepo.findOne({ where: { id } });
   }
@@ -170,12 +184,27 @@ export class ReconciliationService {
     };
   }
 
-  async deleteInvoice(id: string) {
+  async deleteInvoice(id: string, tenantId?: string) {
+    await this.assertOwnedInvoice(id, tenantId);
     await this.invoicesRepo.delete(id);
     return { deleted: true };
   }
 
-  async manualReconciliation(invoiceId: string, movementId: string) {
+  // Auditoría BUSINESS (hallazgo transversal #6): antes enlazaba cualquier invoiceId con
+  // cualquier movementId sin verificar tenant en ninguno de los dos — se valida que la
+  // factura sea del tenant que concilia, y que el movimiento pertenezca a una cuenta
+  // bancaria de ese mismo tenant (Movement no tiene tenantId propio, se resuelve vía
+  // Bank.tenantId, mismo patrón que movements.service.ts).
+  async manualReconciliation(invoiceId: string, movementId: string, tenantId?: string) {
+    await this.assertOwnedInvoice(invoiceId, tenantId);
+
+    if (tenantId) {
+      const movement = await this.movementsRepo.findOne({ where: { id: movementId } });
+      if (!movement) throw new NotFoundException('Movimiento no encontrado');
+      const account = await this.banksRepo.findOne({ where: { id: movement.accountId, tenantId } });
+      if (!account) throw new NotFoundException('Movimiento no encontrado');
+    }
+
     await this.invoicesRepo.update(invoiceId, {
       movementId,
       reconciliationStatus: ReconciliationStatus.CONCILIADA,
@@ -183,7 +212,14 @@ export class ReconciliationService {
     return this.invoicesRepo.findOne({ where: { id: invoiceId } });
   }
 
-  async getAvailableMovements(bankAccountId?: string) {
+  // Auditoría BUSINESS (hallazgo transversal #6): mismo hueco que
+  // movements.service.ts::findByAccount() antes de su fix — no verificaba que bankAccountId
+  // fuera una cuenta del tenant que consulta.
+  async getAvailableMovements(bankAccountId?: string, tenantId?: string) {
+    if (bankAccountId && tenantId) {
+      const account = await this.banksRepo.findOne({ where: { id: bankAccountId, tenantId } });
+      if (!account) throw new NotFoundException('Cuenta no encontrada');
+    }
     const query = this.movementsRepo.createQueryBuilder('movement');
     if (bankAccountId) {
       query.andWhere('movement.accountId = :accountId', { accountId: bankAccountId });

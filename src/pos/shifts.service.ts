@@ -48,13 +48,17 @@ export class ShiftsService {
     }
   }
 
+  // Auditoría BUSINESS (hallazgo transversal #6): withdrawal()/deposit()/precut()/
+  // closeShift()/findOne()/getSummary() no verificaban que el turno perteneciera al tenant
+  // de quien llama — Shift sí tiene tenantId propio, se reutiliza el mismo mensaje "Turno no
+  // encontrado" que ya usa cada catch, sin cambiar el formato de error existente.
   async withdrawal(id: string, data: {
     monto: number;
     motivo: string;
     autorizadoPor: string;
-  }) {
+  }, tenantId?: string) {
     try {
-      const shift = await this.shiftsRepo.findOne({ where: { id } });
+      const shift = await this.shiftsRepo.findOne({ where: tenantId ? { id, tenantId } : { id } });
       if (!shift) {
         throw new Error('Turno no encontrado');
       }
@@ -79,9 +83,9 @@ export class ShiftsService {
     monto: number;
     origen: string;
     autorizadoPor: string;
-  }) {
+  }, tenantId?: string) {
     try {
-      const shift = await this.shiftsRepo.findOne({ where: { id } });
+      const shift = await this.shiftsRepo.findOne({ where: tenantId ? { id, tenantId } : { id } });
       if (!shift) {
         throw new Error('Turno no encontrado');
       }
@@ -109,9 +113,9 @@ export class ShiftsService {
     creditoDeclarado?: number;
     transferenciaDeclarada?: number;
     valesDeclarados?: number;
-  }) {
+  }, tenantId?: string) {
     try {
-      const shift = await this.shiftsRepo.findOne({ where: { id } });
+      const shift = await this.shiftsRepo.findOne({ where: tenantId ? { id, tenantId } : { id } });
       if (!shift) {
         throw new Error('Turno no encontrado');
       }
@@ -150,11 +154,11 @@ export class ShiftsService {
     efectivoContado?: number;
     notas?: string;
     clientTimestamp?: string;
-  }) {
+  }, tenantId?: string) {
     // Fuera del try, mismo motivo que en openShift.
     const now = resolveEventTimestamp(data.clientTimestamp);
     try {
-      const shift = await this.shiftsRepo.findOne({ where: { id } });
+      const shift = await this.shiftsRepo.findOne({ where: tenantId ? { id, tenantId } : { id } });
       if (!shift) {
         throw new Error('Turno no encontrado');
       }
@@ -288,18 +292,18 @@ export class ShiftsService {
     }
   }
 
-  async findOne(id: string) {
+  async findOne(id: string, tenantId?: string) {
     try {
-      return this.shiftsRepo.findOne({ where: { id } });
+      return this.shiftsRepo.findOne({ where: tenantId ? { id, tenantId } : { id } });
     } catch (error) {
       console.error('ShiftsService.findOne error:', error);
       throw new Error(`Error al obtener turno: ${error.message}`);
     }
   }
 
-  async getSummary(id: string) {
+  async getSummary(id: string, tenantId?: string) {
     try {
-      const shift = await this.shiftsRepo.findOne({ where: { id } });
+      const shift = await this.shiftsRepo.findOne({ where: tenantId ? { id, tenantId } : { id } });
       if (!shift) {
         throw new Error('Turno no encontrado');
       }

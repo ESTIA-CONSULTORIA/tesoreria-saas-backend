@@ -24,27 +24,36 @@ export class SalesController {
   }
 
   @Get(':id')
-  getSale(@Param('id') id: string) {
-    return this.salesService.findOne(id);
+  getSale(@Param('id') id: string, @Request() req?: any) {
+    const tenantId = req?.user?.tenantId;
+    return this.salesService.findOne(id, tenantId);
   }
 
   @Put(':id/pay')
-  paySale(@Param('id') id: string, @Body() data: any) {
-    return this.salesService.pay(id, data);
+  paySale(@Param('id') id: string, @Body() data: any, @Request() req?: any) {
+    const tenantId = req?.user?.tenantId;
+    return this.salesService.pay(id, data, tenantId);
   }
 
   @Put(':id/cancel')
-  cancelSale(@Param('id') id: string, @Body() data: { motivo: string }) {
-    return this.salesService.cancel(id, data.motivo);
+  cancelSale(@Param('id') id: string, @Body() data: { motivo: string }, @Request() req?: any) {
+    const tenantId = req?.user?.tenantId;
+    return this.salesService.cancel(id, data.motivo, tenantId);
   }
 
   @Put(':id/discount')
-  applyDiscount(@Param('id') id: string, @Body() data: { descuento: number; nuevoTotal: number }) {
-    return this.salesService.applyDiscount(id, data.descuento, data.nuevoTotal);
+  applyDiscount(
+    @Param('id') id: string,
+    @Body() data: { descuento: number; nuevoTotal: number },
+    @Request() req?: any,
+  ) {
+    const tenantId = req?.user?.tenantId;
+    return this.salesService.applyDiscount(id, data.descuento, data.nuevoTotal, tenantId);
   }
 
   @Post(':id/return')
-  returnSale(@Param('id') id: string, @Body() data: any) {
-    return this.salesService.returnSale(id, data);
+  returnSale(@Param('id') id: string, @Body() data: any, @Request() req?: any) {
+    const tenantId = req?.user?.tenantId;
+    return this.salesService.returnSale(id, data, tenantId);
   }
 }

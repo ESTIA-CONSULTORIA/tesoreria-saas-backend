@@ -122,7 +122,7 @@ export class UsersService {
   async update(
     id: string,
     data: { name?: string; roleId?: string; roleCode?: string; isActive?: boolean; executivePin?: string; password?: string; branchId?: string },
-    requester?: { roleCode?: string; companyId?: string },
+    requester?: { roleCode?: string; companyId?: string; tenantId?: string },
   ) {
     // companyId sigue sin ser un campo que el body pueda pisar directo — ver
     // updateCompany() (SOPORTE-only, endpoint separado) para reasignar la empresa de un
@@ -132,6 +132,14 @@ export class UsersService {
     // branchId, o cambiarle el rol a GERENTE a un usuario que nunca tuvo companyId/branchId.
     const existing = await this.usersRepository.findOne({ where: { id } });
     if (!existing) throw new NotFoundException(`No existe un usuario con id '${id}'`);
+
+    // Auditoría BUSINESS (hallazgo transversal #6): sin esto, un ADMIN de un tenant podía
+    // cambiar rol/contraseña/estado de un usuario de OTRO tenant si conocía su id. Mismo
+    // mensaje que "no existe" a propósito, para no revelar que el id existe en otro tenant.
+    // Opcional para no romper a SOPORTE (tenantId null en su JWT).
+    if (requester?.tenantId && existing.tenantId !== requester.tenantId) {
+      throw new NotFoundException(`No existe un usuario con id '${id}'`);
+    }
 
     // Hallazgo de producto (GoodsHabits): un ADMIN normal (no SOPORTE) nunca elige empresa
     // a mano — ni al crear (hereda req.user.companyId, ver users.controller.ts::create())
@@ -170,9 +178,12 @@ export class UsersService {
   // branchId que ya no pertenece a la empresa nueva — esa consistencia queda fuera de
   // este chequeo (branchId sigue siendo responsabilidad del admin normal vía update()),
   // esto solo evita dejar companyId vacío en un CAJERO/GERENTE.
-  async updateCompany(id: string, companyId: string) {
+  async updateCompany(id: string, companyId: string, tenantId?: string) {
     const existing = await this.usersRepository.findOne({ where: { id } });
     if (!existing) throw new NotFoundException(`No existe un usuario con id '${id}'`);
+    if (tenantId && existing.tenantId !== tenantId) {
+      throw new NotFoundException(`No existe un usuario con id '${id}'`);
+    }
 
     this.assertCompanyBranchIfRequired(existing.roleCode, companyId, existing.branchId);
 
@@ -180,8 +191,15 @@ export class UsersService {
     return this.usersRepository.findOne({ where: { id } });
   }
 
-  async remove(id: string) {
+  // Auditoría BUSINESS (hallazgo transversal #6): antes borraba por id sin verificar tenant —
+  // cualquier ADMIN autenticado podía borrar un usuario de OTRO tenant conociendo su id.
+  async remove(id: string, tenantId?: string) {
+    if (tenantId) {
+      const existing = await this.usersRepository.findOne({ where: { id, tenantId } });
+      if (!existing) throw new NotFoundException(`No existe un usuario con id '${id}'`);
+    }
     await this.usersRepository.delete(id);
+    return { deleted: true };
   }
 
   private assertCompanyBranchIfRequired(roleCode?: string, companyId?: string, branchId?: string) {

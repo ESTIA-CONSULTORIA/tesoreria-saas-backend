@@ -28,23 +28,27 @@ export class ShiftsController {
   }
 
   @Post(':id/withdrawal')
-  withdrawal(@Param('id') id: string, @Body() data: any) {
-    return this.shiftsService.withdrawal(id, data);
+  withdrawal(@Param('id') id: string, @Body() data: any, @Request() req?: any) {
+    const tenantId = req?.user?.tenantId;
+    return this.shiftsService.withdrawal(id, data, tenantId);
   }
 
   @Post(':id/deposit')
-  deposit(@Param('id') id: string, @Body() data: any) {
-    return this.shiftsService.deposit(id, data);
+  deposit(@Param('id') id: string, @Body() data: any, @Request() req?: any) {
+    const tenantId = req?.user?.tenantId;
+    return this.shiftsService.deposit(id, data, tenantId);
   }
 
   @Post(':id/precut')
-  precut(@Param('id') id: string, @Body() data: any) {
-    return this.shiftsService.precut(id, data);
+  precut(@Param('id') id: string, @Body() data: any, @Request() req?: any) {
+    const tenantId = req?.user?.tenantId;
+    return this.shiftsService.precut(id, data, tenantId);
   }
 
   @Put(':id/close')
-  closeShift(@Param('id') id: string, @Body() data: any) {
-    return this.shiftsService.closeShift(id, data);
+  closeShift(@Param('id') id: string, @Body() data: any, @Request() req?: any) {
+    const tenantId = req?.user?.tenantId;
+    return this.shiftsService.closeShift(id, data, tenantId);
   }
 
   @Get('open')
@@ -68,12 +72,14 @@ export class ShiftsController {
   }
 
   @Get(':id')
-  getShift(@Param('id') id: string) {
-    return this.shiftsService.findOne(id);
+  getShift(@Param('id') id: string, @Request() req?: any) {
+    const tenantId = req?.user?.tenantId;
+    return this.shiftsService.findOne(id, tenantId);
   }
 
   @Get(':id/summary')
-  getShiftSummary(@Param('id') id: string) {
-    return this.shiftsService.getSummary(id);
+  getShiftSummary(@Param('id') id: string, @Request() req?: any) {
+    const tenantId = req?.user?.tenantId;
+    return this.shiftsService.getSummary(id, tenantId);
   }
 }

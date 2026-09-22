@@ -59,7 +59,16 @@ export class UsersController {
   }
 
   @Get('role/:roleCode')
-  findByRole(@Param('roleCode') roleCode: string, @Query('tenantId') tenantId?: string) {
+  findByRole(
+    @Param('roleCode') roleCode: string,
+    @Query('tenantId') queryTenantId?: string,
+    @Request() req?: any,
+  ) {
+    // Auditoría de seguridad (GoodsHabits, hallazgo transversal #6): tomaba el tenantId
+    // directo del query param — un ADMIN de un tenant podía listar los usuarios de un rol
+    // dado de OTRO tenant con solo mandar ?tenantId=<otro>. JWT primero, mismo criterio que
+    // findAll() en este mismo archivo.
+    const tenantId = req?.user?.tenantId || queryTenantId;
     return this.usersService.findByRole(roleCode, tenantId);
   }
 
@@ -86,6 +95,7 @@ export class UsersController {
     return this.usersService.update(id, body, {
       roleCode: req?.user?.roleCode,
       companyId: req?.user?.companyId,
+      tenantId: req?.user?.tenantId,
     });
   }
 
@@ -100,12 +110,15 @@ export class UsersController {
   updateCompany(
     @Param('id') id: string,
     @Body() body: { companyId: string },
+    @Request() req?: any,
   ) {
-    return this.usersService.updateCompany(id, body.companyId);
+    const tenantId = req?.user?.tenantId;
+    return this.usersService.updateCompany(id, body.companyId, tenantId);
   }
 
   @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.usersService.remove(id);
+  remove(@Param('id') id: string, @Request() req?: any) {
+    const tenantId = req?.user?.tenantId;
+    return this.usersService.remove(id, tenantId);
   }
 }

@@ -47,8 +47,9 @@ export class ReconciliationController {
   }
 
   @Get('movements')
-  getAvailableMovements(@Query('bankAccountId') bankAccountId?: string) {
-    return this.reconciliationService.getAvailableMovements(bankAccountId);
+  getAvailableMovements(@Query('bankAccountId') bankAccountId?: string, @Request() req?: any) {
+    const tenantId = req?.user?.tenantId;
+    return this.reconciliationService.getAvailableMovements(bankAccountId, tenantId);
   }
 
   @Post()
@@ -70,29 +71,35 @@ export class ReconciliationController {
   }
 
   @Delete(':id')
-  deleteInvoice(@Param('id') id: string) {
-    return this.reconciliationService.deleteInvoice(id);
+  deleteInvoice(@Param('id') id: string, @Request() req?: any) {
+    const tenantId = req?.user?.tenantId;
+    return this.reconciliationService.deleteInvoice(id, tenantId);
   }
 
   @Put(':id/status')
   updateInvoiceStatus(
     @Param('id') id: string,
     @Body('status') status: ReconciliationStatus,
+    @Request() req?: any,
   ) {
-    return this.reconciliationService.updateInvoiceStatus(id, status);
+    const tenantId = req?.user?.tenantId;
+    return this.reconciliationService.updateInvoiceStatus(id, status, tenantId);
   }
 
   @Put(':id/manual-review')
-  markForManualReview(@Param('id') id: string) {
-    return this.reconciliationService.markForManualReview(id);
+  markForManualReview(@Param('id') id: string, @Request() req?: any) {
+    const tenantId = req?.user?.tenantId;
+    return this.reconciliationService.markForManualReview(id, tenantId);
   }
 
   @Post(':invoiceId/reconcile')
   manualReconciliation(
     @Param('invoiceId') invoiceId: string,
     @Body('movementId') movementId: string,
+    @Request() req?: any,
   ) {
-    return this.reconciliationService.manualReconciliation(invoiceId, movementId);
+    const tenantId = req?.user?.tenantId;
+    return this.reconciliationService.manualReconciliation(invoiceId, movementId, tenantId);
   }
 
   @Post('import')

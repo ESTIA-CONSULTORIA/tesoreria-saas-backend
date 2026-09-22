@@ -404,9 +404,14 @@ export class SalesService {
     }
   }
 
-  async findOne(id: string) {
+  // Auditoría BUSINESS (hallazgo transversal #6): findOne()/pay()/cancel()/applyDiscount()/
+  // returnSale() no verificaban que la venta perteneciera al tenant de quien llama — Sale sí
+  // tiene tenantId propio, así que basta con sumarlo al where. Se reutiliza el mismo mensaje
+  // "Venta no encontrada" que ya usa el catch de cada método (no un 403 nuevo) para no
+  // revelar si el id existe en otro tenant y para no romper el formato de error existente.
+  async findOne(id: string, tenantId?: string) {
     try {
-      return this.salesRepo.findOne({ where: { id } });
+      return this.salesRepo.findOne({ where: tenantId ? { id, tenantId } : { id } });
     } catch (error) {
       console.error('SalesService.findOne error:', error);
       throw new Error(`Error al obtener venta: ${error.message}`);
@@ -417,9 +422,9 @@ export class SalesService {
     formaPago: string;
     montoRecibido: number;
     cambio: number;
-  }) {
+  }, tenantId?: string) {
     try {
-      const sale = await this.salesRepo.findOne({ where: { id } });
+      const sale = await this.salesRepo.findOne({ where: tenantId ? { id, tenantId } : { id } });
       if (!sale) {
         throw new Error('Venta no encontrada');
       }
@@ -441,9 +446,9 @@ export class SalesService {
     }
   }
 
-  async cancel(id: string, motivo: string) {
+  async cancel(id: string, motivo: string, tenantId?: string) {
     try {
-      const sale = await this.salesRepo.findOne({ where: { id } });
+      const sale = await this.salesRepo.findOne({ where: tenantId ? { id, tenantId } : { id } });
       if (!sale) {
         throw new Error('Venta no encontrada');
       }
@@ -463,9 +468,9 @@ export class SalesService {
     }
   }
 
-  async applyDiscount(id: string, descuento: number, nuevoTotal: number) {
+  async applyDiscount(id: string, descuento: number, nuevoTotal: number, tenantId?: string) {
     try {
-      const sale = await this.salesRepo.findOne({ where: { id } });
+      const sale = await this.salesRepo.findOne({ where: tenantId ? { id, tenantId } : { id } });
       if (!sale) {
         throw new Error('Venta no encontrada');
       }
@@ -489,9 +494,9 @@ export class SalesService {
     items: SaleItem[];
     motivo: string;
     montoDevolucion: number;
-  }) {
+  }, tenantId?: string) {
     try {
-      const sale = await this.salesRepo.findOne({ where: { id } });
+      const sale = await this.salesRepo.findOne({ where: tenantId ? { id, tenantId } : { id } });
       if (!sale) {
         throw new Error('Venta no encontrada');
       }
