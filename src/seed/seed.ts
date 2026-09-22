@@ -2956,14 +2956,23 @@ export async function seedDatabase(dataSource: DataSource) {
     }
     console.log('✅ Catálogo de módulos sembrado');
 
-    // Debe coincidir EXACTAMENTE con MODULES_BY_PLAN en src/config/modules-by-plan.config.ts
-    // (fuente única para initFromPlan() y para el fallback legacy). Si se edita uno, editar el otro.
+    // Fuente única real para initFromPlan() y para el fallback legacy: la tabla plan_modules
+    // se siembra desde este objeto (loop más abajo). El comentario anterior mencionaba
+    // MODULES_BY_PLAN en src/config/modules-by-plan.config.ts como si fuera el que hay que
+    // mantener sincronizado — ese archivo era "Sistema 1" y se retiró en Fase 4 (ver
+    // src/config/all-modules.config.ts), así que la referencia ya no aplica.
+    //
+    // Decisión de producto confirmada (Miguel, 2026-09-20): 'pacientes' SE QUITÓ del listado
+    // de BUSINESS a propósito — ver el comentario completo en
+    // src/config/module-giro-requirements.config.ts. Sigue en BASIC sin tocar (fuera del
+    // alcance de esta decisión); si se decide aplicar el mismo criterio ahí, es un cambio
+    // aparte.
     const PLAN_MODULES: Record<string, string[]> = {
       LITE_CORTE: ['dashboard', 'corte_caja_lite', 'pos', 'usuarios', 'empresas', 'sucursales', 'apariencia_logo_only'],
       LITE_POS:   ['dashboard', 'pos_sin_inventario', 'usuarios', 'empresas', 'sucursales', 'apariencia_logo_only'],
       BASIC:      ['dashboard', 'empresas', 'sucursales', 'usuarios', 'configuracion', 'bancos', 'movimientos', 'transferencias', 'pacientes'],
       PRO:        ['dashboard', 'empresas', 'sucursales', 'usuarios', 'configuracion', 'bancos', 'movimientos', 'transferencias', 'reportes', 'tesoreria', 'conciliacion', 'proveedores', 'compras'],
-      BUSINESS:   ['dashboard', 'empresas', 'sucursales', 'usuarios', 'configuracion', 'bancos', 'movimientos', 'transferencias', 'reportes', 'tesoreria', 'conciliacion', 'pos', 'configuracion_pos', 'integraciones', 'proveedores', 'compras', 'costos', 'pacientes'],
+      BUSINESS:   ['dashboard', 'empresas', 'sucursales', 'usuarios', 'configuracion', 'bancos', 'movimientos', 'transferencias', 'reportes', 'tesoreria', 'conciliacion', 'pos', 'configuracion_pos', 'integraciones', 'proveedores', 'compras', 'costos'],
       ENTERPRISE: ['dashboard', 'empresas', 'sucursales', 'usuarios', 'configuracion', 'bancos', 'movimientos', 'transferencias', 'reportes', 'tesoreria', 'conciliacion', 'pos', 'configuracion_pos', 'integraciones', 'rh', 'sat_cfdi', 'white_label', 'proveedores', 'compras', 'costos', 'ocr', 'audit'],
     };
 
