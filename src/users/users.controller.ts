@@ -1,6 +1,5 @@
 import { Body, Controller, Delete, Get, Param, Post, Put, Query, Request, UseGuards } from '@nestjs/common';
 import { UsersService } from './users.service';
-import { Public } from '../auth/public.decorator';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 
@@ -52,11 +51,15 @@ export class UsersController {
     return this.usersService.findAll(tenantId);
   }
 
-  @Get('email/:email')
-  @Public()
-  findByEmail(@Param('email') email: string) {
-    return this.usersService.findByEmail(email);
-  }
+  // Auditoría de seguridad (GoodsHabits, hallazgo #0 BUSINESS): existía como
+  // GET /users/email/:email, @Public() — devolvía crudo el resultado de
+  // UsersService.findByEmail(), que a propósito reincluye el hash de password (vía
+  // .addSelect(['user.password']), ver ese método) porque auth.service.ts lo necesita para
+  // bcrypt.compare() en el login. Cualquiera en internet, sin autenticarse, podía pedir el
+  // hash bcrypt de la contraseña de cualquier cuenta con solo conocer su email. Sin
+  // consumidor real (grep limpio en frontend-core y deliveryhub-pro) — se elimina el
+  // endpoint. UsersService.findByEmail() NO se toca: auth.service.ts lo sigue usando para
+  // login/register/portal-login.
 
   @Get('role/:roleCode')
   findByRole(
