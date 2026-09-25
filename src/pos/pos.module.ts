@@ -36,10 +36,15 @@ import { Insumo } from '../costs/entities/insumo.entity';
 import { User } from '../users/entities/user.entity';
 import { Tenant } from '../tenants/entities/tenant.entity';
 import { TenantSetting } from '../tenant-settings/entities/tenant-setting.entity';
+import { Branch } from '../branches/entities/branch.entity';
+import { Company } from '../companies/entities/company.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([PosConfig, Product, PosCategory, Area, Table, Sale, Shift, Recipe, Insumo, User, CorteField, InsumoAlert, Tenant, TenantSetting]),
+    // Branch/Company agregados para el hallazgo transversal #6 (auditoría BUSINESS):
+    // categories.service.ts y areas.service.ts resuelven tenant vía branchId → Branch →
+    // Company.tenantId, porque PosCategory/Area no tienen tenantId propio.
+    TypeOrmModule.forFeature([PosConfig, Product, PosCategory, Area, Table, Sale, Shift, Recipe, Insumo, User, CorteField, InsumoAlert, Tenant, TenantSetting, Branch, Company]),
     // Mismo secret que AuthModule (JWT_SECRET) — cashiers.service.ts firma/verifica con
     // JwtService en vez del jsonwebtoken crudo que usaba antes de la migración a cookies.
     JwtModule.registerAsync({

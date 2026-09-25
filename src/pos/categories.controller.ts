@@ -14,8 +14,9 @@ export class CategoriesController {
   }
 
   @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.categoriesService.findOne(id);
+  findOne(@Param('id') id: string, @Req() req?: any) {
+    const tenantId = req?.user?.tenantId;
+    return this.categoriesService.findOne(id, tenantId);
   }
 
   @Post()
@@ -24,12 +25,14 @@ export class CategoriesController {
   }
 
   @Put(':id')
-  update(@Param('id') id: string, @Body() data: any) {
-    return this.categoriesService.update(id, data);
+  update(@Param('id') id: string, @Body() data: any, @Req() req?: any) {
+    const tenantId = req?.user?.tenantId;
+    return this.categoriesService.update(id, data, tenantId);
   }
 
   @Delete(':id')
-  delete(@Param('id') id: string) {
-    return this.categoriesService.delete(id);
+  delete(@Param('id') id: string, @Req() req?: any) {
+    const tenantId = req?.user?.tenantId;
+    return this.categoriesService.delete(id, tenantId);
   }
 }

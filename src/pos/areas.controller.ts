@@ -14,8 +14,9 @@ export class AreasController {
   }
 
   @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.areasService.findOne(id);
+  findOne(@Param('id') id: string, @Req() req?: any) {
+    const tenantId = req?.user?.tenantId;
+    return this.areasService.findOne(id, tenantId);
   }
 
   @Post()
@@ -24,12 +25,14 @@ export class AreasController {
   }
 
   @Put(':id')
-  update(@Param('id') id: string, @Body() data: any) {
-    return this.areasService.update(id, data);
+  update(@Param('id') id: string, @Body() data: any, @Req() req?: any) {
+    const tenantId = req?.user?.tenantId;
+    return this.areasService.update(id, data, tenantId);
   }
 
   @Delete(':id')
-  delete(@Param('id') id: string) {
-    return this.areasService.delete(id);
+  delete(@Param('id') id: string, @Req() req?: any) {
+    const tenantId = req?.user?.tenantId;
+    return this.areasService.delete(id, tenantId);
   }
 }

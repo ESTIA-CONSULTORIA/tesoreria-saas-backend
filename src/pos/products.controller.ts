@@ -15,8 +15,9 @@ export class ProductsController {
   }
 
   @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.productsService.findOne(id);
+  findOne(@Param('id') id: string, @Req() req?: any) {
+    const tenantId = req?.user?.tenantId;
+    return this.productsService.findOne(id, tenantId);
   }
 
   @Post()
@@ -25,12 +26,14 @@ export class ProductsController {
   }
 
   @Put(':id')
-  update(@Param('id') id: string, @Body() data: any) {
-    return this.productsService.update(id, data);
+  update(@Param('id') id: string, @Body() data: any, @Req() req?: any) {
+    const tenantId = req?.user?.tenantId;
+    return this.productsService.update(id, data, tenantId);
   }
 
   @Delete(':id')
-  delete(@Param('id') id: string) {
-    return this.productsService.delete(id);
+  delete(@Param('id') id: string, @Req() req?: any) {
+    const tenantId = req?.user?.tenantId;
+    return this.productsService.delete(id, tenantId);
   }
 }

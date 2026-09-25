@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Product } from './entities/product.entity';
@@ -93,8 +93,11 @@ export class ProductsService {
     return products;
   }
 
-  findOne(id: string) {
-    return this.productsRepo.findOne({ where: { id } });
+  // Auditoría BUSINESS (hallazgo transversal #6, continuación): findOne()/update()/delete()
+  // no verificaban que el producto perteneciera al tenant de quien llama — Product sí tiene
+  // tenantId propio, mismo patrón que banks.service.ts. Opcional para no romper a SOPORTE.
+  findOne(id: string, tenantId?: string) {
+    return this.productsRepo.findOne({ where: tenantId ? { id, tenantId } : { id } });
   }
 
   create(data: Partial<Product>) {
@@ -102,12 +105,21 @@ export class ProductsService {
     return this.productsRepo.save(product);
   }
 
-  async update(id: string, data: Partial<Product>) {
+  async update(id: string, data: Partial<Product>, tenantId?: string) {
+    if (tenantId) {
+      const existing = await this.productsRepo.findOne({ where: { id, tenantId } });
+      if (!existing) throw new NotFoundException('Producto no encontrado');
+    }
     await this.productsRepo.update(id, { ...data, updatedAt: new Date() });
     return this.productsRepo.findOne({ where: { id } });
   }
 
-  async delete(id: string) {
+  async delete(id: string, tenantId?: string) {
+    if (tenantId) {
+      const existing = await this.productsRepo.findOne({ where: { id, tenantId } });
+      if (!existing) throw new NotFoundException('Producto no encontrado');
+    }
     await this.productsRepo.delete(id);
+    return { deleted: true };
   }
 }

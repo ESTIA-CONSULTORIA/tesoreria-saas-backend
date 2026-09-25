@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Put, Delete, Body, Param } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Body, Param, Req } from '@nestjs/common';
 import { TablesService } from './tables.service';
 import { Modulo } from '../auth/modulo.decorator';
 
@@ -13,8 +13,9 @@ export class TablesController {
   }
 
   @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.tablesService.findOne(id);
+  findOne(@Param('id') id: string, @Req() req?: any) {
+    const tenantId = req?.user?.tenantId;
+    return this.tablesService.findOne(id, tenantId);
   }
 
   @Post()
@@ -23,12 +24,14 @@ export class TablesController {
   }
 
   @Put(':id')
-  update(@Param('id') id: string, @Body() data: any) {
-    return this.tablesService.update(id, data);
+  update(@Param('id') id: string, @Body() data: any, @Req() req?: any) {
+    const tenantId = req?.user?.tenantId;
+    return this.tablesService.update(id, data, tenantId);
   }
 
   @Delete(':id')
-  delete(@Param('id') id: string) {
-    return this.tablesService.delete(id);
+  delete(@Param('id') id: string, @Req() req?: any) {
+    const tenantId = req?.user?.tenantId;
+    return this.tablesService.delete(id, tenantId);
   }
 }
