@@ -872,26 +872,39 @@ export class TreasuryService {
     }
   }
 
+  // Corrección (recomendación #4, seguimiento auditoría BUSINESS): usaba nombres de columna
+  // que no existen en la entidad real Movement (bankId/tipo/monto/descripcion/fecha en vez
+  // de accountId/type/amount/concept/date), forzado con `as any` para saltarse el chequeo de
+  // TypeScript — el depósito de cierre de turno de POS nunca quedaba realmente registrado
+  // como movimiento bancario utilizable. Corregido a los nombres reales, y ahora sí
+  // actualiza el balance de la cuenta (antes tampoco lo hacía, ni con los nombres correctos).
   async confirmDeposit(shiftId: string, tenantId: string, bankId: string, amount: number) {
     try {
       const shift = await this.shiftsRepo.findOne({ where: { id: shiftId } });
       if (!shift) throw new Error('Turno no encontrado');
 
+      const account = await this.banksRepo.findOne({ where: { id: bankId } });
+      if (!account) throw new Error('Cuenta bancaria no encontrada');
+
+      const numericAmount = Number(amount);
+      account.balance = Number(account.balance) + numericAmount;
+      await this.banksRepo.save(account);
+
       // Create a movement in the bank
       const movement = this.movementsRepo.create({
-        bankId,
-        tenantId,
-        tipo: 'DEPOSITO',
-        monto: amount,
-        descripcion: `Depósito en tránsito — turno ${shift.cajero} ${shift.fecha}`,
-        fecha: new Date(),
-        status: 'CONFIRMADO',
-      } as any);
-      const saved = (await this.movementsRepo.save(movement)) as any;
+        accountId: bankId,
+        type: 'INCOME',
+        category: 'DEPOSITO',
+        concept: `Depósito en tránsito — turno ${shift.cajero} ${shift.fecha}`,
+        amount: numericAmount,
+        date: new Date(),
+        status: 'APPROVED',
+      });
+      const saved = await this.movementsRepo.save(movement);
 
       // Mark shift totalDepositos
       await this.shiftsRepo.update(shiftId, {
-        totalDepositos: amount,
+        totalDepositos: numericAmount,
       });
 
       return { success: true, movementId: saved.id };
