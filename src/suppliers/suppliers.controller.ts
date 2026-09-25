@@ -30,10 +30,13 @@ export class SuppliersController {
     return this.suppliersService.findOne(id);
   }
 
+  // Recomendación #4 (seguimiento auditoría BUSINESS): antes era un stub que siempre
+  // devolvía [], con un comentario diciendo que se implementaría "cuando se cree el módulo
+  // de compras" — ese módulo (src/purchases/) ya existe. Se conecta la consulta real.
   @Get(':id/purchases')
-  async getSupplierPurchases(@Param('id') id: string) {
-    // Por ahora retorna un array vacío, se implementará cuando se cree el módulo de compras
-    return [];
+  getSupplierPurchases(@Param('id') id: string, @Req() req?: any) {
+    const tenantId = req?.user?.tenantId;
+    return this.suppliersService.findPurchasesBySupplier(id, tenantId);
   }
 
   @Post()

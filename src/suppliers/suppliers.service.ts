@@ -2,12 +2,15 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Like } from 'typeorm';
 import { Supplier } from './entities/supplier.entity';
+import { Purchase } from '../purchases/entities/purchase.entity';
 
 @Injectable()
 export class SuppliersService {
   constructor(
     @InjectRepository(Supplier)
     private suppliersRepo: Repository<Supplier>,
+    @InjectRepository(Purchase)
+    private purchasesRepo: Repository<Purchase>,
   ) {}
 
   findAll(tenantId?: string, search?: string, isActive?: boolean, companyId?: string) {
@@ -28,6 +31,20 @@ export class SuppliersService {
 
   findOne(id: string) {
     return this.suppliersRepo.findOne({ where: { id } });
+  }
+
+  // Recomendación #4 (seguimiento auditoría BUSINESS): GET /suppliers/:id/purchases era un
+  // stub que siempre devolvía [] — Purchase ya tiene supplierId y tenantId propios, así que
+  // filtrar por ambos alcanza: un supplierId de OTRO tenant nunca puede coincidir con una
+  // fila cuyo tenantId sea el del que llama, sin necesitar una verificación de pertenencia
+  // aparte sobre el proveedor.
+  findPurchasesBySupplier(supplierId: string, tenantId?: string) {
+    const where: any = { supplierId };
+    if (tenantId) where.tenantId = tenantId;
+    return this.purchasesRepo.find({
+      where,
+      order: { createdAt: 'DESC' },
+    });
   }
 
   create(data: Partial<Supplier>) {
