@@ -572,65 +572,6 @@ export class TreasuryService {
     }
   }
 
-  // Transfer between accounts
-  async createTransfer(data: {
-    cuentaOrigenId: string;
-    cuentaDestinoId: string;
-    monto: number;
-    concepto: string;
-    fecha?: Date;
-    referencia?: string;
-    tenantId?: string;
-  }) {
-    try {
-      const originAccount = await this.banksRepo.findOne({ where: { id: data.cuentaOrigenId } });
-      const destAccount = await this.banksRepo.findOne({ where: { id: data.cuentaDestinoId } });
-
-      if (!originAccount || !destAccount) {
-        throw new Error('Cuentas no encontradas');
-      }
-
-      if (Number(originAccount.balance) < data.monto) {
-        throw new Error('Saldo insuficiente en cuenta origen');
-      }
-
-      // Create expense movement for origin account
-      const expenseMovement = this.movementsRepo.create({
-        accountId: data.cuentaOrigenId,
-        type: 'EXPENSE',
-        amount: data.monto,
-        concept: `Transferencia a ${destAccount.name} - ${data.concepto}`,
-        reference: data.referencia,
-      });
-      await this.movementsRepo.save(expenseMovement);
-
-      // Create income movement for destination account
-      const incomeMovement = this.movementsRepo.create({
-        accountId: data.cuentaDestinoId,
-        type: 'INCOME',
-        amount: data.monto,
-        concept: `Transferencia desde ${originAccount.name} - ${data.concepto}`,
-        reference: data.referencia,
-      });
-      await this.movementsRepo.save(incomeMovement);
-
-      // Update account balances
-      originAccount.balance = Number(originAccount.balance) - data.monto;
-      destAccount.balance = Number(destAccount.balance) + data.monto;
-      await this.banksRepo.save([originAccount, destAccount]);
-
-      return {
-        expenseMovement,
-        incomeMovement,
-        originBalance: originAccount.balance,
-        destBalance: destAccount.balance,
-      };
-    } catch (error) {
-      console.error('TreasuryService.createTransfer error:', error);
-      throw new Error(`Error al crear transferencia: ${error.message}`);
-    }
-  }
-
   // Accounts Payable (CxP)
   async getAccountsPayable(tenantId?: string, branchId?: string, companyId?: string) {
     try {
@@ -855,20 +796,6 @@ export class TreasuryService {
     } catch (error) {
       console.error('TreasuryService.getPendingDeposits error:', error);
       throw new Error(`Error al obtener depósitos pendientes: ${error.message}`);
-    }
-  }
-
-  async getTransferHistory(tenantId?: string, limit = 20) {
-    try {
-      const query = this.transfersRepo
-        .createQueryBuilder('transfer')
-        .orderBy('transfer.createdAt', 'DESC')
-        .take(limit);
-      if (tenantId) query.andWhere('transfer.tenantId = :tenantId', { tenantId });
-      return query.getMany();
-    } catch (error) {
-      console.error('TreasuryService.getTransferHistory error:', error);
-      return [];
     }
   }
 

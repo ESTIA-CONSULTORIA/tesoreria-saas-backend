@@ -129,7 +129,16 @@ export class TransfersService {
       await manager.save(outMovement);
       await manager.save(inMovement);
 
+      // Auditoría BUSINESS (recomendación #3, seguimiento — encontrado durante el smoke test
+      // manual de la migración del tab Traslados): a diferencia de la rama INTERCOMPAÑIA (más
+      // arriba), esta nunca guardaba tenantId en el registro Transfer. findAll(tenantId) sí
+      // filtra por tenantId, así que todo traslado INTERNA quedaba invisible para su propio
+      // creador — el balance se movía de verdad, pero el historial (tanto de esta página como
+      // del tab Traslados de Tesorería, que ahora depende de este mismo endpoint) nunca lo
+      // mostraba. Mismo bug de fondo que motivó retirar treasury.service.ts::createTransfer(),
+      // reaparecido aquí.
       const transfer = manager.create(Transfer, {
+        tenantId,
         fromAccountId,
         toAccountId,
         amount: numericAmount,

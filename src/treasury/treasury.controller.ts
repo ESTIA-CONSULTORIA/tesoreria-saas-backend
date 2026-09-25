@@ -114,20 +114,14 @@ export class TreasuryController {
     return this.treasuryService.deleteScheduledPayment(id);
   }
 
-  // Transfers
-  @Get('transfers')
-  @Modulo('tesoreria')
-  getTransferHistory(@Request() req, @Query('limit') limit?: string) {
-    const tenantId = req.user?.tenantId || req.tenantId;
-    return this.treasuryService.getTransferHistory(tenantId, limit ? parseInt(limit) : 20);
-  }
-
-  @Post('transfers')
-  @Modulo('tesoreria')
-  createTransfer(@Body() data: any, @Request() req) {
-    const tenantId = req.user?.tenantId || req.tenantId;
-    return this.treasuryService.createTransfer({ ...data, tenantId });
-  }
+  // Auditoría BUSINESS (recomendación #3, seguimiento): GET/POST /treasury/transfers se
+  // retiraron — duplicaban y desincronizaban TransfersService (createTransfer() nunca creaba
+  // una fila en la tabla `transfer`, así que getTransferHistory() jamás mostraba lo que ahí
+  // se creaba; el selector "INTERCOMPAÑIA" del formulario no tenía efecto porque
+  // createTransfer() ni siquiera leía ese campo, saltándose por completo el flujo de
+  // autorización que sí exige TransfersService; y esta vía nunca recibió el fix de
+  // aislamiento de tenant del hallazgo #1). El frontend (TreasuryPage.tsx, tab "Traslados")
+  // ahora usa GET/POST /transfers, igual que la página dedicada de Transferencias.
 
   // Accounts Payable (CxP)
   @Get('accounts-payable')
