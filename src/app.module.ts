@@ -43,6 +43,7 @@ import { PayrollModule } from './payroll/payroll.module';
 import { ContractsModule } from './contracts/contracts.module';
 import { StorageModule } from './storage/storage.module';
 import { PatientsModule } from './patients/patients.module';
+import { AppointmentsModule } from './appointments/appointments.module';
 import { ModulesModule } from './modules/modules.module';
 import { TenantModule } from './modules/entities/tenant-module.entity';
 import { DeliveryIngestModule } from './integrations/delivery/delivery-ingest.module';
@@ -127,6 +128,7 @@ import { ExecutiveConfigModule } from './executive-config/executive-config.modul
     ContractsModule,
     StorageModule,
     PatientsModule,
+    AppointmentsModule,
     ModulesModule,
     TypeOrmModule.forFeature([TenantModule]),
     DeliveryIngestModule,
