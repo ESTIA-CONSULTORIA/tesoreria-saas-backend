@@ -10,6 +10,7 @@ import { PhysicalCount } from './entities/physical-count.entity';
 import { Justifiable, JustifiableCategory } from './entities/justifiable.entity';
 import { Almacen } from './entities/almacen.entity';
 import { FamiliaInsumo } from './entities/familia-insumo.entity';
+import { resolveActiveInsumoChain } from './insumo-resolution';
 
 @Injectable()
 export class CostsService {
@@ -466,29 +467,23 @@ export class CostsService {
     await this.recipeItemsRepo.delete(id);
   }
 
+  // Ronda de seguimiento (arquitectura): la caminata de reemplazadoPorId se unificó en
+  // insumo-resolution.ts (compartida con sales.service.ts/products.service.ts) — este método
+  // solo traduce el resultado al contrato de error que ya tenía (Error genérico, mismos
+  // mensajes exactos), leyendo con this.insumosRepo.manager (no-transaccional, equivalente a
+  // this.insumosRepo.findOne() de antes).
   private async costoUnitarioInsumo(insumo: Insumo, visitados: Set<string> = new Set()): Promise<number> {
-    if (visitados.has(insumo.id)) {
-      throw new Error(`Referencia circular detectada en la cadena de reemplazo del insumo ${insumo.id}`);
+    const resultado = await resolveActiveInsumoChain(this.insumosRepo.manager, insumo, visitados);
+    if (resultado.ok) {
+      return Number(resultado.insumo.costoUnitario);
     }
-    visitados.add(insumo.id);
-
-    if (insumo.isActive) {
-      visitados.delete(insumo.id);
-      return Number(insumo.costoUnitario);
+    if (resultado.reason === 'CYCLE') {
+      throw new Error(`Referencia circular detectada en la cadena de reemplazo del insumo ${resultado.insumoId}`);
     }
-
-    if (!insumo.reemplazadoPorId) {
-      throw new Error(`El insumo "${insumo.nombre}" está inactivo y no tiene reemplazo configurado`);
+    if (resultado.reason === 'NO_REPLACEMENT') {
+      throw new Error(`El insumo "${resultado.nombre}" está inactivo y no tiene reemplazo configurado`);
     }
-
-    const siguiente = await this.insumosRepo.findOne({ where: { id: insumo.reemplazadoPorId } });
-    if (!siguiente) {
-      throw new Error(`El insumo de reemplazo ${insumo.reemplazadoPorId} no existe`);
-    }
-
-    const costo = await this.costoUnitarioInsumo(siguiente, visitados);
-    visitados.delete(insumo.id);
-    return costo;
+    throw new Error(`El insumo de reemplazo ${resultado.insumoId} no existe`);
   }
 
   async costoRecipe(recipeId: string, visitados: Set<string> = new Set()): Promise<{ subtotal: number; costoPorUnidad: number }> {

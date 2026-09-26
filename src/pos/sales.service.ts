@@ -10,6 +10,7 @@ import { Branch } from '../branches/entities/branch.entity';
 import { TenantSetting } from '../tenant-settings/entities/tenant-setting.entity';
 import { InsumoAlertsService } from './insumo-alerts.service';
 import { resolveEventTimestamp } from '../common/resolve-event-timestamp.util';
+import { resolveActiveInsumoChain } from '../costs/insumo-resolution';
 
 interface LowStockInsumo {
   id: string;
@@ -260,41 +261,31 @@ export class SalesService {
     }
   }
 
-  // Auditoría de producto (GoodsHabits, Punto 2): mismo algoritmo que
-  // costs.service.ts::costoUnitarioInsumo() — recorre reemplazadoPorId hasta encontrar un
-  // insumo activo, protegido contra ciclos. NO se reutiliza costoUnitarioInsumo()
-  // directamente a propósito: ese usa this.insumosRepo (fuera de cualquier transacción),
-  // mientras que deductInsumo() opera dentro de la transacción de la venta (mismo motivo
-  // ya documentado en delivery-ingest.service.ts para no reusar MovementsService — leer
-  // por otro canal rompería el aislamiento). `manager` es opcional: se pasa cuando se
-  // llama desde dentro de la transacción (deductInsumo), se omite en el chequeo previo
-  // (checkStockAvailability, que corre ANTES de abrir la transacción).
+  // Ronda de seguimiento (arquitectura): la caminata de reemplazadoPorId se unificó en
+  // insumo-resolution.ts (compartida con costs.service.ts/products.service.ts) — este método
+  // solo traduce el resultado al contrato de error que ya tenía (Error en ciclo,
+  // BadRequestException en los otros dos casos, mismos mensajes exactos — venta real, el
+  // cajero necesita un 400 claro). `manager` sigue siendo opcional: se pasa el manager
+  // transaccional activo cuando se llama desde dentro de la transacción (deductInsumo), se
+  // omite en el chequeo previo (checkStockAvailability, que corre ANTES de abrir la
+  // transacción) — ahí se usa this.insumoRepo.manager (no-transaccional, equivalente exacto a
+  // this.insumoRepo.findOne() de antes).
   private async resolveActiveInsumo(
     insumo: Insumo,
     manager?: EntityManager,
     visitados: Set<string> = new Set(),
   ): Promise<Insumo> {
-    if (visitados.has(insumo.id)) {
-      throw new Error(`Referencia circular en la cadena de reemplazo del insumo ${insumo.id}`);
+    const resultado = await resolveActiveInsumoChain(manager ?? this.insumoRepo.manager, insumo, visitados);
+    if (resultado.ok) {
+      return resultado.insumo;
     }
-    visitados.add(insumo.id);
-
-    if (insumo.isActive) {
-      visitados.delete(insumo.id);
-      return insumo;
+    if (resultado.reason === 'CYCLE') {
+      throw new Error(`Referencia circular en la cadena de reemplazo del insumo ${resultado.insumoId}`);
     }
-    if (!insumo.reemplazadoPorId) {
-      throw new BadRequestException(`El insumo "${insumo.nombre}" está inactivo y no tiene reemplazo configurado — no se puede vender.`);
+    if (resultado.reason === 'NO_REPLACEMENT') {
+      throw new BadRequestException(`El insumo "${resultado.nombre}" está inactivo y no tiene reemplazo configurado — no se puede vender.`);
     }
-    const siguiente = manager
-      ? await manager.findOne(Insumo, { where: { id: insumo.reemplazadoPorId } })
-      : await this.insumoRepo.findOne({ where: { id: insumo.reemplazadoPorId } });
-    if (!siguiente) {
-      throw new BadRequestException(`El insumo de reemplazo de "${insumo.nombre}" no existe.`);
-    }
-    const resuelto = await this.resolveActiveInsumo(siguiente, manager, visitados);
-    visitados.delete(insumo.id);
-    return resuelto;
+    throw new BadRequestException(`El insumo de reemplazo de "${resultado.nombre}" no existe.`);
   }
 
   private async deductInventory(manager: EntityManager, items: SaleItem[], folio: string, tenantId: string, sucursalId: string): Promise<LowStockInsumo[]> {

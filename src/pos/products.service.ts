@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { Product } from './entities/product.entity';
 import { Insumo } from '../costs/entities/insumo.entity';
 import { Recipe } from '../costs/entities/recipe.entity';
+import { resolveActiveInsumoChain } from '../costs/insumo-resolution';
 
 @Injectable()
 export class ProductsService {
@@ -18,32 +19,26 @@ export class ProductsService {
     private recipesRepo: Repository<Recipe>,
   ) {}
 
-  // Auditoría de producto (GoodsHabits, Punto 2): mismo algoritmo que
-  // sales.service.ts::resolveActiveInsumo() / costs.service.ts::costoUnitarioInsumo() —
-  // sigue reemplazadoPorId hasta un insumo activo. Se duplica en vez de importar desde
-  // otro módulo por el mismo motivo ya establecido en este código (delivery-ingest.service.ts):
-  // evitar acoplamiento cruzado entre módulos solo para una función de ~15 líneas. A
-  // diferencia de la de ventas, esta NO lanza — el stock del POS se calcula para una
-  // lista completa de productos; un insumo con la cadena rota no debe tumbar el listado
-  // entero, solo ese producto puntual queda con stock 0 y un warning en el log.
+  // Ronda de seguimiento (arquitectura): la caminata de reemplazadoPorId se unificó en
+  // insumo-resolution.ts (compartida con sales.service.ts/costs.service.ts) — este método
+  // solo traduce el resultado al contrato que ya tenía: nunca lanza, loggea con
+  // logger.warn() y devuelve null (el stock del POS se calcula para una lista completa de
+  // productos; un insumo con la cadena rota no debe tumbar el listado entero, solo ese
+  // producto puntual queda con stock 0), leyendo con this.insumosRepo.manager
+  // (no-transaccional, equivalente a this.insumosRepo.findOne() de antes).
   private async resolveActiveInsumoSafe(insumo: Insumo, visitados: Set<string> = new Set()): Promise<Insumo | null> {
-    if (visitados.has(insumo.id)) {
-      this.logger.warn(`Referencia circular en la cadena de reemplazo del insumo ${insumo.id}`);
-      return null;
+    const resultado = await resolveActiveInsumoChain(this.insumosRepo.manager, insumo, visitados);
+    if (resultado.ok) {
+      return resultado.insumo;
     }
-    visitados.add(insumo.id);
-
-    if (insumo.isActive) return insumo;
-    if (!insumo.reemplazadoPorId) {
-      this.logger.warn(`Insumo "${insumo.nombre}" (${insumo.id}) está inactivo sin reemplazo configurado`);
-      return null;
+    if (resultado.reason === 'CYCLE') {
+      this.logger.warn(`Referencia circular en la cadena de reemplazo del insumo ${resultado.insumoId}`);
+    } else if (resultado.reason === 'NO_REPLACEMENT') {
+      this.logger.warn(`Insumo "${resultado.nombre}" (${resultado.insumoId}) está inactivo sin reemplazo configurado`);
+    } else {
+      this.logger.warn(`El insumo de reemplazo de "${resultado.nombre}" (${resultado.insumoId}) no existe`);
     }
-    const siguiente = await this.insumosRepo.findOne({ where: { id: insumo.reemplazadoPorId } });
-    if (!siguiente) {
-      this.logger.warn(`El insumo de reemplazo de "${insumo.nombre}" (${insumo.reemplazadoPorId}) no existe`);
-      return null;
-    }
-    return this.resolveActiveInsumoSafe(siguiente, visitados);
+    return null;
   }
 
   async findAll(branchId?: string, tenantId?: string) {
