@@ -3,6 +3,7 @@ import { TenantSettingsService } from './tenant-settings.service';
 import { Public } from '../auth/public.decorator';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
+import { PosCapability } from '../config/pos-capabilities.config';
 
 @Controller('tenant-settings')
 export class TenantSettingsController {
@@ -65,6 +66,7 @@ export class TenantSettingsController {
       secondaryButtonColor?: string;
       buttonBorderRadius?: 'square' | 'rounded' | 'pill';
       stockPolicy?: 'BLOQUEAR' | 'PERMITIR_NEGATIVO';
+      posCapabilities?: Partial<Record<PosCapability, boolean>>;
     },
     @Request() req?: any,
   ) {

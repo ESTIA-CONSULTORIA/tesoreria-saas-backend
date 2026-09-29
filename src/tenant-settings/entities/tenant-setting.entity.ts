@@ -95,6 +95,16 @@ export class TenantSetting {
   @Column({ default: 'PERMITIR_NEGATIVO' })
   stockPolicy: 'BLOQUEAR' | 'PERMITIR_NEGATIVO';
 
+  // POS flexible — capacidades combinables por tenant (ver src/config/pos-capabilities.config.ts
+  // para el catálogo, los defaults y por qué vive aquí y no en tenant_modules). Nullable y sin
+  // default a nivel de columna a propósito: ninguna fila existente tiene esta clave, y
+  // TenantSettingsService.hasPosCapability() resuelve el valor real cayendo al default del
+  // config file cuando la clave no está — así ninguna fila necesita backfill para que el
+  // comportamiento actual del POS siga igual. Solo guarda EXCEPCIONES al default (una
+  // capacidad puesta explícitamente en true/false), no el mapa completo — ver upsert().
+  @Column({ type: 'json', nullable: true })
+  posCapabilities: Partial<Record<string, boolean>> | null;
+
   @CreateDateColumn()
   createdAt: Date;
 
