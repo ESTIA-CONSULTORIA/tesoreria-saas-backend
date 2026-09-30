@@ -8,6 +8,7 @@ import { Recipe } from '../costs/entities/recipe.entity';
 import { Insumo } from '../costs/entities/insumo.entity';
 import { TenantSetting } from '../tenant-settings/entities/tenant-setting.entity';
 import { InsumoAlertsService } from './insumo-alerts.service';
+import { TenantSettingsService } from '../tenant-settings/tenant-settings.service';
 
 // Ronda de seguimiento (arquitectura): captura el comportamiento OBSERVABLE de
 // SalesService.resolveActiveInsumo() antes de extraer la caminata de reemplazadoPorId a
@@ -48,6 +49,7 @@ describe('SalesService.resolveActiveInsumo() — resolución de cadena de reempl
         { provide: getRepositoryToken(TenantSetting), useValue: {} },
         { provide: DataSource, useValue: {} },
         { provide: InsumoAlertsService, useValue: {} },
+        { provide: TenantSettingsService, useValue: {} },
       ],
     }).compile();
 

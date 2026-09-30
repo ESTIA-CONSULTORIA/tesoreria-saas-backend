@@ -24,6 +24,9 @@ import { CorteField } from './entities/corte-field.entity';
 import { InsumoAlertsController } from './insumo-alerts.controller';
 import { InsumoAlertsService } from './insumo-alerts.service';
 import { InsumoAlert } from './entities/insumo-alert.entity';
+import { NotasCocinaController } from './notas-cocina.controller';
+import { NotasCocinaService } from './notas-cocina.service';
+import { NotaCocina } from './entities/nota-cocina.entity';
 import { PosConfig } from './entities/pos-config.entity';
 import { Product } from './entities/product.entity';
 import { PosCategory } from './entities/category.entity';
@@ -38,13 +41,14 @@ import { Tenant } from '../tenants/entities/tenant.entity';
 import { TenantSetting } from '../tenant-settings/entities/tenant-setting.entity';
 import { Branch } from '../branches/entities/branch.entity';
 import { Company } from '../companies/entities/company.entity';
+import { TenantSettingsModule } from '../tenant-settings/tenant-settings.module';
 
 @Module({
   imports: [
     // Branch/Company agregados para el hallazgo transversal #6 (auditoría BUSINESS):
     // categories.service.ts y areas.service.ts resuelven tenant vía branchId → Branch →
     // Company.tenantId, porque PosCategory/Area no tienen tenantId propio.
-    TypeOrmModule.forFeature([PosConfig, Product, PosCategory, Area, Table, Sale, Shift, Recipe, Insumo, User, CorteField, InsumoAlert, Tenant, TenantSetting, Branch, Company]),
+    TypeOrmModule.forFeature([PosConfig, Product, PosCategory, Area, Table, Sale, Shift, Recipe, Insumo, User, CorteField, InsumoAlert, NotaCocina, Tenant, TenantSetting, Branch, Company]),
     // Mismo secret que AuthModule (JWT_SECRET) — cashiers.service.ts firma/verifica con
     // JwtService en vez del jsonwebtoken crudo que usaba antes de la migración a cookies.
     JwtModule.registerAsync({
@@ -54,6 +58,10 @@ import { Company } from '../companies/entities/company.entity';
         secret: config.get<string>('JWT_SECRET'),
       }),
     }),
+    // POS flexible, capacidad notas_cocina_barra: SalesService.create() consulta
+    // TenantSettingsService.hasPosCapability() directo (cross-module DI normal, mismo
+    // patrón que AuthModule con varios services de otros módulos).
+    TenantSettingsModule,
   ],
   controllers: [
     PosController,
@@ -66,6 +74,7 @@ import { Company } from '../companies/entities/company.entity';
     CashiersController,
     CorteFieldsController,
     InsumoAlertsController,
+    NotasCocinaController,
   ],
   providers: [
     PosService,
@@ -78,6 +87,7 @@ import { Company } from '../companies/entities/company.entity';
     CashiersService,
     CorteFieldsService,
     InsumoAlertsService,
+    NotasCocinaService,
   ],
   exports: [
     PosService,

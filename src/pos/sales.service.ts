@@ -11,6 +11,8 @@ import { TenantSetting } from '../tenant-settings/entities/tenant-setting.entity
 import { InsumoAlertsService } from './insumo-alerts.service';
 import { resolveEventTimestamp } from '../common/resolve-event-timestamp.util';
 import { resolveActiveInsumoChain } from '../costs/insumo-resolution';
+import { NotaCocina } from './entities/nota-cocina.entity';
+import { TenantSettingsService } from '../tenant-settings/tenant-settings.service';
 
 interface LowStockInsumo {
   id: string;
@@ -34,6 +36,10 @@ export class SalesService {
     private tenantSettingRepo: Repository<TenantSetting>,
     private dataSource: DataSource,
     private insumoAlertsService: InsumoAlertsService,
+    // POS flexible, capacidad notas_cocina_barra: inyección de servicio normal (no un
+    // algoritmo puro como resolveActiveInsumoChain, es una consulta a otra tabla) — mismo
+    // patrón que AuthService ya usa con varios services de otros módulos.
+    private tenantSettingsService: TenantSettingsService,
   ) {}
 
   async generateFolio(): Promise<string> {
@@ -104,6 +110,14 @@ export class SalesService {
     // PERMITIR_NEGATIVO (default) es un no-op inmediato.
     await this.checkStockAvailability(data.items, data.tenantId);
 
+    // POS flexible, capacidad notas_cocina_barra: se resuelve ANTES de abrir la
+    // transacción (mismo criterio que checkStockAvailability arriba) — un solo query de
+    // capacidad por venta, no uno por ítem dentro de la transacción.
+    const notasCocinaHabilitada = await this.tenantSettingsService.hasPosCapability(
+      data.tenantId,
+      'notas_cocina_barra',
+    );
+
     let savedSale: Sale;
     let lowStockInsumos: LowStockInsumo[] = [];
 
@@ -140,6 +154,13 @@ export class SalesService {
         // Deduct inventory for each product sold; junta los insumos que quedaron en
         // stock bajo para generar sus alertas DESPUÉS de confirmar la venta (abajo).
         lowStockInsumos = await this.deductInventory(manager, data.items, folio, data.tenantId, data.sucursalId);
+
+        // POS flexible, capacidad notas_cocina_barra: paso adicional dentro de la MISMA
+        // transacción de la venta (no un servicio paralelo) — si la venta se revierte, las
+        // notas generadas se revierten con ella.
+        if (notasCocinaHabilitada) {
+          await this.generateNotasCocina(manager, data.items, saved.id, data.tenantId, data.sucursalId);
+        }
 
         return saved;
       });
@@ -352,6 +373,36 @@ export class SalesService {
       return { id: insumo.id, nombre: insumo.nombre, stockActual: newStock, stockMinimo };
     }
     return null;
+  }
+
+  // POS flexible, capacidad notas_cocina_barra: una NotaCocina por ÍTEM cuyo producto tenga
+  // estacionPreparacion asignada (no todos los ítems de la venta, solo los que van a
+  // cocina/barra — ver Product.estacionPreparacion). estacion se copia del producto en este
+  // momento, no queda como referencia viva: si el producto cambia de estación después, esta
+  // nota ya generada conserva la estación con la que se creó.
+  private async generateNotasCocina(
+    manager: EntityManager,
+    items: SaleItem[],
+    saleId: string,
+    tenantId: string,
+    sucursalId: string,
+  ): Promise<void> {
+    for (const item of items) {
+      const product = await manager.findOne(Product, { where: { id: item.productoId } });
+      if (!product || !product.estacionPreparacion) continue;
+
+      const nota = manager.create(NotaCocina, {
+        tenantId,
+        sucursalId,
+        saleId,
+        productoId: product.id,
+        nombre: product.name,
+        cantidad: item.cantidad,
+        estacion: product.estacionPreparacion,
+        estado: 'PENDIENTE',
+      });
+      await manager.save(nota);
+    }
   }
 
   async findAll(filters?: {
