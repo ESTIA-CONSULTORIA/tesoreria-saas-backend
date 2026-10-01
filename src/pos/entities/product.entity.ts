@@ -55,6 +55,15 @@ export class Product {
   @Column({ nullable: true })
   estacionPreparacion: 'COCINA' | 'BARRA';
 
+  // POS flexible, capacidad venta_de_servicio: marca explícita de que este producto es un
+  // concepto (consulta, tratamiento) y no un bien físico — SalesService lo usa para saltar
+  // el descuento de inventario sin importar si además tiene recipeId/insumoId vinculado por
+  // error. Default false: no cambia el comportamiento de ningún producto existente. La
+  // escritura de este campo NO está gateada por la capacidad (cualquiera puede marcarlo) —
+  // el gate vive solo en el momento de la venta, ver SalesService.
+  @Column({ default: false })
+  esServicio: boolean;
+
   @Column({ type: 'timestamp', default: () => 'CURRENT_TIMESTAMP' })
   createdAt: Date;
 

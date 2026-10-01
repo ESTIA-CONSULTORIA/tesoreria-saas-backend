@@ -52,11 +52,16 @@ export class SalesService {
     return `VTA-${today}-${nextNumber}`;
   }
 
-  private async calculateCostoReal(items: SaleItem[]): Promise<number> {
+  private async calculateCostoReal(items: SaleItem[], ventaServicioHabilitada: boolean): Promise<number> {
     let total = 0;
     for (const item of items) {
       const product = await this.productRepo.findOne({ where: { id: item.productoId } });
       if (!product) continue;
+      // POS flexible, capacidad venta_de_servicio: un servicio nunca contribuye a
+      // costoReal, sin importar si por error quedó con recipeId/insumoId vinculado — el
+      // chequeo va ANTES de las ramas de type, no depende de que además le falten esos
+      // campos.
+      if (product.esServicio && ventaServicioHabilitada) continue;
       if (product.type === 'PREPARADO' && product.recipeId) {
         const recipe = await this.recipeRepo.findOne({ where: { id: product.recipeId } });
         if (recipe?.items) {
@@ -102,13 +107,23 @@ export class SalesService {
     // Fuera del try (más abajo): un clientTimestamp inválido debe llegar al cliente como
     // 400 (BadRequestException), no enmascararse como 500 por el catch genérico de la venta.
     const now = resolveEventTimestamp(data.clientTimestamp);
-    const costoReal = await this.calculateCostoReal(data.items);
+
+    // POS flexible, capacidad venta_de_servicio: se resuelve una sola vez, antes de
+    // calculateCostoReal()/checkStockAvailability()/deductInventory() — las tres ramas que
+    // deciden si un ítem descuenta inventario necesitan la misma respuesta, no vale la pena
+    // preguntar la capacidad por ítem.
+    const ventaServicioHabilitada = await this.tenantSettingsService.hasPosCapability(
+      data.tenantId,
+      'venta_de_servicio',
+    );
+
+    const costoReal = await this.calculateCostoReal(data.items, ventaServicioHabilitada);
 
     // Auditoría de producto (GoodsHabits, Punto 1): chequeo de disponibilidad ANTES de
     // abrir la transacción — si el tenant tiene stockPolicy BLOQUEAR y algo no alcanza,
     // la venta se rechaza con detalle claro de qué falta, sin tocar la BD. Bajo
     // PERMITIR_NEGATIVO (default) es un no-op inmediato.
-    await this.checkStockAvailability(data.items, data.tenantId);
+    await this.checkStockAvailability(data.items, data.tenantId, ventaServicioHabilitada);
 
     // POS flexible, capacidad notas_cocina_barra: se resuelve ANTES de abrir la
     // transacción (mismo criterio que checkStockAvailability arriba) — un solo query de
@@ -153,7 +168,7 @@ export class SalesService {
 
         // Deduct inventory for each product sold; junta los insumos que quedaron en
         // stock bajo para generar sus alertas DESPUÉS de confirmar la venta (abajo).
-        lowStockInsumos = await this.deductInventory(manager, data.items, folio, data.tenantId, data.sucursalId);
+        lowStockInsumos = await this.deductInventory(manager, data.items, folio, data.tenantId, data.sucursalId, ventaServicioHabilitada);
 
         // POS flexible, capacidad notas_cocina_barra: paso adicional dentro de la MISMA
         // transacción de la venta (no un servicio paralelo) — si la venta se revierte, las
@@ -232,7 +247,7 @@ export class SalesService {
   // productos del mismo ticket pueden compartir insumo, y si uno apunta a un insumo ya
   // reemplazado, el chequeo debe hacerse contra el insumo vigente, no el descontinuado
   // (mismo criterio que aplicará deductInsumo() al momento real de descontar).
-  private async checkStockAvailability(items: SaleItem[], tenantId: string): Promise<void> {
+  private async checkStockAvailability(items: SaleItem[], tenantId: string, ventaServicioHabilitada: boolean): Promise<void> {
     const setting = await this.tenantSettingRepo.findOne({ where: { tenantId } });
     if ((setting?.stockPolicy || 'PERMITIR_NEGATIVO') !== 'BLOQUEAR') return;
 
@@ -252,6 +267,10 @@ export class SalesService {
     for (const item of items) {
       const product = await this.productRepo.findOne({ where: { id: item.productoId } });
       if (!product) continue;
+
+      // POS flexible, capacidad venta_de_servicio: un servicio nunca exige stock
+      // disponible, sin importar si por error quedó con recipeId/insumoId vinculado.
+      if (product.esServicio && ventaServicioHabilitada) continue;
 
       if (product.type === 'PREPARADO' && product.recipeId) {
         const recipe = await this.recipeRepo.findOne({ where: { id: product.recipeId } });
@@ -309,11 +328,19 @@ export class SalesService {
     throw new BadRequestException(`El insumo de reemplazo de "${resultado.nombre}" no existe.`);
   }
 
-  private async deductInventory(manager: EntityManager, items: SaleItem[], folio: string, tenantId: string, sucursalId: string): Promise<LowStockInsumo[]> {
+  private async deductInventory(manager: EntityManager, items: SaleItem[], folio: string, tenantId: string, sucursalId: string, ventaServicioHabilitada: boolean): Promise<LowStockInsumo[]> {
     const lowStock: LowStockInsumo[] = [];
     for (const item of items) {
       const product = await manager.findOne(Product, { where: { id: item.productoId } });
       if (!product) continue;
+
+      // POS flexible, capacidad venta_de_servicio: un servicio nunca descuenta inventario,
+      // sin importar si por error quedó con recipeId/insumoId vinculado — el chequeo va
+      // ANTES de las ramas de type, no depende de que además le falten esos campos. Con la
+      // capacidad INACTIVA (ventaServicioHabilitada=false), este `continue` nunca se toma
+      // — un producto marcado esServicio=true cae directo a las ramas de abajo y se
+      // comporta como un producto normal (si además tiene insumoId, SÍ descuenta).
+      if (product.esServicio && ventaServicioHabilitada) continue;
 
       if (product.type === 'PREPARADO' && product.recipeId) {
         // Deduct recipe ingredients
