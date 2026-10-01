@@ -1,9 +1,11 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { PosConfig } from './entities/pos-config.entity';
 import { Product } from './entities/product.entity';
 import { PosCategory } from './entities/category.entity';
+import { Branch } from '../branches/entities/branch.entity';
+import { Company } from '../companies/entities/company.entity';
 
 @Injectable()
 export class PosService {
@@ -14,6 +16,10 @@ export class PosService {
     private productRepo: Repository<Product>,
     @InjectRepository(PosCategory)
     private categoryRepo: Repository<PosCategory>,
+    @InjectRepository(Branch)
+    private branchRepo: Repository<Branch>,
+    @InjectRepository(Company)
+    private companyRepo: Repository<Company>,
   ) {}
 
   async findByBranch(branchId: string) {
@@ -38,9 +44,24 @@ export class PosService {
     return this.create({ ...data, branchId });
   }
 
-  async importProducts(productos: any[]) {
+  // Auditoría BUSINESS (hallazgo transversal #6, continuación): antes creaba los productos
+  // sin tenantId (huérfanos) y buscaba categorías de TODOS los tenants por nombre. Ahora el
+  // tenantId (del JWT) se asigna a cada producto y solo se consideran las categorías cuyas
+  // sucursales pertenecen al tenant (branchId → Branch → Company.tenantId, mismo patrón de
+  // dos saltos que categories.service.ts, porque PosCategory no tiene tenantId propio). Sin
+  // tenant (SOPORTE) se rechaza: no hay a quién asignar los productos.
+  async importProducts(productos: any[], tenantId?: string) {
+    if (!tenantId) {
+      throw new BadRequestException('No se puede importar productos sin tenant.');
+    }
     const results = { success: 0, errors: [] as any[] };
-    const categories = await this.categoryRepo.find({ where: { isActive: true } });
+    const companies = await this.companyRepo.find({ where: { tenantId } });
+    const branches = companies.length
+      ? await this.branchRepo.find({ where: { companyId: In(companies.map(c => c.id)) } })
+      : [];
+    const categories = branches.length
+      ? await this.categoryRepo.find({ where: { isActive: true, branchId: In(branches.map(b => b.id)) } })
+      : [];
 
     for (let i = 0; i < productos.length; i++) {
       const row = productos[i];
@@ -68,6 +89,7 @@ export class PosService {
           price: precio,
           imageUrl: row.imagenUrl || null,
           isActive: true,
+          tenantId,
         });
 
         await this.productRepo.save(product);

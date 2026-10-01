@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Product } from './entities/product.entity';
@@ -95,17 +95,30 @@ export class ProductsService {
     return this.productsRepo.findOne({ where: tenantId ? { id, tenantId } : { id } });
   }
 
-  create(data: Partial<Product>) {
-    const product = this.productsRepo.create(data);
+  // Auditoría BUSINESS (hallazgo transversal #6, continuación): create() tomaba el tenantId
+  // del body tal cual — sin él, el producto quedaba con tenantId null (huérfano: invisible
+  // para todo tenant y imposible de editar/borrar por la API). Ahora el tenantId SIEMPRE
+  // viene resuelto por el controller (req.user.tenantId, con body.tenantId solo como
+  // fallback para SOPORTE) y aquí se impone sobre lo que traiga el body; sin tenant en
+  // ninguno de los dos lados, se rechaza.
+  create(data: Partial<Product>, tenantId?: string) {
+    if (!tenantId) {
+      throw new BadRequestException('No se puede crear un producto sin tenant.');
+    }
+    const product = this.productsRepo.create({ ...data, tenantId });
     return this.productsRepo.save(product);
   }
 
+  // tenantId e id se descartan del body: antes `{ ...data }` iba directo a repo.update(), así
+  // que un ADMIN podía reasignar su producto a OTRO tenant (o dejarlo huérfano con
+  // tenantId: null) mandando ese campo en el PUT. La pertenencia se sigue verificando contra
+  // el tenant del JWT; SOPORTE (sin tenantId) conserva acceso total, pero el producto debe
+  // existir.
   async update(id: string, data: Partial<Product>, tenantId?: string) {
-    if (tenantId) {
-      const existing = await this.productsRepo.findOne({ where: { id, tenantId } });
-      if (!existing) throw new NotFoundException('Producto no encontrado');
-    }
-    await this.productsRepo.update(id, { ...data, updatedAt: new Date() });
+    const existing = await this.productsRepo.findOne({ where: tenantId ? { id, tenantId } : { id } });
+    if (!existing) throw new NotFoundException('Producto no encontrado');
+    const { tenantId: _ignoredTenantId, id: _ignoredId, ...safeData } = data as any;
+    await this.productsRepo.update(id, { ...safeData, updatedAt: new Date() });
     return this.productsRepo.findOne({ where: { id } });
   }
 

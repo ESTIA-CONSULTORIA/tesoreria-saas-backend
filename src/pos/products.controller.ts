@@ -21,8 +21,11 @@ export class ProductsController {
   }
 
   @Post()
-  create(@Body() data: any) {
-    return this.productsService.create(data);
+  create(@Body() data: any, @Req() req?: any) {
+    // JWT primero; body.tenantId solo como fallback para SOPORTE (sin tenantId en su JWT) —
+    // mismo criterio que cashiers/users/companies.
+    const tenantId = req?.user?.tenantId || data?.tenantId;
+    return this.productsService.create(data, tenantId);
   }
 
   @Put(':id')

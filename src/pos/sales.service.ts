@@ -52,10 +52,32 @@ export class SalesService {
     return `VTA-${today}-${nextNumber}`;
   }
 
-  private async calculateCostoReal(items: SaleItem[], ventaServicioHabilitada: boolean): Promise<number> {
+  // Opcional para no romper a quien llega sin tenantId (mismo criterio que el resto del POS:
+  // sin tenant no se filtra).
+  private productWhere(id: string, tenantId?: string) {
+    return tenantId ? { id, tenantId } : { id };
+  }
+
+  // Un id que no existe en absoluto conserva el comportamiento de siempre (las ramas de
+  // inventario lo ignoran); lo que se rechaza es un producto que SÍ existe pero no es de este
+  // tenant (de otro, o huérfano). Mensaje igual al de "no existe" para no revelar a qué
+  // tenant pertenece.
+  private async assertProductsBelongToTenant(items: SaleItem[], tenantId?: string): Promise<void> {
+    if (!tenantId) return;
+    for (const item of items) {
+      const owned = await this.productRepo.findOne({ where: { id: item.productoId, tenantId } });
+      if (owned) continue;
+      const existsElsewhere = await this.productRepo.findOne({ where: { id: item.productoId } });
+      if (existsElsewhere) {
+        throw new BadRequestException(`Producto no encontrado: ${item.productoId}`);
+      }
+    }
+  }
+
+  private async calculateCostoReal(items: SaleItem[], tenantId: string, ventaServicioHabilitada: boolean): Promise<number> {
     let total = 0;
     for (const item of items) {
-      const product = await this.productRepo.findOne({ where: { id: item.productoId } });
+      const product = await this.productRepo.findOne({ where: this.productWhere(item.productoId, tenantId) });
       if (!product) continue;
       // POS flexible, capacidad venta_de_servicio: un servicio nunca contribuye a
       // costoReal, sin importar si por error quedó con recipeId/insumoId vinculado — el
@@ -108,6 +130,11 @@ export class SalesService {
     // 400 (BadRequestException), no enmascararse como 500 por el catch genérico de la venta.
     const now = resolveEventTimestamp(data.clientTimestamp);
 
+    // Aislamiento por tenant: antes los productos se buscaban solo por id, así que una venta
+    // podía incluir (y descontar inventario de) un producto de OTRO tenant, o uno huérfano
+    // sin tenantId, conociendo su UUID. Se rechaza ANTES de calcular nada.
+    await this.assertProductsBelongToTenant(data.items, data.tenantId);
+
     // POS flexible, capacidad venta_de_servicio: se resuelve una sola vez, antes de
     // calculateCostoReal()/checkStockAvailability()/deductInventory() — las tres ramas que
     // deciden si un ítem descuenta inventario necesitan la misma respuesta, no vale la pena
@@ -117,7 +144,7 @@ export class SalesService {
       'venta_de_servicio',
     );
 
-    const costoReal = await this.calculateCostoReal(data.items, ventaServicioHabilitada);
+    const costoReal = await this.calculateCostoReal(data.items, data.tenantId, ventaServicioHabilitada);
 
     // Auditoría de producto (GoodsHabits, Punto 1): chequeo de disponibilidad ANTES de
     // abrir la transacción — si el tenant tiene stockPolicy BLOQUEAR y algo no alcanza,
@@ -265,7 +292,7 @@ export class SalesService {
     };
 
     for (const item of items) {
-      const product = await this.productRepo.findOne({ where: { id: item.productoId } });
+      const product = await this.productRepo.findOne({ where: this.productWhere(item.productoId, tenantId) });
       if (!product) continue;
 
       // POS flexible, capacidad venta_de_servicio: un servicio nunca exige stock
@@ -331,7 +358,7 @@ export class SalesService {
   private async deductInventory(manager: EntityManager, items: SaleItem[], folio: string, tenantId: string, sucursalId: string, ventaServicioHabilitada: boolean): Promise<LowStockInsumo[]> {
     const lowStock: LowStockInsumo[] = [];
     for (const item of items) {
-      const product = await manager.findOne(Product, { where: { id: item.productoId } });
+      const product = await manager.findOne(Product, { where: this.productWhere(item.productoId, tenantId) });
       if (!product) continue;
 
       // POS flexible, capacidad venta_de_servicio: un servicio nunca descuenta inventario,
@@ -415,7 +442,7 @@ export class SalesService {
     sucursalId: string,
   ): Promise<void> {
     for (const item of items) {
-      const product = await manager.findOne(Product, { where: { id: item.productoId } });
+      const product = await manager.findOne(Product, { where: this.productWhere(item.productoId, tenantId) });
       if (!product || !product.estacionPreparacion) continue;
 
       const nota = manager.create(NotaCocina, {
