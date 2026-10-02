@@ -89,6 +89,13 @@ export class Sale {
   @Column({ type: 'varchar', nullable: true })
   tableId: string | null;
 
+  // POS flexible, capacidad ligar_venta_a_cita: cita a la que pertenece esta venta. Varchar
+  // simple sin FK real, mismo patrón que Cita.patientId / Consulta.patientId — la referencia
+  // se valida a nivel de servicio (SalesService.create()). Opcional: NULL en toda venta normal.
+  // Una cita puede tener varias ventas ligadas (pagos parciales), por eso no hay unicidad.
+  @Column({ type: 'varchar', nullable: true })
+  citaId: string | null;
+
   // Origen de la venta: 'POS' (default, ventas de siempre) o 'DELIVERY' (ingest de
   // DeliveryHub Pro — ver DeliveryIngestService). Las columnas de abajo solo se llenan
   // cuando origin === 'DELIVERY'; quedan NULL/0 en toda venta POS existente y nueva.

@@ -7,6 +7,7 @@ import { Product } from './entities/product.entity';
 import { Recipe } from '../costs/entities/recipe.entity';
 import { Insumo } from '../costs/entities/insumo.entity';
 import { TenantSetting } from '../tenant-settings/entities/tenant-setting.entity';
+import { AppointmentsService } from '../appointments/appointments.service';
 import { TenantSettingsService } from '../tenant-settings/tenant-settings.service';
 import { InsumoAlertsService } from './insumo-alerts.service';
 
@@ -102,6 +103,7 @@ describe('SalesService.create() — capacidad venta_de_servicio', () => {
         { provide: DataSource, useValue: { transaction: jest.fn((cb: any) => cb(manager)) } },
         { provide: InsumoAlertsService, useValue: {} },
         { provide: TenantSettingsService, useValue: { hasPosCapability } },
+        { provide: AppointmentsService, useValue: {} },
       ],
     }).compile();
 

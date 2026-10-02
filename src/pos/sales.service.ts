@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, EntityManager, Repository } from 'typeorm';
 import { Sale, SaleItem } from './entities/sale.entity';
@@ -13,6 +13,7 @@ import { resolveEventTimestamp } from '../common/resolve-event-timestamp.util';
 import { resolveActiveInsumoChain } from '../costs/insumo-resolution';
 import { NotaCocina } from './entities/nota-cocina.entity';
 import { TenantSettingsService } from '../tenant-settings/tenant-settings.service';
+import { AppointmentsService } from '../appointments/appointments.service';
 
 interface LowStockInsumo {
   id: string;
@@ -40,7 +41,40 @@ export class SalesService {
     // algoritmo puro como resolveActiveInsumoChain, es una consulta a otra tabla) — mismo
     // patrón que AuthService ya usa con varios services de otros módulos.
     private tenantSettingsService: TenantSettingsService,
+    // POS flexible, capacidad ligar_venta_a_cita: validar/completar/buscar citas reutiliza
+    // AppointmentsService (misma consulta y regla de tenant del módulo de citas), no duplica
+    // el acceso a la tabla "citas" desde el POS.
+    private appointmentsService: AppointmentsService,
   ) {}
+
+  // POS flexible, capacidad ligar_venta_a_cita: devuelve el citaId a persistir en la venta, o
+  // null. Solo consulta la capacidad cuando el body trae citaId — una venta normal no paga
+  // ninguna consulta extra y queda exactamente igual. Capacidad inactiva (o sin tenant): el
+  // citaId se IGNORA, sin error, igual que un campo desconocido del body.
+  private async resolveCitaId(citaId: string | undefined, tenantId?: string): Promise<string | null> {
+    if (!citaId || !tenantId) return null;
+    const habilitada = await this.tenantSettingsService.hasPosCapability(tenantId, 'ligar_venta_a_cita');
+    if (!habilitada) return null;
+    // Cita de otro tenant → NotFoundException; CANCELADA → BadRequestException.
+    await this.appointmentsService.assertLinkable(citaId, tenantId);
+    return citaId;
+  }
+
+  // Búsqueda de citas para elegir cuál ligar antes de cobrar (GET /pos/sales/citas).
+  async buscarCitasParaLigar(tenantId: string | undefined, filters: { from?: string; to?: string; paciente?: string }) {
+    if (!tenantId) {
+      throw new ForbiddenException('Se requiere un tenant para consultar citas.');
+    }
+    if (!(await this.tenantSettingsService.hasPosCapability(tenantId, 'ligar_venta_a_cita'))) {
+      throw new ForbiddenException('La capacidad ligar_venta_a_cita no está activa para este negocio.');
+    }
+    const from = filters.from ? new Date(filters.from) : undefined;
+    const to = filters.to ? new Date(filters.to) : undefined;
+    if ((from && isNaN(from.getTime())) || (to && isNaN(to.getTime()))) {
+      throw new BadRequestException('from/to inválidos');
+    }
+    return this.appointmentsService.searchForPos(tenantId, { from, to, paciente: filters.paciente });
+  }
 
   async generateFolio(): Promise<string> {
     const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
@@ -122,6 +156,7 @@ export class SalesService {
     referencia?: string;
     tableId?: string;
     clientTimestamp?: string;
+    citaId?: string; // POS flexible, capacidad ligar_venta_a_cita (se ignora si la capacidad está inactiva)
     folio?: string; // generado en el cliente (Fase A1, modo offline). Si no viene,
                      // se genera server-side como siempre — retrocompatible.
   }) {
@@ -134,6 +169,10 @@ export class SalesService {
     // podía incluir (y descontar inventario de) un producto de OTRO tenant, o uno huérfano
     // sin tenantId, conociendo su UUID. Se rechaza ANTES de calcular nada.
     await this.assertProductsBelongToTenant(data.items, data.tenantId);
+
+    // POS flexible, capacidad ligar_venta_a_cita: validado ANTES de abrir la transacción
+    // (cita ajena/cancelada → rechazo sin tocar la BD).
+    const citaId = await this.resolveCitaId(data.citaId, data.tenantId);
 
     // POS flexible, capacidad venta_de_servicio: se resuelve una sola vez, antes de
     // calculateCostoReal()/checkStockAvailability()/deductInventory() — las tres ramas que
@@ -188,10 +227,18 @@ export class SalesService {
           notas: data.notas || '',
           referencia: data.referencia || '',
           tableId: data.tableId || null,
+          citaId,
           costoReal,
         });
 
         const saved = await manager.save(sale);
+
+        // POS flexible, capacidad ligar_venta_a_cita: una venta que nace PAGADA completa la
+        // cita en la MISMA transacción (si se revierte, la cita no cambia). Una venta ABIERTA
+        // la completará pay() al cobrarse.
+        if (citaId && saved.status === 'PAGADA') {
+          await this.appointmentsService.completarPorVenta(citaId, data.tenantId, manager);
+        }
 
         // Deduct inventory for each product sold; junta los insumos que quedaron en
         // stock bajo para generar sus alertas DESPUÉS de confirmar la venta (abajo).
@@ -528,12 +575,23 @@ export class SalesService {
         throw new Error('La venta ya no está abierta');
       }
 
-      await this.salesRepo.update(id, {
+      const cambiosPago = {
         formaPago: data.formaPago as any,
         montoRecibido: data.montoRecibido,
         cambio: data.cambio,
-        status: 'PAGADA',
-      });
+        status: 'PAGADA' as const,
+      };
+
+      if (sale.citaId && sale.tenantId) {
+        // Venta ligada a una cita (capacidad ligar_venta_a_cita, validada al crearla): el
+        // cobro y la transición de la cita a COMPLETADA van en la misma transacción.
+        await this.dataSource.transaction(async (manager) => {
+          await manager.update(Sale, id, cambiosPago);
+          await this.appointmentsService.completarPorVenta(sale.citaId as string, sale.tenantId, manager);
+        });
+      } else {
+        await this.salesRepo.update(id, cambiosPago);
+      }
 
       return this.salesRepo.findOne({ where: { id } });
     } catch (error) {

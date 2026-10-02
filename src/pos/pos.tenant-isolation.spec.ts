@@ -9,6 +9,7 @@ import { Recipe } from '../costs/entities/recipe.entity';
 import { Insumo } from '../costs/entities/insumo.entity';
 import { TenantSetting } from '../tenant-settings/entities/tenant-setting.entity';
 import { InsumoAlertsService } from './insumo-alerts.service';
+import { AppointmentsService } from '../appointments/appointments.service';
 import { TenantSettingsService } from '../tenant-settings/tenant-settings.service';
 
 // Auditoría BUSINESS (hallazgo transversal #6): getSale/paySale/cancelSale/applyDiscount/
@@ -60,6 +61,7 @@ describe('SalesService — aislamiento por tenant', () => {
         { provide: getDataSourceToken(), useValue: { transaction: jest.fn() } },
         { provide: InsumoAlertsService, useValue: { upsert: jest.fn() } },
         { provide: TenantSettingsService, useValue: {} },
+        { provide: AppointmentsService, useValue: {} },
       ],
     }).compile();
 

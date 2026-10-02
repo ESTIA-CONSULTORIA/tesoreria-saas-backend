@@ -8,6 +8,7 @@ import { Product } from './entities/product.entity';
 import { Recipe } from '../costs/entities/recipe.entity';
 import { Insumo } from '../costs/entities/insumo.entity';
 import { TenantSetting } from '../tenant-settings/entities/tenant-setting.entity';
+import { AppointmentsService } from '../appointments/appointments.service';
 import { TenantSettingsService } from '../tenant-settings/tenant-settings.service';
 import { InsumoAlertsService } from './insumo-alerts.service';
 
@@ -71,6 +72,7 @@ describe('SalesService.create() — no vende ni descuenta productos de otro tena
         { provide: DataSource, useValue: { transaction } },
         { provide: InsumoAlertsService, useValue: {} },
         { provide: TenantSettingsService, useValue: { hasPosCapability: jest.fn().mockResolvedValue(false) } },
+        { provide: AppointmentsService, useValue: {} },
       ],
     }).compile();
     service = module.get(SalesService);

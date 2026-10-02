@@ -42,6 +42,7 @@ import { TenantSetting } from '../tenant-settings/entities/tenant-setting.entity
 import { Branch } from '../branches/entities/branch.entity';
 import { Company } from '../companies/entities/company.entity';
 import { TenantSettingsModule } from '../tenant-settings/tenant-settings.module';
+import { AppointmentsModule } from '../appointments/appointments.module';
 
 @Module({
   imports: [
@@ -62,6 +63,8 @@ import { TenantSettingsModule } from '../tenant-settings/tenant-settings.module'
     // TenantSettingsService.hasPosCapability() directo (cross-module DI normal, mismo
     // patrón que AuthModule con varios services de otros módulos).
     TenantSettingsModule,
+    // POS flexible, capacidad ligar_venta_a_cita: SalesService usa AppointmentsService.
+    AppointmentsModule,
   ],
   controllers: [
     PosController,

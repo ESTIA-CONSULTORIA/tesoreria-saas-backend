@@ -23,6 +23,15 @@ export class SalesController {
     });
   }
 
+  // POS flexible, capacidad ligar_venta_a_cita: citas del día (o rango from/to) del tenant,
+  // filtrables por nombre de paciente. Declarado ANTES de ':id' para que 'citas' no se
+  // interprete como un id de venta.
+  @Get('citas')
+  getCitasParaLigar(@Query() filters: { from?: string; to?: string; paciente?: string }, @Request() req) {
+    const tenantId = req.user?.tenantId || req.tenantId;
+    return this.salesService.buscarCitasParaLigar(tenantId, filters);
+  }
+
   @Get(':id')
   getSale(@Param('id') id: string, @Request() req?: any) {
     const tenantId = req?.user?.tenantId;
