@@ -8,6 +8,7 @@ import { CostsService } from '../costs/costs.service';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
 import { Branch } from '../branches/entities/branch.entity';
+import { Insumo } from '../costs/entities/insumo.entity';
 
 @Injectable()
 export class PurchasesService {
@@ -159,37 +160,48 @@ export class PurchasesService {
     return this.purchasesRepo.findOne({ where: { id } });
   }
 
+  // La factura, el incremento de stock de cada insumo y la transición de la OC a FACTURADA viven
+  // en UNA sola transacción (igual que SalesService.create()): antes eran escrituras sueltas, y un
+  // fallo a medio camino dejaba la compra guardada sin stock incrementado (o stock sumado de una
+  // compra que no quedó). Cada insumo se lee con lock de escritura dentro de la transacción: el
+  // incremento es leer-sumar-escribir, y sin el lock dos facturas simultáneas del mismo insumo
+  // se pisaban (una de las dos sumas se perdía).
   async createPurchase(data: Partial<Purchase>) {
-    const purchase = this.purchasesRepo.create(data);
-    const savedPurchase = await this.purchasesRepo.save(purchase);
+    return this.dataSource.transaction(async (manager) => {
+      const purchase = manager.create(Purchase, data);
+      const savedPurchase = await manager.save(purchase);
 
-    // Actualizar inventario de insumos si la factura tiene items
-    if (savedPurchase.items && Array.isArray(savedPurchase.items)) {
-      for (const item of savedPurchase.items) {
-        if (item.insumoId && item.cantidad) {
-          const insumo = await this.costsService.findOneInsumo(item.insumoId);
-          if (insumo) {
-            // Auditoría de seguridad (GoodsHabits, portabilidad Costos standalone):
-            // item.cantidad es la cantidad comprada en la PRESENTACIÓN DE COMPRA (ej. "1"
-            // caja), no en la unidad de consumo del stock — antes se sumaba directo, así que
-            // comprar "1 caja de 24" solo sumaba +1 al stock en vez de +24.
-            // insumo.factorConversion es cuántas unidades de consumo rinde esa presentación
-            // (default 1 para insumos que compran y consumen en la misma unidad, sin caja de
-            // por medio — comportamiento sin cambio para esos).
-            await this.costsService.updateInsumo(item.insumoId, {
-              stockActual: Number(insumo.stockActual) + Number(item.cantidad) * Number(insumo.factorConversion || 1),
+      // Actualizar inventario de insumos si la factura tiene items
+      if (savedPurchase.items && Array.isArray(savedPurchase.items)) {
+        for (const item of savedPurchase.items) {
+          if (item.insumoId && item.cantidad) {
+            const insumo = await manager.findOne(Insumo, {
+              where: { id: item.insumoId },
+              lock: { mode: 'pessimistic_write' },
             });
+            if (insumo) {
+              // Auditoría de seguridad (GoodsHabits, portabilidad Costos standalone):
+              // item.cantidad es la cantidad comprada en la PRESENTACIÓN DE COMPRA (ej. "1"
+              // caja), no en la unidad de consumo del stock — antes se sumaba directo, así que
+              // comprar "1 caja de 24" solo sumaba +1 al stock en vez de +24.
+              // insumo.factorConversion es cuántas unidades de consumo rinde esa presentación
+              // (default 1 para insumos que compran y consumen en la misma unidad, sin caja de
+              // por medio — comportamiento sin cambio para esos).
+              await this.costsService.updateInsumo(item.insumoId, {
+                stockActual: Number(insumo.stockActual) + Number(item.cantidad) * Number(insumo.factorConversion || 1),
+              }, manager);
+            }
           }
         }
       }
-    }
 
-    // Transicionar OC a FACTURADA cuando se vincula una factura
-    if (data.ocId) {
-      await this.purchaseOrdersRepo.update(data.ocId, { status: 'FACTURADA' });
-    }
+      // Transicionar OC a FACTURADA cuando se vincula una factura
+      if (data.ocId) {
+        await manager.update(PurchaseOrder, data.ocId, { status: 'FACTURADA' });
+      }
 
-    return savedPurchase;
+      return savedPurchase;
+    });
   }
 
   async updatePurchase(id: string, data: Partial<Purchase>) {

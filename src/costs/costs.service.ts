@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, Between } from 'typeorm';
+import { Repository, Between, EntityManager } from 'typeorm';
 import { Insumo } from './entities/insumo.entity';
 import { Recipe } from './entities/recipe.entity';
 import { RecipeItem } from './entities/recipe-item.entity';
@@ -100,8 +100,12 @@ export class CostsService {
     return this.insumosRepo.save(insumo);
   }
 
-  async updateInsumo(id: string, data: Partial<Insumo>) {
-    const existing = await this.insumosRepo.findOne({ where: { id } });
+  // `manager` opcional (mismo patrón que resolveActiveInsumoChain): quien necesite que el update
+  // viva dentro de SU transacción (PurchasesService.createPurchase) pasa el EntityManager
+  // transaccional; sin él se usa el repositorio de siempre, comportamiento sin cambio.
+  async updateInsumo(id: string, data: Partial<Insumo>, manager?: EntityManager) {
+    const insumosRepo = manager ? manager.getRepository(Insumo) : this.insumosRepo;
+    const existing = await insumosRepo.findOne({ where: { id } });
     const payload: Partial<Insumo> = { ...data, updatedAt: new Date() };
     // Mismo criterio que createInsumo(), pero mezclado con lo que ya había guardado — un
     // update que solo cambia factorConversion (sin volver a mandar precioCompra) debe
@@ -116,8 +120,8 @@ export class CostsService {
         merma !== undefined && merma !== null ? Number(merma) : 0,
       );
     }
-    await this.insumosRepo.update(id, payload);
-    return this.insumosRepo.findOne({ where: { id } });
+    await insumosRepo.update(id, payload);
+    return insumosRepo.findOne({ where: { id } });
   }
 
   async deleteInsumo(id: string) {
