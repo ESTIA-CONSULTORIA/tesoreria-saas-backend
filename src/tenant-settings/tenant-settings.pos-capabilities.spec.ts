@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { TenantSettingsService } from './tenant-settings.service';
 import { TenantSetting } from './entities/tenant-setting.entity';
+import { DEFAULT_POS_CAPABILITIES } from '../config/pos-capabilities.config';
 
 // POS flexible, capacidad 1 de 5 (venta_directa_producto): valida el contrato central —
 // hasPosCapability() cae al default sin fila poblada (nadie que ya usa el POS se rompe),
@@ -40,6 +41,14 @@ describe('TenantSettingsService — posCapabilities', () => {
     it('tenant con fila pero posCapabilities null: usa el default del catálogo', async () => {
       repo.findOne.mockResolvedValue({ tenantId: TENANT_A, posCapabilities: null });
       await expect(service.hasPosCapability(TENANT_A, 'venta_directa_producto')).resolves.toBe(true);
+    });
+
+    // mesas_cuenta_abierta no tiene UI todavía: ningún tenant debe tenerla activa sin que alguien la
+    // prenda a propósito. El único default en true es venta_directa_producto (el POS de siempre).
+    it('catálogo: solo venta_directa_producto está activa por defecto; mesas_cuenta_abierta es false', () => {
+      expect(DEFAULT_POS_CAPABILITIES.mesas_cuenta_abierta).toBe(false);
+      const activasPorDefecto = Object.entries(DEFAULT_POS_CAPABILITIES).filter(([, v]) => v).map(([k]) => k);
+      expect(activasPorDefecto).toEqual(['venta_directa_producto']);
     });
 
     it('capacidad aún no construida (mesas_cuenta_abierta): default false, sin fila', async () => {

@@ -38,7 +38,9 @@ export class NotaCocina {
   estacion: 'COCINA' | 'BARRA';
 
   @Column({ default: 'PENDIENTE' })
-  estado: 'PENDIENTE' | 'PREPARADO';
+  // 'CANCELADA': la cuenta se canceló o el ítem se quitó antes de prepararse (sale de la pantalla
+  // de pendientes de cocina/barra). Columna varchar: no requiere migración.
+  estado: 'PENDIENTE' | 'PREPARADO' | 'CANCELADA';
 
   @CreateDateColumn()
   createdAt: Date;

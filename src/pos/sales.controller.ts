@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Put, Body, Param, Query, Request } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Body, Param, Query, Request } from '@nestjs/common';
 import { SalesService } from './sales.service';
 
 @Controller('pos/sales')
@@ -32,10 +32,35 @@ export class SalesController {
     return this.salesService.buscarCitasParaLigar(tenantId, filters);
   }
 
+  // POS flexible, capacidad mesas_cuenta_abierta. Declarado ANTES de ':id' (igual que 'citas').
+  @Get('cuentas-abiertas')
+  getCuentasAbiertas(@Query() filters: { tableId?: string; sucursalId?: string }, @Request() req) {
+    const tenantId = req.user?.tenantId || req.tenantId;
+    return this.salesService.buscarCuentasAbiertas(tenantId, filters);
+  }
+
   @Get(':id')
   getSale(@Param('id') id: string, @Request() req?: any) {
     const tenantId = req?.user?.tenantId;
     return this.salesService.findOne(id, tenantId);
+  }
+
+  @Post(':id/items')
+  addItems(@Param('id') id: string, @Body() data: any, @Request() req?: any) {
+    const tenantId = req?.user?.tenantId;
+    return this.salesService.agregarItems(id, data, tenantId);
+  }
+
+  @Delete(':id/items/:index')
+  removeItem(@Param('id') id: string, @Param('index') index: string, @Request() req?: any) {
+    const tenantId = req?.user?.tenantId;
+    return this.salesService.quitarItem(id, Number(index), tenantId);
+  }
+
+  @Post(':id/pagos')
+  cobrarCuenta(@Param('id') id: string, @Body() data: any, @Request() req?: any) {
+    const tenantId = req?.user?.tenantId;
+    return this.salesService.cobrarCuenta(id, data, tenantId);
   }
 
   @Put(':id/pay')

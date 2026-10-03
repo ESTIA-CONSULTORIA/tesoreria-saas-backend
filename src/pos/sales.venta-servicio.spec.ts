@@ -8,6 +8,7 @@ import { Recipe } from '../costs/entities/recipe.entity';
 import { Insumo } from '../costs/entities/insumo.entity';
 import { TenantSetting } from '../tenant-settings/entities/tenant-setting.entity';
 import { AppointmentsService } from '../appointments/appointments.service';
+import { CostsService } from '../costs/costs.service';
 import { TenantSettingsService } from '../tenant-settings/tenant-settings.service';
 import { InsumoAlertsService } from './insumo-alerts.service';
 
@@ -104,6 +105,7 @@ describe('SalesService.create() — capacidad venta_de_servicio', () => {
         { provide: InsumoAlertsService, useValue: {} },
         { provide: TenantSettingsService, useValue: { hasPosCapability } },
         { provide: AppointmentsService, useValue: {} },
+        { provide: CostsService, useValue: { createJustifiable: jest.fn() } },
       ],
     }).compile();
 

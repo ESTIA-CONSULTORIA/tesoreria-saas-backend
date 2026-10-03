@@ -7,6 +7,14 @@ export interface SaleItem {
   precioUnitario: number;
   descuento: number;
   subtotal: number;
+  // Marcas SOLO del servidor (create()/agregarItems() descartan cualquier valor que mande el
+  // cliente). POS flexible, capacidad mesas_cuenta_abierta:
+  //  - notaCocinaId: este ítem ya salió a cocina/barra (tiene NotaCocina emitida). Al cancelar la
+  //    cuenta o quitar el ítem NO se devuelve stock y se registra merma.
+  //  - anulado: el ítem se quitó de la cuenta abierta. Se conserva la línea (no se borra) para que
+  //    los índices usados al dividir la cuenta por ítems no se desplacen entre dos cajeros.
+  notaCocinaId?: string;
+  anulado?: boolean;
 }
 
 @Entity()
@@ -51,6 +59,12 @@ export class Sale {
     bancoOrigen?: string;
     motivo?: string;
     autorizadoPor?: string;
+    // POS flexible, capacidad mesas_cuenta_abierta: pagos parciales de una cuenta abierta. Cada
+    // entrada es un cobro (una persona / un grupo de ítems); itemIndexes son las posiciones en
+    // `items` que ese cobro cubre (cuando se divide por ítems). Es JSON: sin migración.
+    itemIndexes?: number[];
+    montoRecibido?: number;
+    cambio?: number;
   }>;
 
   @Column({ default: 'ABIERTA' })

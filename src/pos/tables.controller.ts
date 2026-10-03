@@ -8,8 +8,8 @@ export class TablesController {
   constructor(private tablesService: TablesService) {}
 
   @Get()
-  findAll(@Param('branchId') branchId?: string, @Param('areaId') areaId?: string) {
-    return this.tablesService.findAll(branchId, areaId);
+  findAll(@Req() req?: any, @Param('branchId') branchId?: string, @Param('areaId') areaId?: string) {
+    return this.tablesService.findAll(branchId, areaId, req?.user?.tenantId);
   }
 
   @Get(':id')
@@ -19,8 +19,11 @@ export class TablesController {
   }
 
   @Post()
-  create(@Body() data: any) {
-    return this.tablesService.create(data);
+  create(@Body() data: any, @Req() req?: any) {
+    // JWT primero; body.tenantId solo como fallback para SOPORTE — mismo criterio que
+    // products/cashiers/users/companies.
+    const tenantId = req?.user?.tenantId || data?.tenantId;
+    return this.tablesService.create(data, tenantId);
   }
 
   @Put(':id')

@@ -11,6 +11,7 @@ import { TenantSetting } from '../tenant-settings/entities/tenant-setting.entity
 import { TenantSettingsService } from '../tenant-settings/tenant-settings.service';
 import { InsumoAlertsService } from './insumo-alerts.service';
 import { AppointmentsService } from '../appointments/appointments.service';
+import { CostsService } from '../costs/costs.service';
 import { Cita } from '../appointments/entities/cita.entity';
 import { Patient } from '../patients/entities/patient.entity';
 
@@ -93,6 +94,7 @@ describe('SalesService — capacidad ligar_venta_a_cita', () => {
       providers: [
         SalesService,
         AppointmentsService, // REAL: la regla de estados y el filtro por tenant viven aquí
+        { provide: CostsService, useValue: { createJustifiable: jest.fn() } },
         { provide: getRepositoryToken(Cita), useValue: citasRepo },
         { provide: getRepositoryToken(Patient), useValue: {} },
         { provide: getRepositoryToken(Sale), useValue: salesRepo },
@@ -227,6 +229,7 @@ describe('SalesService.buscarCitasParaLigar() y AppointmentsService.searchForPos
       providers: [
         SalesService,
         AppointmentsService,
+        { provide: CostsService, useValue: { createJustifiable: jest.fn() } },
         { provide: getRepositoryToken(Cita), useValue: citasRepo },
         { provide: getRepositoryToken(Patient), useValue: {} },
         { provide: getRepositoryToken(Sale), useValue: {} },

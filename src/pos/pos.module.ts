@@ -43,6 +43,7 @@ import { Branch } from '../branches/entities/branch.entity';
 import { Company } from '../companies/entities/company.entity';
 import { TenantSettingsModule } from '../tenant-settings/tenant-settings.module';
 import { AppointmentsModule } from '../appointments/appointments.module';
+import { CostsModule } from '../costs/costs.module';
 
 @Module({
   imports: [
@@ -65,6 +66,9 @@ import { AppointmentsModule } from '../appointments/appointments.module';
     TenantSettingsModule,
     // POS flexible, capacidad ligar_venta_a_cita: SalesService usa AppointmentsService.
     AppointmentsModule,
+    // POS flexible, capacidad mesas_cuenta_abierta: SalesService registra mermas por la vía de
+    // Costos (CostsService.createJustifiable) al cancelar cuentas con ítems ya enviados a cocina.
+    CostsModule,
   ],
   controllers: [
     PosController,

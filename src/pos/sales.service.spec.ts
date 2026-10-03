@@ -9,6 +9,7 @@ import { Insumo } from '../costs/entities/insumo.entity';
 import { TenantSetting } from '../tenant-settings/entities/tenant-setting.entity';
 import { InsumoAlertsService } from './insumo-alerts.service';
 import { AppointmentsService } from '../appointments/appointments.service';
+import { CostsService } from '../costs/costs.service';
 import { TenantSettingsService } from '../tenant-settings/tenant-settings.service';
 
 // Ronda de seguimiento (arquitectura): captura el comportamiento OBSERVABLE de
@@ -52,6 +53,7 @@ describe('SalesService.resolveActiveInsumo() — resolución de cadena de reempl
         { provide: InsumoAlertsService, useValue: {} },
         { provide: TenantSettingsService, useValue: {} },
         { provide: AppointmentsService, useValue: {} },
+        { provide: CostsService, useValue: { createJustifiable: jest.fn() } },
       ],
     }).compile();
 

@@ -10,6 +10,7 @@ import { Insumo } from '../costs/entities/insumo.entity';
 import { TenantSetting } from '../tenant-settings/entities/tenant-setting.entity';
 import { InsumoAlertsService } from './insumo-alerts.service';
 import { AppointmentsService } from '../appointments/appointments.service';
+import { CostsService } from '../costs/costs.service';
 import { TenantSettingsService } from '../tenant-settings/tenant-settings.service';
 
 // Auditoría BUSINESS (hallazgo transversal #6): getSale/paySale/cancelSale/applyDiscount/
@@ -62,6 +63,7 @@ describe('SalesService — aislamiento por tenant', () => {
         { provide: InsumoAlertsService, useValue: { upsert: jest.fn() } },
         { provide: TenantSettingsService, useValue: {} },
         { provide: AppointmentsService, useValue: {} },
+        { provide: CostsService, useValue: { createJustifiable: jest.fn() } },
       ],
     }).compile();
 
@@ -144,7 +146,7 @@ describe('SalesService — aislamiento por tenant', () => {
 describe('ShiftsService — aislamiento por tenant', () => {
   let service: ShiftsService;
   let shiftsRepo: { findOne: jest.Mock; update: jest.Mock };
-  let salesRepo: { find: jest.Mock };
+  let salesRepo: { find: jest.Mock; count: jest.Mock };
 
   const TENANT_A = 'tenant-A';
   const TENANT_B = 'tenant-B';
@@ -169,7 +171,7 @@ describe('ShiftsService — aislamiento por tenant', () => {
       findOne: jest.fn(({ where }) => fakeShiftLookup(where)),
       update: jest.fn().mockResolvedValue(undefined),
     };
-    salesRepo = { find: jest.fn().mockResolvedValue([]) };
+    salesRepo = { find: jest.fn().mockResolvedValue([]), count: jest.fn().mockResolvedValue(0) };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [

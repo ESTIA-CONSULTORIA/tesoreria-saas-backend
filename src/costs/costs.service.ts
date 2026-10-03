@@ -702,6 +702,8 @@ export class CostsService {
   }
 
   // Justificables
+  // `manager` opcional (mismo patrón que updateInsumo/resolveActiveInsumoChain): SalesService
+  // registra aquí las mermas de una cuenta cancelada DENTRO de la transacción de la cancelación.
   async createJustifiable(data: {
     periodo: string;
     categoria: JustifiableCategory;
@@ -710,9 +712,10 @@ export class CostsService {
     detalles?: any;
     tenantId?: string;
     branchId?: string;
-  }) {
-    const justifiable = this.justifiableRepo.create(data);
-    return this.justifiableRepo.save(justifiable);
+  }, manager?: EntityManager) {
+    const justifiableRepo = manager ? manager.getRepository(Justifiable) : this.justifiableRepo;
+    const justifiable = justifiableRepo.create(data);
+    return justifiableRepo.save(justifiable);
   }
 
   findJustificablesByPeriod(periodo: string, tenantId?: string) {

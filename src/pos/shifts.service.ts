@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { IsNull, Not, Repository } from 'typeorm';
 import { Shift } from './entities/shift.entity';
 import { Sale } from './entities/sale.entity';
 import { resolveEventTimestamp } from '../common/resolve-event-timestamp.util';
@@ -167,6 +167,18 @@ export class ShiftsService {
       }
       if (!shift.precorteGuardado) {
         throw new Error('Debe realizar el precorte antes del corte Z');
+      }
+
+      // POS flexible, capacidad mesas_cuenta_abierta: el corte solo suma ventas PAGADA. Una cuenta
+      // abierta en este turno (con o sin cobros parciales) quedaría fuera del corte, y al cobrarse
+      // después seguiría ligada a este turno ya cerrado — el efectivo no cuadraría nunca. Por eso
+      // el corte Z se bloquea mientras haya cuentas abiertas en mesas: hay que cobrarlas o
+      // cancelarlas antes.
+      const cuentasAbiertas = await this.salesRepo.count({
+        where: { turnoId: id, status: 'ABIERTA', tableId: Not(IsNull()) },
+      });
+      if (cuentasAbiertas > 0) {
+        throw new Error(`No se puede cerrar el turno: hay ${cuentasAbiertas} cuenta(s) abierta(s) en mesas. Cóbralas o cancélalas antes del corte Z.`);
       }
 
       // Calculate real totals from actual paid sales in this shift
