@@ -99,7 +99,7 @@ describe('SalesService.resolveActiveInsumo() — resolución de cadena de reempl
   });
 
   it('inactivo sin reemplazo configurado: BadRequestException con mensaje exacto', async () => {
-    const insumo = buildInsumo({ isActive: false, reemplazadoPorId: null, nombre: 'Queso' });
+    const insumo = buildInsumo({ isActive: false, reemplazadoPorId: undefined, nombre: 'Queso' });
     await expect(callResolve(insumo)).rejects.toThrow(
       'El insumo "Queso" está inactivo y no tiene reemplazo configurado — no se puede vender.',
     );

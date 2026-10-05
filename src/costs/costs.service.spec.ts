@@ -94,7 +94,7 @@ describe('CostsService.costoUnitarioInsumo() — resolución de cadena de reempl
   });
 
   it('inactivo sin reemplazo configurado: lanza Error con mensaje exacto', async () => {
-    const insumo = buildInsumo({ isActive: false, reemplazadoPorId: null, nombre: 'Queso' });
+    const insumo = buildInsumo({ isActive: false, reemplazadoPorId: undefined, nombre: 'Queso' });
     await expect(callCostoUnitarioInsumo(insumo)).rejects.toThrow(
       'El insumo "Queso" está inactivo y no tiene reemplazo configurado',
     );

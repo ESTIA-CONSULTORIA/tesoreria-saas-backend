@@ -123,7 +123,7 @@ describe('SalesService.create() — generación de NotaCocina', () => {
 
   it('capacidad activada, producto SIN estación asignada: no genera nota para ese ítem', async () => {
     hasPosCapability.mockResolvedValue(true);
-    registerProduct(buildProduct({ id: 'p1', estacionPreparacion: null }));
+    registerProduct(buildProduct({ id: 'p1', estacionPreparacion: undefined }));
 
     await service.create(baseSaleData([{ productoId: 'p1', cantidad: 1 }]) as any);
 
@@ -158,7 +158,7 @@ describe('SalesService.create() — generación de NotaCocina', () => {
     hasPosCapability.mockResolvedValue(true);
     registerProduct(buildProduct({ id: 'p1', name: 'Hamburguesa', estacionPreparacion: 'COCINA' }));
     registerProduct(buildProduct({ id: 'p2', name: 'Mojito', estacionPreparacion: 'BARRA' }));
-    registerProduct(buildProduct({ id: 'p3', name: 'Agua embotellada', estacionPreparacion: null }));
+    registerProduct(buildProduct({ id: 'p3', name: 'Agua embotellada', estacionPreparacion: undefined }));
 
     await service.create(
       baseSaleData([

@@ -69,7 +69,7 @@ describe('ProductsService.resolveActiveInsumoSafe() — resolución de cadena de
   });
 
   it('inactivo sin reemplazo configurado: no lanza, loggea warning y devuelve null', async () => {
-    const insumo = buildInsumo({ isActive: false, reemplazadoPorId: null, id: 'insumo-x', nombre: 'Queso' });
+    const insumo = buildInsumo({ isActive: false, reemplazadoPorId: undefined, id: 'insumo-x', nombre: 'Queso' });
     const resuelto = await callResolveSafe(insumo);
 
     expect(resuelto).toBeNull();
