@@ -1250,6 +1250,12 @@ export class SalesService {
     return this.dataSource.transaction(async (manager) => {
       const sale = await manager.findOne(Sale, { where: { id, tenantId }, lock: { mode: 'pessimistic_write' } });
       if (!sale) throw new NotFoundException('Venta no encontrada');
+      // Las ventas de delivery no pasaron por caja ni por un turno (turnoId nulo) y su ingreso entró
+      // como movimiento bancario: devolverlas aquí descontaría dinero de un turno que nunca lo tuvo y
+      // dejaría el ingreso sin revertir. Se devuelven desde la plataforma.
+      if (sale.origin === 'DELIVERY') {
+        throw new BadRequestException('Las ventas de delivery no se devuelven desde el POS: se devuelven desde la plataforma de delivery.');
+      }
       if (sale.status === 'DEVUELTA') throw new BadRequestException('Esta venta ya fue devuelta.');
       // Las filas "-DEV" negativas del esquema anterior siguen siendo PAGADA: no son devolvibles.
       if (sale.status !== 'PAGADA' || Number(sale.total) <= 0) {

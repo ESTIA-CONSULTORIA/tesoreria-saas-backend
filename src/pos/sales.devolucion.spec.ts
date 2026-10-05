@@ -403,6 +403,32 @@ describe('SalesService.returnSale() — devolución total', () => {
     });
   });
 
+  // ── delivery ────────────────────────────────────────────────────────────────────────────
+  describe('ventas de delivery', () => {
+    it('origin DELIVERY: 400 con mensaje claro; no cambia ventas, stock, caja ni turno', async () => {
+      ventas.set('dlv-1', {
+        id: 'dlv-1', folio: 'DLV-UBER-1', tenantId: TENANT_A, status: 'PAGADA', total: '250.00', subtotal: '250.00',
+        formaPago: 'TRANSFERENCIA', formasPago: [], origin: 'DELIVERY', platform: 'UBER', turnoId: null, sucursalId: 'sucursal-A',
+        items: [{ productoId: 'uber-item-1', nombre: 'Combo', cantidad: 1, precioUnitario: 250, descuento: 0, subtotal: 250 }],
+      });
+      const err: any = await sales.returnSale('dlv-1', { motivo: 'x' }, TENANT_A, GERENTE).catch((e) => e);
+      expect(err).toBeInstanceOf(BadRequestException);
+      expect(err.getStatus()).toBe(400);
+      expect(err.message).toBe('Las ventas de delivery no se devuelven desde el POS: se devuelven desde la plataforma de delivery.');
+      expect(ventas.get('dlv-1').status).toBe('PAGADA');
+      expect(devoluciones()).toHaveLength(0);
+      expect(movimientos).toHaveLength(0);
+      const cierre = await cerrarTurno();
+      expect(cierre).toEqual(expect.objectContaining({ totalTransferencia: 0, totalDevoluciones: 0 })); // el turno no se tocó
+    });
+
+    it('una venta de POS (origin POS) sigue devolviéndose normal', async () => {
+      const v = await crearPagada();
+      ventas.get(v.id).origin = 'POS';
+      await expect(sales.returnSale(v.id, { motivo: 'x' }, TENANT_A, GERENTE)).resolves.toBeDefined();
+    });
+  });
+
   // ── turnoId opcional ────────────────────────────────────────────────────────────────────
   describe('turnoId opcional', () => {
     const turno = (id: string, extra: Record<string, any> = {}) => ({
