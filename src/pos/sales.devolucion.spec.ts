@@ -503,6 +503,39 @@ describe('SalesService.returnSale() — devolución total', () => {
     });
   });
 
+  // ── cancel() ya no toca ventas cobradas ─────────────────────────────────────────────────
+  describe('cancel() solo para cuentas ABIERTA', () => {
+    it('una venta PAGADA: 400 con mensaje que indica usar la devolución; no cambia nada', async () => {
+      const v = await crearPagada();
+      const err: any = await sales.cancel(v.id, 'x', TENANT_A).catch((e) => e);
+      expect(err).toBeInstanceOf(BadRequestException);
+      expect(err.getStatus()).toBe(400);
+      expect(err.message).toContain('usa la devolución');
+      expect(ventas.get(v.id).status).toBe('PAGADA');
+      expect(stock()).toBe(98);
+    });
+
+    it('DEVUELTA y DEVOLUCION: 400 (cancelarlas sacaba la venta del bruto del corte y duplicaba la devolución)', async () => {
+      const v = await crearPagada();
+      await sales.returnSale(v.id, { motivo: 'x' }, TENANT_A, GERENTE);
+      await expect(sales.cancel(v.id, 'x', TENANT_A)).rejects.toThrow(BadRequestException);
+      await expect(sales.cancel(devoluciones()[0].id, 'x', TENANT_A)).rejects.toThrow(BadRequestException);
+      expect(ventas.get(v.id).status).toBe('DEVUELTA');
+      expect(devoluciones()).toHaveLength(1);
+    });
+
+    it('una cuenta ABIERTA sin cobros se sigue cancelando como siempre', async () => {
+      const abierta = await sales.create({ items: [{ productoId: 'p-simple', nombre: 'Taco', cantidad: 1, precioUnitario: 50, descuento: 0, subtotal: 50 }], subtotal: 50, descuento: 0, impuestos: 0, total: 50, cajero: 'c', turnoId: 'turno-1', sucursalId: 'sucursal-A', tenantId: TENANT_A, folio: 'ABI-1' } as any);
+      const r: any = await sales.cancel(abierta.id, 'se fue el cliente', TENANT_A);
+      expect(r.status).toBe('CANCELADA');
+    });
+
+    it('una venta ya CANCELADA conserva su mensaje de siempre', async () => {
+      ventas.set('canc', { id: 'canc', tenantId: TENANT_A, status: 'CANCELADA', total: 10 });
+      await expect(sales.cancel('canc', 'x', TENANT_A)).rejects.toThrow('La venta ya está cancelada');
+    });
+  });
+
   // ── política de devoluciones por tenant ─────────────────────────────────────────────────
   describe('política de devoluciones (politicaDevoluciones)', () => {
     const intacta = (id: string) => {

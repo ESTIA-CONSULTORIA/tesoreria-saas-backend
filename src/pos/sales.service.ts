@@ -1147,6 +1147,16 @@ export class SalesService {
       if (sale.status === 'CANCELADA') {
         throw new Error('La venta ya está cancelada');
       }
+      // Cancelar solo aplica a una cuenta ABIERTA (sin cobrar). Una venta ya cobrada (PAGADA), una
+      // ya devuelta (DEVUELTA) o el registro de una devolución (DEVOLUCION) no se cancelan: cancelar
+      // no devuelve stock ni dinero y descuadra el corte. Para una venta cobrada: returnSale().
+      if (sale.status !== 'ABIERTA') {
+        throw new BadRequestException(
+          sale.status === 'PAGADA'
+            ? 'Una venta ya cobrada no se cancela: usa la devolución para regresar el inventario y el dinero.'
+            : `Una venta en estado ${sale.status} no se puede cancelar.`,
+        );
+      }
       // Cuenta abierta con cobros parciales: cancelarla dejaría dinero cobrado sin venta que lo
       // respalde — hay que resolver esos pagos (reembolso) antes.
       if (sale.status === 'ABIERTA' && this.sumPagos(sale.formasPago) > 0) {
