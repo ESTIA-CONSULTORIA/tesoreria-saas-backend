@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, HttpException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, EntityManager, IsNull, Not, Repository } from 'typeorm';
 import { Sale, SaleItem } from './entities/sale.entity';
@@ -778,7 +778,7 @@ export class SalesService {
       if (!sale) throw new Error('Venta no encontrada');
       if (sale.status !== 'ABIERTA') throw new Error('La cuenta ya no está abierta');
       if (this.sumPagos(sale.formasPago) > 0) {
-        throw new Error('La cuenta tiene pagos parciales cobrados: no se puede cancelar sin reembolsarlos.');
+        throw new BadRequestException('La cuenta tiene pagos parciales; no se puede cancelar');
       }
 
       const vivos = (sale.items || []).filter((it) => !it.anulado);
@@ -1143,7 +1143,7 @@ export class SalesService {
       // Cuenta abierta con cobros parciales: cancelarla dejaría dinero cobrado sin venta que lo
       // respalde — hay que resolver esos pagos (reembolso) antes.
       if (sale.status === 'ABIERTA' && this.sumPagos(sale.formasPago) > 0) {
-        throw new Error('La cuenta tiene pagos parciales cobrados: no se puede cancelar sin reembolsarlos.');
+        throw new BadRequestException('La cuenta tiene pagos parciales; no se puede cancelar');
       }
 
       const liberaMesa = !!(
@@ -1166,6 +1166,7 @@ export class SalesService {
       return this.salesRepo.findOne({ where: { id } });
     } catch (error) {
       console.error('SalesService.cancel error:', error);
+      if (error instanceof HttpException) throw error;
       throw new Error(`Error al cancelar venta: ${error.message}`);
     }
   }

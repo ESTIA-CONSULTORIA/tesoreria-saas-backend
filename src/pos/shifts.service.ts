@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, HttpException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { IsNull, Not, Repository } from 'typeorm';
 import { Shift } from './entities/shift.entity';
@@ -178,7 +178,7 @@ export class ShiftsService {
         where: { turnoId: id, status: 'ABIERTA', tableId: Not(IsNull()) },
       });
       if (cuentasAbiertas > 0) {
-        throw new Error(`No se puede cerrar el turno: hay ${cuentasAbiertas} cuenta(s) abierta(s) en mesas. Cóbralas o cancélalas antes del corte Z.`);
+        throw new BadRequestException(`No se puede cerrar el turno: hay ${cuentasAbiertas} cuenta(s) abierta(s) en mesas. Cóbralas o cancélalas antes del corte Z.`);
       }
 
       // Calculate real totals from actual paid sales in this shift
@@ -216,7 +216,13 @@ export class ShiftsService {
       }
 
       const cancelledSales = await this.salesRepo.find({ where: { turnoId: id, status: 'CANCELADA' } });
-      const calcTotalDevoluciones = cancelledSales.reduce((sum, s) => sum + (Number(s.total) || 0), 0);
+      // Una cuenta abierta de mesa cancelada sin cobro nunca recibió dinero: no hay nada que
+      // devolver, así que no cuenta como devolución. Las ventas que sí se cobraron (PAGADA
+      // canceladas después) cuentan igual que siempre.
+      const huboCobro = (s: Sale) => (Array.isArray(s.formasPago) && s.formasPago.length > 0) || !!s.formaPago;
+      const calcTotalDevoluciones = cancelledSales
+        .filter((s) => !(s.tableId && !huboCobro(s)))
+        .reduce((sum, s) => sum + (Number(s.total) || 0), 0);
 
       await this.shiftsRepo.update(id, {
         horaCierre: now.toTimeString().slice(0, 8),
@@ -236,6 +242,7 @@ export class ShiftsService {
       return this.shiftsRepo.findOne({ where: { id } });
     } catch (error) {
       console.error('ShiftsService.closeShift error:', error);
+      if (error instanceof HttpException) throw error;
       throw new Error(`Error al cerrar turno: ${error.message}`);
     }
   }

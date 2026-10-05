@@ -490,6 +490,17 @@ describe('SalesService — capacidad mesas_cuenta_abierta', () => {
       expect(venta(v.id).status).toBe('ABIERTA');
     });
 
+    it('cancel() con cobros parciales: 400 (BadRequestException) con mensaje claro, sin tocar stock ni mesa', async () => {
+      const v = await crearVenta();
+      await service.cobrarCuenta(v.id, { formaPago: 'EFECTIVO', monto: 30 }, TENANT_A);
+      const err: any = await service.cancel(v.id, 'error', TENANT_A).catch((e) => e);
+      expect(err).toBeInstanceOf(BadRequestException);
+      expect(err.getStatus()).toBe(400);
+      expect(err.message).toBe('La cuenta tiene pagos parciales; no se puede cancelar');
+      expect(venta(v.id).status).toBe('ABIERTA');
+      expect(venta(v.id).formasPago).toHaveLength(1);
+    });
+
     it('cancel() se rechaza con cobros parciales; applyDiscount() también', async () => {
       const v = await crearVenta();
       await service.cobrarCuenta(v.id, { formaPago: 'EFECTIVO', monto: 30 }, TENANT_A);
@@ -869,6 +880,46 @@ describe('ShiftsService.closeShift() — bloqueo con cuentas abiertas en mesas',
     salesRepo.count.mockResolvedValue(2);
     await expect(service.closeShift('turno-1', { efectivoContado: 0 } as any, TENANT_A)).rejects.toThrow('hay 2 cuenta(s) abierta(s)');
     expect(shiftsRepo.update).not.toHaveBeenCalled();
+  });
+
+  it('el bloqueo llega como 400 (BadRequestException) con el mensaje claro, no como 500', async () => {
+    salesRepo.count.mockResolvedValue(1);
+    const err: any = await service.closeShift('turno-1', { efectivoContado: 0 } as any, TENANT_A).catch((e) => e);
+    expect(err).toBeInstanceOf(BadRequestException);
+    expect(err.getStatus()).toBe(400);
+    expect(err.message).toBe('No se puede cerrar el turno: hay 1 cuenta(s) abierta(s) en mesas. Cóbralas o cancélalas antes del corte Z.');
+  });
+
+  describe('totalDevoluciones', () => {
+    const cancelar = (extra: any) => ({ status: 'CANCELADA', total: '100.00', tableId: null, formasPago: null, formaPago: null, ...extra });
+    const cerrarConCanceladas = async (canceladas: any[]) => {
+      salesRepo.count.mockResolvedValue(0);
+      salesRepo.find.mockImplementation(async ({ where }: any) => (where.status === 'CANCELADA' ? canceladas : []));
+      await service.closeShift('turno-1', { efectivoContado: 0 } as any, TENANT_A);
+      return shiftsRepo.update.mock.calls[0][1].totalDevoluciones;
+    };
+
+    it('cuenta abierta de mesa cancelada SIN cobro: no cuenta como devolución', async () => {
+      expect(await cerrarConCanceladas([cancelar({ tableId: 'mesa-1' })])).toBe(0);
+    });
+
+    it('venta PAGADA cancelada después (con formaPago o formasPago): cuenta igual que siempre, con o sin mesa', async () => {
+      const total = await cerrarConCanceladas([
+        cancelar({ formaPago: 'EFECTIVO' }),
+        cancelar({ tableId: 'mesa-1', formasPago: [{ forma: 'EFECTIVO', monto: 100 }] }),
+        cancelar({ total: '50.00', tableId: 'mesa-2', formaPago: 'TARJETA' }),
+      ]);
+      expect(total).toBe(250);
+    });
+
+    it('venta sin mesa cancelada sin cobro: comportamiento previo intacto (sigue contando)', async () => {
+      expect(await cerrarConCanceladas([cancelar({})])).toBe(100);
+    });
+
+    it('mezcla: solo se descuentan las cuentas de mesa canceladas sin cobro', async () => {
+      const total = await cerrarConCanceladas([cancelar({ tableId: 'mesa-1' }), cancelar({ total: '80.00', formaPago: 'EFECTIVO' })]);
+      expect(total).toBe(80);
+    });
   });
 
   it('sin cuentas abiertas: cierra como siempre', async () => {
