@@ -1,4 +1,5 @@
-import { Body, Controller, ForbiddenException, Get, Param, Post, Put, Request, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, ForbiddenException, Get, Param, Post, Put, Request, UseGuards } from '@nestjs/common';
+import { POLITICA_DEVOLUCION_KEY } from '../config/politica-devoluciones.config';
 import { TenantSettingsService } from './tenant-settings.service';
 import { Public } from '../auth/public.decorator';
 import { RolesGuard } from '../auth/roles.guard';
@@ -23,8 +24,42 @@ export class TenantSettingsController {
   // usuarios — así que cerrarlo rompería esas pantallas de login sin ganar mucho a cambio.
   @Public()
   @Get(':tenantId')
-  findByTenant(@Param('tenantId') tenantId: string) {
-    return this.service.findByTenant(tenantId);
+  async findByTenant(@Param('tenantId') tenantId: string) {
+    const setting = await this.service.findByTenant(tenantId);
+    // Este GET es público: la política de devoluciones es regla interna del negocio y solo se lee
+    // por GET :tenantId/politica-devoluciones (ADMIN) o por /pos/sales/politica-devoluciones (POS).
+    if (setting?.posCapabilities && POLITICA_DEVOLUCION_KEY in setting.posCapabilities) {
+      const { [POLITICA_DEVOLUCION_KEY]: _oculta, ...resto } = setting.posCapabilities;
+      return { ...setting, posCapabilities: resto };
+    }
+    return setting;
+  }
+
+  // Política de devoluciones (SOLO_GERENTE | CAJERO_LIBRE). Leer y cambiar: solo ADMIN del propio
+  // tenant (SOPORTE conserva su acceso total, como en el resto de este controller). Un valor
+  // inválido responde 400 desde el servicio.
+  @UseGuards(RolesGuard)
+  @Roles('ADMIN', 'SOPORTE')
+  @Get(':tenantId/politica-devoluciones')
+  async getPoliticaDevoluciones(@Param('tenantId') tenantId: string, @Request() req?: any) {
+    this.assertOwnTenant(tenantId, req);
+    return { politicaDevoluciones: await this.service.getPoliticaDevoluciones(tenantId) };
+  }
+
+  @UseGuards(RolesGuard)
+  @Roles('ADMIN', 'SOPORTE')
+  @Put(':tenantId/politica-devoluciones')
+  async setPoliticaDevoluciones(
+    @Param('tenantId') tenantId: string,
+    @Body() body: { politicaDevoluciones?: string },
+    @Request() req?: any,
+  ) {
+    this.assertOwnTenant(tenantId, req);
+    if (body?.politicaDevoluciones === undefined) {
+      throw new BadRequestException('politicaDevoluciones es requerida.');
+    }
+    await this.service.upsert(tenantId, { politicaDevoluciones: body.politicaDevoluciones });
+    return { politicaDevoluciones: await this.service.getPoliticaDevoluciones(tenantId) };
   }
 
   // Auditoría de seguridad (GoodsHabits, hallazgo #3 BUSINESS): antes no tenía NINGÚN guard —

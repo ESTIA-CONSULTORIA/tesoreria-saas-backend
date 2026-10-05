@@ -13,6 +13,10 @@ import { resolveEventTimestamp } from '../common/resolve-event-timestamp.util';
 import { resolveActiveInsumoChain } from '../costs/insumo-resolution';
 import { NotaCocina } from './entities/nota-cocina.entity';
 import { Shift } from './entities/shift.entity';
+import { PoliticaDevolucion, ROLES_GERENTE } from '../config/politica-devoluciones.config';
+
+// Quien ejecuta una operación (req.user del JWT): id, email y roleCode.
+type Actor = { id?: string; email?: string; roleCode?: string };
 import { Table } from './entities/table.entity';
 import { TenantSettingsService } from '../tenant-settings/tenant-settings.service';
 import { AppointmentsService } from '../appointments/appointments.service';
@@ -1209,10 +1213,28 @@ export class SalesService {
   //    devolución se registra como una venta 'DEVOLUCION' en el turno abierto actual, con las mismas
   //    formasPago: el corte la suma en totalDevoluciones y la resta del efectivo/tarjeta/transferencia.
   //  - No repetible: la original deja de estar PAGADA (y folio `${folio}-DEV` es único).
-  async returnSale(id: string, data: { motivo?: string } | undefined, tenantId?: string) {
+  //  - Quién puede: política del tenant (TenantSetting, default SOLO_GERENTE) → con SOLO_GERENTE
+  //    exige roleCode ADMIN o GERENTE; con CAJERO_LIBRE cualquier usuario autenticado del POS.
+  //    Rechazo 403. Quien ejecutó queda en la devolución (notas y formasPago[].autorizadoPor).
+  async getPoliticaDevolucionesParaUsuario(tenantId: string | undefined, actor?: Actor) {
+    if (!tenantId) throw new ForbiddenException('Se requiere un tenant.');
+    const politica = await this.tenantSettingsService.getPoliticaDevoluciones(tenantId);
+    return { politicaDevoluciones: politica, puedeDevolver: this.puedeDevolver(politica, actor) };
+  }
+
+  private puedeDevolver(politica: PoliticaDevolucion, actor?: Actor): boolean {
+    return politica === 'CAJERO_LIBRE' || ROLES_GERENTE.includes(actor?.roleCode ?? '');
+  }
+
+  async returnSale(id: string, data: { motivo?: string } | undefined, tenantId?: string, actor?: Actor) {
     if (!tenantId) {
       throw new ForbiddenException('Se requiere un tenant para devolver una venta.');
     }
+    const politica = await this.tenantSettingsService.getPoliticaDevoluciones(tenantId);
+    if (!this.puedeDevolver(politica, actor)) {
+      throw new ForbiddenException('La política de devoluciones de este negocio solo permite devolver a un gerente o administrador. Pide a un gerente que la realice.');
+    }
+    const quien = actor?.email ?? actor?.id ?? 'desconocido';
     const motivo = String(data?.motivo ?? '').trim();
     if (!motivo) {
       throw new BadRequestException('El motivo de la devolución es requerido.');
@@ -1250,8 +1272,8 @@ export class SalesService {
 
       // Cómo se cobró la original: pagos mixtos (formasPago) o un solo pago (formaPago por el total).
       const pagos = Array.isArray(sale.formasPago) && sale.formasPago.length > 0
-        ? sale.formasPago.map((p) => ({ forma: p.forma, monto: this.round2(Number(p.monto) || 0) }))
-        : [{ forma: sale.formaPago, monto: this.round2(Number(sale.total)) }];
+        ? sale.formasPago.map((p) => ({ forma: p.forma, monto: this.round2(Number(p.monto) || 0), autorizadoPor: quien }))
+        : [{ forma: sale.formaPago, monto: this.round2(Number(sale.total)), autorizadoPor: quien }];
 
       const now = new Date();
       const devolucion = manager.create(Sale, {
@@ -1270,7 +1292,7 @@ export class SalesService {
         turnoId: turno.id,
         sucursalId: sale.sucursalId,
         tenantId,
-        notas: `Devolución de venta ${sale.folio}. Motivo: ${motivo}`,
+        notas: `Devolución de venta ${sale.folio}. Motivo: ${motivo}. Devolvió: ${quien} (${actor?.roleCode ?? 'sin rol'})`,
         referencia: sale.folio,
       });
       const guardada = await manager.save(devolucion);

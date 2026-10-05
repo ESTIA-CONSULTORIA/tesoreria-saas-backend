@@ -1,8 +1,15 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { TenantSetting } from './entities/tenant-setting.entity';
 import { Repository } from 'typeorm';
 import { DEFAULT_POS_CAPABILITIES, PosCapability } from '../config/pos-capabilities.config';
+import {
+  DEFAULT_POLITICA_DEVOLUCION,
+  isValidPoliticaDevolucion,
+  PoliticaDevolucion,
+  POLITICAS_DEVOLUCION,
+  POLITICA_DEVOLUCION_KEY,
+} from '../config/politica-devoluciones.config';
 
 @Injectable()
 export class TenantSettingsService {
@@ -30,6 +37,14 @@ export class TenantSettingsService {
     return DEFAULT_POS_CAPABILITIES[capability];
   }
 
+  // Política de devoluciones del tenant. Sin fila, sin clave o con un valor no reconocido cae al
+  // default SOLO_GERENTE (el más restrictivo): nadie queda con permiso de más por un dato raro.
+  async getPoliticaDevoluciones(tenantId: string): Promise<PoliticaDevolucion> {
+    const setting = await this.findByTenant(tenantId);
+    const stored = setting?.posCapabilities?.[POLITICA_DEVOLUCION_KEY];
+    return isValidPoliticaDevolucion(stored) ? stored : DEFAULT_POLITICA_DEVOLUCION;
+  }
+
   async upsert(
     tenantId: string,
     body: {
@@ -55,17 +70,33 @@ export class TenantSettingsService {
       companyDisplayName?: string;
       stockPolicy?: 'BLOQUEAR' | 'PERMITIR_NEGATIVO';
       posCapabilities?: Partial<Record<PosCapability, boolean>>;
+      politicaDevoluciones?: string;
     },
   ) {
     const existing = await this.findByTenant(tenantId);
+
+    // politicaDevoluciones no es una columna: se guarda dentro de posCapabilities (JSON). Puede
+    // llegar como campo propio o dentro de posCapabilities; en ambos casos se valida aquí, así
+    // que ningún valor inválido llega a la fila por ninguna vía (PUT, POST ni posCapabilities).
+    const { politicaDevoluciones: politicaTop, ...bodySinPolitica } = body;
+    const { [POLITICA_DEVOLUCION_KEY]: politicaEnCaps, ...capsSinPolitica } = (body.posCapabilities || {}) as Record<string, any>;
+    const politica = politicaTop !== undefined ? politicaTop : politicaEnCaps;
+    if (politica !== undefined && !isValidPoliticaDevolucion(politica)) {
+      throw new BadRequestException(`politicaDevoluciones inválida: usa ${POLITICAS_DEVOLUCION.join(' o ')}.`);
+    }
+    body = { ...bodySinPolitica, ...(body.posCapabilities !== undefined ? { posCapabilities: capsSinPolitica } : {}) };
 
     // Merge, nunca reemplazo: posCapabilities solo guarda excepciones al default (ver
     // comentario en la entidad), así que activar/desactivar UNA capacidad no debe borrar
     // las otras 4 que ya estaban guardadas explícitamente en la fila. body.posCapabilities
     // es parcial a propósito (puede traer solo la capacidad que el panel está tocando).
     const mergedCapabilities =
-      body.posCapabilities !== undefined
-        ? { ...(existing?.posCapabilities || {}), ...body.posCapabilities }
+      body.posCapabilities !== undefined || politica !== undefined
+        ? {
+            ...(existing?.posCapabilities || {}),
+            ...(body.posCapabilities || {}),
+            ...(politica !== undefined ? { [POLITICA_DEVOLUCION_KEY]: politica } : {}),
+          }
         : undefined;
 
     if (!existing) {

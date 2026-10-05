@@ -103,7 +103,10 @@ export class TenantSetting {
   // comportamiento actual del POS siga igual. Solo guarda EXCEPCIONES al default (una
   // capacidad puesta explícitamente en true/false), no el mapa completo — ver upsert().
   @Column({ type: 'json', nullable: true })
-  posCapabilities: Partial<Record<string, boolean>> | null;
+  // Además de las capacidades (boolean) guarda UNA clave de texto, 'politicaDevoluciones'
+  // (SOLO_GERENTE | CAJERO_LIBRE; ver src/config/politica-devoluciones.config.ts): reutiliza esta
+  // columna JSON para no necesitar migración. Solo TenantSettingsService la escribe, validada.
+  posCapabilities: Partial<Record<string, boolean | string>> | null;
 
   @CreateDateColumn()
   createdAt: Date;

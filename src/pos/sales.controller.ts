@@ -39,6 +39,13 @@ export class SalesController {
     return this.salesService.buscarCuentasAbiertas(tenantId, filters);
   }
 
+  // Política de devoluciones vigente y si quien llama puede devolver (para que el POS muestre u oculte
+  // el botón). Es solo informativo: returnSale() vuelve a decidir. Antes de ':id'.
+  @Get('politica-devoluciones')
+  getPoliticaDevoluciones(@Request() req) {
+    return this.salesService.getPoliticaDevolucionesParaUsuario(req.user?.tenantId, req.user);
+  }
+
   @Get(':id')
   getSale(@Param('id') id: string, @Request() req?: any) {
     const tenantId = req?.user?.tenantId;
@@ -85,9 +92,10 @@ export class SalesController {
     return this.salesService.applyDiscount(id, data.descuento, data.nuevoTotal, tenantId);
   }
 
+  // El servicio decide según la política del tenant (SOLO_GERENTE | CAJERO_LIBRE) y el rol de quien llama.
   @Post(':id/return')
   returnSale(@Param('id') id: string, @Body() data: any, @Request() req?: any) {
     const tenantId = req?.user?.tenantId;
-    return this.salesService.returnSale(id, data, tenantId);
+    return this.salesService.returnSale(id, data, tenantId, req?.user);
   }
 }
