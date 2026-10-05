@@ -1226,7 +1226,7 @@ export class SalesService {
     return politica === 'CAJERO_LIBRE' || ROLES_GERENTE.includes(actor?.roleCode ?? '');
   }
 
-  async returnSale(id: string, data: { motivo?: string } | undefined, tenantId?: string, actor?: Actor) {
+  async returnSale(id: string, data: { motivo?: string; turnoId?: string } | undefined, tenantId?: string, actor?: Actor) {
     if (!tenantId) {
       throw new ForbiddenException('Se requiere un tenant para devolver una venta.');
     }
@@ -1239,6 +1239,12 @@ export class SalesService {
     if (!motivo) {
       throw new BadRequestException('El motivo de la devolución es requerido.');
     }
+    // turnoId opcional: el POS manda su turno actual para que la devolución caiga en SU caja aunque la
+    // sucursal tenga otros turnos abiertos. Sin él se usa el más reciente de la sucursal.
+    const turnoIdPedido = data?.turnoId;
+    if (turnoIdPedido !== undefined && (typeof turnoIdPedido !== 'string' || !turnoIdPedido.trim())) {
+      throw new BadRequestException('turnoId inválido.');
+    }
     const ventaServicioHabilitada = await this.tenantSettingsService.hasPosCapability(tenantId, 'venta_de_servicio');
 
     return this.dataSource.transaction(async (manager) => {
@@ -1250,12 +1256,23 @@ export class SalesService {
         throw new BadRequestException('Solo se puede devolver ventas pagadas');
       }
 
-      const turno = await manager.findOne(Shift, {
-        where: { tenantId, sucursalId: sale.sucursalId, status: 'ABIERTO' },
-        order: { createdAt: 'DESC' },
-      });
-      if (!turno) {
-        throw new BadRequestException('No hay un turno abierto en esta sucursal: abre turno antes de devolver una venta.');
+      let turno: Shift | null;
+      if (turnoIdPedido !== undefined) {
+        // Turno elegido por quien devuelve: debe ser un turno ABIERTO de este tenant y de la MISMA
+        // sucursal que la venta. Un solo mensaje para todo rechazo: no revela si el id existe en
+        // otro tenant o sucursal.
+        turno = await manager.findOne(Shift, { where: { id: turnoIdPedido.trim(), tenantId } });
+        if (!turno || turno.status !== 'ABIERTO' || turno.sucursalId !== sale.sucursalId) {
+          throw new BadRequestException('El turno indicado no es un turno abierto de la sucursal de esta venta.');
+        }
+      } else {
+        turno = await manager.findOne(Shift, {
+          where: { tenantId, sucursalId: sale.sucursalId, status: 'ABIERTO' },
+          order: { createdAt: 'DESC' },
+        });
+        if (!turno) {
+          throw new BadRequestException('No hay un turno abierto en esta sucursal: abre turno antes de devolver una venta.');
+        }
       }
 
       const devFolio = `${sale.folio}-DEV`;

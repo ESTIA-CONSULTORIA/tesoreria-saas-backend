@@ -95,8 +95,9 @@ describe('SalesService.returnSale() — devolución total', () => {
         if (entity === Product) return productLookup(opts.where);
         const m = mapFor(entity);
         if (!m) return Promise.resolve(null);
-        const row = [...m.values()].find((r) => matches(r, opts.where));
-        return Promise.resolve(row ? clone(row) : null);
+        const filas = [...m.values()].filter((r) => matches(r, opts.where));
+        if (opts.order?.createdAt === 'DESC') filas.sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt));
+        return Promise.resolve(filas[0] ? clone(filas[0]) : null);
       }),
       update: jest.fn((entity: any, criteria: any, patch: any) => {
         if (entity === NotaCocina) {
@@ -399,6 +400,80 @@ describe('SalesService.returnSale() — devolución total', () => {
       await sales.returnSale(v.id, { motivo: 'x' }, TENANT_A, GERENTE);
       const cierre = await cerrarTurno();
       expect(cierre.totalDevoluciones).toBe(100); // solo la devolución real, no los $70 de la cuenta sin cobro
+    });
+  });
+
+  // ── turnoId opcional ────────────────────────────────────────────────────────────────────
+  describe('turnoId opcional', () => {
+    const turno = (id: string, extra: Record<string, any> = {}) => ({
+      id, tenantId: TENANT_A, sucursalId: 'sucursal-A', cajero: `cajero-${id}`, status: 'ABIERTO', precorteGuardado: true,
+      totalRetiros: 0, totalDepositos: 0, createdAt: new Date(), ...extra,
+    });
+    const sinCambios = (id: string) => {
+      expect(ventas.get(id).status).toBe('PAGADA');
+      expect(stock()).toBe(98);
+      expect(devoluciones()).toHaveLength(0);
+    };
+
+    beforeEach(() => {
+      // turno-1 (el de siempre) es el MÁS ANTIGUO; turno-2 es el más reciente de la sucursal
+      turnos.get('turno-1').createdAt = new Date('2026-10-05T08:00:00Z');
+      turnos.set('turno-2', turno('turno-2', { createdAt: new Date('2026-10-05T12:00:00Z') }));
+    });
+
+    it('sin turnoId: usa el turno abierto más reciente de la sucursal (comportamiento de siempre)', async () => {
+      const v = await crearPagada();
+      const dev: any = await sales.returnSale(v.id, { motivo: 'x' }, TENANT_A, GERENTE);
+      expect(dev.turnoId).toBe('turno-2');
+      expect(dev.cajero).toBe('cajero-turno-2');
+    });
+
+    it('con turnoId válido: la devolución cae en ESE turno aunque haya otro más reciente', async () => {
+      const v = await crearPagada();
+      const dev: any = await sales.returnSale(v.id, { motivo: 'x', turnoId: 'turno-1' }, TENANT_A, GERENTE);
+      expect(dev.turnoId).toBe('turno-1');
+      expect(ventas.get(v.id).status).toBe('DEVUELTA');
+      expect(stock()).toBe(100);
+    });
+
+    it('el corte de cada turno refleja la devolución solo donde se hizo', async () => {
+      const v = await crearPagada({ formaPago: 'EFECTIVO' }); // vendida en turno-1
+      await sales.returnSale(v.id, { motivo: 'x', turnoId: 'turno-2' }, TENANT_A, GERENTE);
+      const c2 = await cerrarTurno('turno-2');
+      expect(c2).toEqual(expect.objectContaining({ totalVentas: 0, totalEfectivo: -100, totalDevoluciones: 100 }));
+    });
+
+    it('turno CERRADO: 400 y no cambia nada', async () => {
+      const v = await crearPagada();
+      turnos.set('turno-3', turno('turno-3', { status: 'CERRADO' }));
+      const err: any = await sales.returnSale(v.id, { motivo: 'x', turnoId: 'turno-3' }, TENANT_A, GERENTE).catch((e) => e);
+      expect(err).toBeInstanceOf(BadRequestException);
+      expect(err.message).toBe('El turno indicado no es un turno abierto de la sucursal de esta venta.');
+      sinCambios(v.id);
+    });
+
+    it('turno de OTRO tenant: 400 con el mismo mensaje (no revela que existe) y no cambia nada', async () => {
+      const v = await crearPagada();
+      turnos.set('turno-B', turno('turno-B', { tenantId: TENANT_B }));
+      const err: any = await sales.returnSale(v.id, { motivo: 'x', turnoId: 'turno-B' }, TENANT_A, GERENTE).catch((e) => e);
+      expect(err).toBeInstanceOf(BadRequestException);
+      expect(err.message).toBe('El turno indicado no es un turno abierto de la sucursal de esta venta.');
+      sinCambios(v.id);
+    });
+
+    it('turno abierto de OTRA sucursal del mismo tenant: 400', async () => {
+      const v = await crearPagada();
+      turnos.set('turno-otra-suc', turno('turno-otra-suc', { sucursalId: 'sucursal-B' }));
+      await expect(sales.returnSale(v.id, { motivo: 'x', turnoId: 'turno-otra-suc' }, TENANT_A, GERENTE)).rejects.toThrow(BadRequestException);
+      sinCambios(v.id);
+    });
+
+    it('turnoId inexistente, vacío o que no es texto: 400', async () => {
+      const v = await crearPagada();
+      await expect(sales.returnSale(v.id, { motivo: 'x', turnoId: 'no-existe' }, TENANT_A, GERENTE)).rejects.toThrow(BadRequestException);
+      await expect(sales.returnSale(v.id, { motivo: 'x', turnoId: '  ' }, TENANT_A, GERENTE)).rejects.toThrow('turnoId inválido');
+      await expect(sales.returnSale(v.id, { motivo: 'x', turnoId: 123 as any }, TENANT_A, GERENTE)).rejects.toThrow('turnoId inválido');
+      sinCambios(v.id);
     });
   });
 
