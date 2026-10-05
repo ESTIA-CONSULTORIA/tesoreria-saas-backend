@@ -12,6 +12,7 @@ import { InsumoAlertsService } from './insumo-alerts.service';
 import { resolveEventTimestamp } from '../common/resolve-event-timestamp.util';
 import { resolveActiveInsumoChain } from '../costs/insumo-resolution';
 import { NotaCocina } from './entities/nota-cocina.entity';
+import { Shift } from './entities/shift.entity';
 import { Table } from './entities/table.entity';
 import { TenantSettingsService } from '../tenant-settings/tenant-settings.service';
 import { AppointmentsService } from '../appointments/appointments.service';
@@ -681,6 +682,7 @@ export class SalesService {
     tenantId: string,
     sucursalId: string,
     ventaServicioHabilitada: boolean,
+    tipoMovimiento = 'ENTRADA_CANCELACION',
   ): Promise<void> {
     for (const item of items) {
       const product = await manager.findOne(Product, { where: this.productWhere(item.productoId, tenantId) });
@@ -693,10 +695,10 @@ export class SalesService {
         const recipe = await manager.findOne(Recipe, { where: { id: product.recipeId } });
         if (!recipe || !recipe.items) continue;
         for (const ri of recipe.items) {
-          await this.restoreInsumo(manager, ri.insumoId, ri.cantidad * item.cantidad, folio, tenantId, sucursalId);
+          await this.restoreInsumo(manager, ri.insumoId, ri.cantidad * item.cantidad, folio, tenantId, sucursalId, tipoMovimiento);
         }
       } else if (product.type === 'SIMPLE' && product.insumoId) {
-        await this.restoreInsumo(manager, product.insumoId, item.cantidad, folio, tenantId, sucursalId);
+        await this.restoreInsumo(manager, product.insumoId, item.cantidad, folio, tenantId, sucursalId, tipoMovimiento);
       }
     }
   }
@@ -708,6 +710,7 @@ export class SalesService {
     folio: string,
     tenantId: string,
     sucursalId: string,
+    tipoMovimiento = 'ENTRADA_CANCELACION',
   ): Promise<void> {
     const insumoCrudo = await manager.findOne(Insumo, { where: { id: insumoId } });
     if (!insumoCrudo) return;
@@ -727,7 +730,7 @@ export class SalesService {
     const movement = manager.create(InventoryMovement, {
       insumoId: insumo.id,
       tenantId,
-      tipo: 'ENTRADA_CANCELACION',
+      tipo: tipoMovimiento,
       cantidad: quantity,
       stockResultante: newStock,
       costoUnitario: Number(insumo.costoUnitario),
@@ -1196,46 +1199,83 @@ export class SalesService {
     }
   }
 
-  async returnSale(id: string, data: {
-    items: SaleItem[];
-    motivo: string;
-    montoDevolucion: number;
-  }, tenantId?: string) {
-    try {
-      const sale = await this.salesRepo.findOne({ where: tenantId ? { id, tenantId } : { id } });
-      if (!sale) {
-        throw new Error('Venta no encontrada');
-      }
-      if (sale.status !== 'PAGADA') {
-        throw new Error('Solo se puede devolver ventas pagadas');
+  // Devolución TOTAL de una venta PAGADA. Solo se acepta el motivo: ítems e importes se calculan
+  // desde la venta original (nada que el cliente pueda inflar). Una sola transacción con lock
+  // sobre la original: stock, merma, notas, marca de "devuelta" y registro de la devolución se
+  // confirman o se revierten juntos.
+  //  - Ítems sin notaCocinaId → regresan al inventario por la cadena de Costos (restoreInventory).
+  //  - Ítems que ya salieron a cocina/barra → no regresan; merma en MERMAS_FALTANTES.
+  //  - Corte Z: la original pasa a 'DEVUELTA' (sigue contando como venta bruta de SU turno) y la
+  //    devolución se registra como una venta 'DEVOLUCION' en el turno abierto actual, con las mismas
+  //    formasPago: el corte la suma en totalDevoluciones y la resta del efectivo/tarjeta/transferencia.
+  //  - No repetible: la original deja de estar PAGADA (y folio `${folio}-DEV` es único).
+  async returnSale(id: string, data: { motivo?: string } | undefined, tenantId?: string) {
+    if (!tenantId) {
+      throw new ForbiddenException('Se requiere un tenant para devolver una venta.');
+    }
+    const motivo = String(data?.motivo ?? '').trim();
+    if (!motivo) {
+      throw new BadRequestException('El motivo de la devolución es requerido.');
+    }
+    const ventaServicioHabilitada = await this.tenantSettingsService.hasPosCapability(tenantId, 'venta_de_servicio');
+
+    return this.dataSource.transaction(async (manager) => {
+      const sale = await manager.findOne(Sale, { where: { id, tenantId }, lock: { mode: 'pessimistic_write' } });
+      if (!sale) throw new NotFoundException('Venta no encontrada');
+      if (sale.status === 'DEVUELTA') throw new BadRequestException('Esta venta ya fue devuelta.');
+      // Las filas "-DEV" negativas del esquema anterior siguen siendo PAGADA: no son devolvibles.
+      if (sale.status !== 'PAGADA' || Number(sale.total) <= 0) {
+        throw new BadRequestException('Solo se puede devolver ventas pagadas');
       }
 
-      // Create a new return sale record
-      const folio = await this.generateFolio();
+      const turno = await manager.findOne(Shift, {
+        where: { tenantId, sucursalId: sale.sucursalId, status: 'ABIERTO' },
+        order: { createdAt: 'DESC' },
+      });
+      if (!turno) {
+        throw new BadRequestException('No hay un turno abierto en esta sucursal: abre turno antes de devolver una venta.');
+      }
+
+      const devFolio = `${sale.folio}-DEV`;
+      const vivos = (sale.items || []).filter((it) => !it.anulado);
+      const aDevolver = vivos.filter((it) => !it.notaCocinaId);
+      const aMerma = vivos.filter((it) => !!it.notaCocinaId);
+
+      await this.restoreInventory(manager, aDevolver, devFolio, tenantId, sale.sucursalId, ventaServicioHabilitada, 'ENTRADA_DEVOLUCION');
+      if (aMerma.length > 0) {
+        const monto = await this.calculateCostoReal(aMerma, tenantId, ventaServicioHabilitada);
+        await this.registrarMerma(manager, sale, aMerma, monto, `Devolución de la venta ${sale.folio}: ítems que ya salieron a cocina/barra`);
+      }
+      await manager.update(NotaCocina, { saleId: id, estado: 'PENDIENTE' }, { estado: 'CANCELADA' });
+
+      // Cómo se cobró la original: pagos mixtos (formasPago) o un solo pago (formaPago por el total).
+      const pagos = Array.isArray(sale.formasPago) && sale.formasPago.length > 0
+        ? sale.formasPago.map((p) => ({ forma: p.forma, monto: this.round2(Number(p.monto) || 0) }))
+        : [{ forma: sale.formaPago, monto: this.round2(Number(sale.total)) }];
+
       const now = new Date();
-      const returnSale = this.salesRepo.create({
-        folio: `${folio}-DEV`,
+      const devolucion = manager.create(Sale, {
+        folio: devFolio,
         fecha: now,
         hora: now.toTimeString().slice(0, 8),
-        items: data.items,
-        subtotal: -data.montoDevolucion,
-        descuento: 0,
-        impuestos: 0,
-        total: -data.montoDevolucion,
-        formaPago: 'CORTESIA',
-        status: 'PAGADA',
-        cajero: sale.cajero,
-        turnoId: sale.turnoId,
+        items: vivos,
+        subtotal: sale.subtotal,
+        descuento: sale.descuento,
+        impuestos: sale.impuestos,
+        total: sale.total,
+        formaPago: pagos[0].forma,
+        formasPago: pagos,
+        status: 'DEVOLUCION',
+        cajero: turno.cajero,
+        turnoId: turno.id,
         sucursalId: sale.sucursalId,
-        tenantId: sale.tenantId,
-        notas: `Devolución de venta ${sale.folio}. Motivo: ${data.motivo}`,
+        tenantId,
+        notas: `Devolución de venta ${sale.folio}. Motivo: ${motivo}`,
         referencia: sale.folio,
       });
-
-      return this.salesRepo.save(returnSale);
-    } catch (error) {
-      console.error('SalesService.returnSale error:', error);
-      throw new Error(`Error al procesar devolución: ${error.message}`);
-    }
+      const guardada = await manager.save(devolucion);
+      await manager.update(Sale, id, { status: 'DEVUELTA' });
+      return guardada;
+    });
   }
 }

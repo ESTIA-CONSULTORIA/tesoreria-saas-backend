@@ -116,31 +116,8 @@ describe('SalesService — aislamiento por tenant', () => {
     });
   });
 
-  describe('returnSale()', () => {
-    const payload = { items: [], motivo: 'motivo', montoDevolucion: 50 };
-
-    it('rechaza devolver una venta de OTRO tenant', async () => {
-      // returnSale() solo exige status PAGADA — el fixture usa ABIERTA para los otros tests,
-      // así que aquí se ajusta el mock puntualmente a PAGADA para no chocar con esa regla.
-      salesRepo.findOne.mockImplementation(({ where }: any) =>
-        where.id === SALE_B && (!where.tenantId || where.tenantId === TENANT_B)
-          ? Promise.resolve({ id: SALE_B, tenantId: TENANT_B, status: 'PAGADA', folio: 'VTA-1', cajero: 'c', turnoId: 't', sucursalId: 's' })
-          : Promise.resolve(null),
-      );
-      await expect(service.returnSale(SALE_B, payload, TENANT_A)).rejects.toThrow();
-      expect(salesRepo.save).not.toHaveBeenCalled();
-    });
-
-    it('permite devolver una venta PAGADA del MISMO tenant', async () => {
-      salesRepo.findOne.mockImplementation(({ where }: any) =>
-        where.id === SALE_B && (!where.tenantId || where.tenantId === TENANT_B)
-          ? Promise.resolve({ id: SALE_B, tenantId: TENANT_B, status: 'PAGADA', folio: 'VTA-1', cajero: 'c', turnoId: 't', sucursalId: 's' })
-          : Promise.resolve(null),
-      );
-      await expect(service.returnSale(SALE_B, payload, TENANT_B)).resolves.toBeDefined();
-      expect(salesRepo.save).toHaveBeenCalled();
-    });
-  });
+  // returnSale() ahora es transaccional (lock + stock + turno): su aislamiento por tenant se prueba
+  // contra una BD en memoria en sales.devolucion.spec.ts ("aislamiento de tenant").
 });
 
 describe('ShiftsService — aislamiento por tenant', () => {

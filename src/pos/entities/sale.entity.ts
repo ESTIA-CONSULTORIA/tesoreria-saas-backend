@@ -68,7 +68,9 @@ export class Sale {
   }>;
 
   @Column({ default: 'ABIERTA' })
-  status: 'ABIERTA' | 'PAGADA' | 'CANCELADA';
+  // 'DEVUELTA': venta PAGADA ya devuelta (no repetible). 'DEVOLUCION': el registro de esa devolución
+  // (referencia = folio de la original, total positivo, turno donde se hizo). Columna varchar: sin migración.
+  status: 'ABIERTA' | 'PAGADA' | 'CANCELADA' | 'DEVUELTA' | 'DEVOLUCION';
 
   @Column({ nullable: true })
   cajero: string; // userId

@@ -1,6 +1,6 @@
 import { BadRequestException, HttpException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { IsNull, Not, Repository } from 'typeorm';
+import { In, IsNull, Not, Repository } from 'typeorm';
 import { Shift } from './entities/shift.entity';
 import { Sale } from './entities/sale.entity';
 import { resolveEventTimestamp } from '../common/resolve-event-timestamp.util';
@@ -182,37 +182,48 @@ export class ShiftsService {
       }
 
       // Calculate real totals from actual paid sales in this shift
-      const sales = await this.salesRepo.find({ where: { turnoId: id, status: 'PAGADA' } });
+      // 'DEVUELTA' = venta PAGADA que luego se devolvió: sigue siendo venta bruta del turno donde
+      // se hizo (totalVentas no se resta). La devolución en sí vive como una venta 'DEVOLUCION' en
+      // el turno donde se hizo y entra abajo, una sola vez.
+      const sales = await this.salesRepo.find({ where: { turnoId: id, status: In(['PAGADA', 'DEVUELTA']) } });
       let calcTotalVentas = 0;
       let calcTotalEfectivo = 0;
       let calcTotalTarjeta = 0;
       let calcTotalTransferencia = 0;
       let calcTotalCortesia = 0;
 
-      for (const sale of sales) {
-        calcTotalVentas += Number(sale.total) || 0;
-        if (Array.isArray(sale.formasPago) && sale.formasPago.length > 0) {
-          for (const fp of sale.formasPago) {
-            const monto = Number(fp.monto) || 0;
-            switch (fp.forma) {
-              case 'EFECTIVO': calcTotalEfectivo += monto; break;
-              case 'DEBITO':
-              case 'CREDITO':
-              case 'TARJETA': calcTotalTarjeta += monto; break;
-              case 'TRANSFERENCIA': calcTotalTransferencia += monto; break;
-              case 'CORTESIA': calcTotalCortesia += monto; break;
-            }
-          }
-        } else if (sale.formaPago) {
-          switch (sale.formaPago) {
-            case 'EFECTIVO': calcTotalEfectivo += Number(sale.total); break;
+      // signo = 1 suma el cobro de una venta; -1 resta el reembolso de una devolución.
+      const aplicarPagos = (sale: Sale, signo: 1 | -1) => {
+        const aplicar = (forma: string, monto: number) => {
+          switch (forma) {
+            case 'EFECTIVO': calcTotalEfectivo += signo * monto; break;
             case 'DEBITO':
             case 'CREDITO':
-            case 'TARJETA': calcTotalTarjeta += Number(sale.total); break;
-            case 'TRANSFERENCIA': calcTotalTransferencia += Number(sale.total); break;
-            case 'CORTESIA': calcTotalCortesia += Number(sale.total); break;
+            case 'TARJETA': calcTotalTarjeta += signo * monto; break;
+            case 'TRANSFERENCIA': calcTotalTransferencia += signo * monto; break;
+            // La cortesía no mueve dinero: una devolución no la resta.
+            case 'CORTESIA': if (signo === 1) calcTotalCortesia += monto; break;
           }
+        };
+        if (Array.isArray(sale.formasPago) && sale.formasPago.length > 0) {
+          for (const fp of sale.formasPago) aplicar(fp.forma, Number(fp.monto) || 0);
+        } else if (sale.formaPago) {
+          aplicar(sale.formaPago, Number(sale.total));
         }
+      };
+
+      for (const sale of sales) {
+        calcTotalVentas += Number(sale.total) || 0;
+        aplicarPagos(sale, 1);
+      }
+
+      // Devoluciones hechas en este turno (de ventas de este o de turnos anteriores): reembolso
+      // por la misma forma de pago con la que se cobró la original.
+      const devoluciones = await this.salesRepo.find({ where: { turnoId: id, status: 'DEVOLUCION' } });
+      let calcDevolucionesDeVentas = 0;
+      for (const dev of devoluciones) {
+        calcDevolucionesDeVentas += Number(dev.total) || 0;
+        aplicarPagos(dev, -1);
       }
 
       const cancelledSales = await this.salesRepo.find({ where: { turnoId: id, status: 'CANCELADA' } });
@@ -220,7 +231,7 @@ export class ShiftsService {
       // devolver, así que no cuenta como devolución. Las ventas que sí se cobraron (PAGADA
       // canceladas después) cuentan igual que siempre.
       const huboCobro = (s: Sale) => (Array.isArray(s.formasPago) && s.formasPago.length > 0) || !!s.formaPago;
-      const calcTotalDevoluciones = cancelledSales
+      const calcTotalDevoluciones = calcDevolucionesDeVentas + cancelledSales
         .filter((s) => !(s.tableId && !huboCobro(s)))
         .reduce((sum, s) => sum + (Number(s.total) || 0), 0);
 
@@ -338,9 +349,12 @@ export class ShiftsService {
       let totalVentasCortesia = 0;
 
       sales.forEach(sale => {
+        // Una devolución (status 'DEVOLUCION') es un reembolso: resta de la forma de pago con la
+        // que se cobró la original. La cortesía no mueve dinero, no se resta.
+        const signo = sale.status === 'DEVOLUCION' ? -1 : 1;
         if (Array.isArray(sale.formasPago)) {
           sale.formasPago.forEach((fp: any) => {
-            const monto = Number(fp.monto) || 0;
+            const monto = (Number(fp.monto) || 0) * signo;
             switch (fp.forma) {
               case 'EFECTIVO':
                 totalVentasEfectivo += monto;
@@ -355,14 +369,14 @@ export class ShiftsService {
                 totalVentasSPEI += monto;
                 break;
               case 'CORTESIA':
-                totalVentasCortesia += monto;
+                if (signo === 1) totalVentasCortesia += monto;
                 break;
             }
           });
         } else {
           // Fallback for old single payment form
           const forma = sale.formaPago;
-          const monto = Number(sale.total) || 0;
+          const monto = (Number(sale.total) || 0) * signo;
           switch (forma) {
             case 'EFECTIVO':
               totalVentasEfectivo += monto;
@@ -377,7 +391,7 @@ export class ShiftsService {
               totalVentasSPEI += monto;
               break;
             case 'CORTESIA':
-              totalVentasCortesia += monto;
+              if (signo === 1) totalVentasCortesia += monto;
               break;
           }
         }
