@@ -15,8 +15,10 @@ import { NotaCocina } from './entities/nota-cocina.entity';
 import { Shift } from './entities/shift.entity';
 import { PoliticaDevolucion, ROLES_GERENTE } from '../config/politica-devoluciones.config';
 
-// Quien ejecuta una operación (req.user del JWT): id, email y roleCode.
-type Actor = { id?: string; email?: string; roleCode?: string };
+import { ActorMesas, contextoCobro, puedeCobrar, puedeDividir } from '../config/politicas-pos.config';
+
+// Quien ejecuta una operación (req.user del JWT): id, email, roleCode y si la sesión es POS Lite.
+type Actor = ActorMesas;
 import { Table } from './entities/table.entity';
 import { TenantSettingsService } from '../tenant-settings/tenant-settings.service';
 import { AppointmentsService } from '../appointments/appointments.service';
@@ -1230,6 +1232,27 @@ export class SalesService {
     if (!tenantId) throw new ForbiddenException('Se requiere un tenant.');
     const politica = await this.tenantSettingsService.getPoliticaDevoluciones(tenantId);
     return { politicaDevoluciones: politica, puedeDevolver: this.puedeDevolver(politica, actor) };
+  }
+
+  // Informativo para el POS (mostrar u ocultar botones): políticas vigentes y qué puede hacer ESTE usuario con
+  // las cuentas de mesa. Es solo informativo: cobrarCuenta(), quitarItem() y cancel() vuelven a decidir.
+  async getPoliticasMesasParaUsuario(tenantId: string | undefined, actor?: Actor) {
+    if (!tenantId) throw new ForbiddenException('Se requiere un tenant.');
+    const [politicaCobro, politicaDivisionCuentas] = await Promise.all([
+      this.tenantSettingsService.getPoliticaCobro(tenantId),
+      this.tenantSettingsService.getPoliticaDivisionCuentas(tenantId),
+    ]);
+    const rol = actor?.roleCode ?? null;
+    return {
+      politicaCobro,
+      politicaDivisionCuentas,
+      rol,
+      contexto: contextoCobro(actor),
+      puedeCobrar: puedeCobrar(actor, politicaCobro),
+      puedeDividir: puedeDividir(actor, politicaCobro, politicaDivisionCuentas),
+      // El mesero solo quita ítems que no salieron a cocina y solo cancela cuentas sin ítems enviados ni pagos.
+      soloQuitaSinCocina: rol === 'MESERO',
+    };
   }
 
   private puedeDevolver(politica: PoliticaDevolucion, actor?: Actor): boolean {

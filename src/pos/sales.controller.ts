@@ -46,6 +46,12 @@ export class SalesController {
     return this.salesService.getPoliticaDevolucionesParaUsuario(req.user?.tenantId, req.user);
   }
 
+  // Políticas de cobro y división y qué puede hacer el usuario actual con las cuentas de mesa. Antes de ':id'.
+  @Get('politicas-mesas')
+  getPoliticasMesas(@Request() req) {
+    return this.salesService.getPoliticasMesasParaUsuario(req.user?.tenantId, req.user);
+  }
+
   @Get(':id')
   getSale(@Param('id') id: string, @Request() req?: any) {
     const tenantId = req?.user?.tenantId;
