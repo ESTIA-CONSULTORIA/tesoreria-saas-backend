@@ -1,4 +1,6 @@
-import { Body, Controller, Get, Param, Post, Put } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Put, UseGuards } from '@nestjs/common';
+import { RolesGuard } from '../auth/roles.guard';
+import { Roles } from '../auth/roles.decorator';
 import { RolesService } from './roles.service';
 import { Module } from './entities/permission.entity';
 import { Public } from '../auth/public.decorator';
@@ -7,6 +9,10 @@ import { Public } from '../auth/public.decorator';
 export class RolesController {
   constructor(private rolesService: RolesService) {}
 
+  // Antes sin guard: cualquier usuario autenticado (incluso un CAJERO) podía crear roles. Los roles son
+  // globales (no por tenant), así que crear uno afecta a todos: solo ADMIN y SOPORTE.
+  @UseGuards(RolesGuard)
+  @Roles('ADMIN', 'SOPORTE')
   @Post()
   create(
     @Body()
