@@ -149,6 +149,7 @@ describe('SalesService — cuentas de mesa: roles, estampado y corte', () => {
     mesas = new Map([
       ['mesa-1', { id: 'mesa-1', tenantId: TENANT_A, number: 1, status: 'AVAILABLE', isActive: true }],
       ['mesa-2', { id: 'mesa-2', tenantId: TENANT_A, number: 2, status: 'AVAILABLE', isActive: true }],
+      ['mesa-3', { id: 'mesa-3', tenantId: TENANT_A, number: 3, status: 'AVAILABLE', isActive: true }],
     ]);
     insumos = new Map([['ins-1', { id: 'ins-1', nombre: 'Tortilla', isActive: true, stockActual: 100, stockMinimo: 0, costoUnitario: 5 }]]);
     notas = [];
@@ -279,6 +280,305 @@ describe('SalesService — cuentas de mesa: roles, estampado y corte', () => {
       const sinMesa = await sales.create({ items: [ITEM_SIN_COCINA], subtotal: 100, descuento: 0, impuestos: 0, total: 100, cajero: 'caja-1', turnoId: 'turno-z', sucursalId: SUC, tenantId: TENANT_A, formasPago: [{ forma: 'EFECTIVO', monto: 100 }], folio: 'V-SIN-MESA' } as any, erp('CAJERO'));
       expect(sinMesa.cajero).toBe('caja-1');
       expect(sinMesa.turnoId).toBe('turno-z');
+    });
+  });
+
+  // ── cobro completo ───────────────────────────────────────────────────────────────────────────────────────
+  const cobrar = (id: string, data: any, actor: any, tenant = TENANT_A) => sales.cobrarCuenta(id, data, tenant, actor);
+  const COMPLETO = { formaPago: 'EFECTIVO' };
+  const POLITICAS_COBRO_ALL: PoliticaCobro[] = ['SOLO_CAJA', 'GERENTE_EN_MESA', 'MESERO_EN_MESA'];
+
+  describe('cobro completo — desde caja nunca se bloquea', () => {
+    it.each(POLITICAS_COBRO_ALL.flatMap((p) => ['ADMIN', 'GERENTE', 'CAJERO'].map((r) => [p, r] as const)))(
+      'con %s, %s con sesión ERP cobra la cuenta completa (origen CAJA)', async (politica, rol) => {
+        politicaCobro = politica;
+        const c = await abrirCuenta(lite('MESERO'));
+        const r = await cobrar(c.id, COMPLETO, erp(rol));
+        expect(r.cerrada).toBe(true);
+        expect(venta(c.id).status).toBe('PAGADA');
+        expect(mesa()).toBe('AVAILABLE');
+        const pago = venta(c.id).formasPago[0];
+        expect(pago).toMatchObject({ forma: 'EFECTIVO', monto: 100, origen: 'CAJA', cobradoPorEmail: `${rol.toLowerCase()}@erp`, cobradoPorRol: rol });
+        expect(pago.dividido).toBeUndefined();
+      });
+
+    it('un gerente con sesión ERP cuenta como caja aunque esté en una tableta: cobra con SOLO_CAJA', async () => {
+      const c = await abrirCuenta(erp('GERENTE'));
+      await cobrar(c.id, COMPLETO, erp('GERENTE'));
+      expect(venta(c.id).formasPago[0].origen).toBe('CAJA');
+    });
+
+    it('el mismo gerente con sesión POS Lite (NIP) es mesa: con SOLO_CAJA se rechaza', async () => {
+      const c = await abrirCuenta(lite('GERENTE'));
+      await expect(cobrar(c.id, COMPLETO, lite('GERENTE'))).rejects.toBeInstanceOf(ForbiddenException);
+    });
+  });
+
+  describe('cobro completo — desde mesa, según politicaCobro', () => {
+    it('defaults (SOLO_CAJA y GERENTE_CAPITAN_CAJERO): el mesero con NIP recibe 403 y la cuenta queda intacta', async () => {
+      const c = await abrirCuenta(lite('MESERO'));
+      const err: any = await cobrar(c.id, COMPLETO, lite('MESERO')).catch((e) => e);
+      expect(err).toBeInstanceOf(ForbiddenException);
+      expect(err.message).toBe('Con la política de cobro de este negocio las cuentas solo se cobran en caja. Pasa la cuenta a caja.');
+      expect(venta(c.id).status).toBe('ABIERTA');
+      expect(venta(c.id).formasPago ?? []).toHaveLength(0);
+      expect(mesa()).toBe('OCCUPIED');
+    });
+
+    it('SOLO_CAJA: mesero (POS Lite o ERP) y capitán son rechazados con 403', async () => {
+      const c = await abrirCuenta(lite('MESERO'));
+      for (const actor of [lite('MESERO'), erp('MESERO'), lite('CAPITAN'), erp('CAPITAN')]) {
+        await expect(cobrar(c.id, COMPLETO, actor)).rejects.toBeInstanceOf(ForbiddenException);
+      }
+      expect(venta(c.id).status).toBe('ABIERTA');
+    });
+
+    it('GERENTE_EN_MESA: capitán y gerente con NIP cobran (origen MESA); el mesero sigue en 403', async () => {
+      politicaCobro = 'GERENTE_EN_MESA';
+      const c1 = await abrirCuenta(lite('MESERO'), {}, [ITEM_SIN_COCINA], 'mesa-1');
+      await expect(cobrar(c1.id, COMPLETO, lite('MESERO'))).rejects.toThrow('Tu rol no puede cobrar cuentas desde mesa');
+      await cobrar(c1.id, COMPLETO, lite('CAPITAN'));
+      expect(venta(c1.id).formasPago[0]).toMatchObject({ origen: 'MESA', cobradoPorRol: 'CAPITAN' });
+      const c2 = await abrirCuenta(lite('MESERO'), {}, [ITEM_SIN_COCINA], 'mesa-2');
+      await cobrar(c2.id, COMPLETO, lite('GERENTE'));
+      expect(venta(c2.id).formasPago[0]).toMatchObject({ origen: 'MESA', cobradoPorRol: 'GERENTE' });
+    });
+
+    it('MESERO_EN_MESA: el mesero cobra la cuenta completa desde mesa y queda estampado', async () => {
+      politicaCobro = 'MESERO_EN_MESA';
+      const c = await abrirCuenta(lite('MESERO'));
+      await cobrar(c.id, { formaPago: 'EFECTIVO', montoRecibido: 200, cambio: 100 }, lite('MESERO'));
+      expect(venta(c.id).formasPago[0]).toMatchObject({ monto: 100, origen: 'MESA', cobradoPorId: 'u-MESERO-lite', cobradoPorEmail: 'mesero@lite', montoRecibido: 200, cambio: 100 });
+    });
+
+    it('PUT /pay (cobro de un solo pago) respeta la misma política: mesero 403 con SOLO_CAJA; cajero ERP cobra y queda estampado', async () => {
+      const c = await abrirCuenta(lite('MESERO'));
+      const pay = (actor: any) => sales.pay(c.id, { formaPago: 'EFECTIVO', montoRecibido: 100, cambio: 0 }, TENANT_A, actor);
+      await expect(pay(lite('MESERO'))).rejects.toBeInstanceOf(ForbiddenException);
+      expect(venta(c.id).status).toBe('ABIERTA');
+      await pay(erp('CAJERO'));
+      expect(venta(c.id).status).toBe('PAGADA');
+      expect(venta(c.id).formasPago[0]).toMatchObject({ forma: 'EFECTIVO', monto: 100, origen: 'CAJA', cobradoPorEmail: 'cajero@erp' });
+      expect(mesa()).toBe('AVAILABLE');
+    });
+  });
+
+  // ── dividir ──────────────────────────────────────────────────────────────────────────────────────────────
+  describe('cobro dividido — politicaDivisionCuentas', () => {
+    const parcial = { formaPago: 'EFECTIVO', monto: 40 };
+
+    it('default GERENTE_CAPITAN_CAJERO: cajero, gerente y ADMIN en caja dividen; queda marcado quién dividió', async () => {
+      for (const rol of ['CAJERO', 'GERENTE', 'ADMIN']) {
+        const c = await abrirCuenta(lite('MESERO'), {}, [ITEM_SIN_COCINA], rol === 'CAJERO' ? 'mesa-1' : rol === 'GERENTE' ? 'mesa-2' : 'mesa-3');
+        await cobrar(c.id, parcial, erp(rol));
+        expect(venta(c.id).status).toBe('ABIERTA');
+        expect(venta(c.id).formasPago[0]).toMatchObject({ monto: 40, dividido: true, divididoPorEmail: `${rol.toLowerCase()}@erp` });
+      }
+    });
+
+    it('SOLO_GERENTE: el cajero recibe 403 al dividir (parcial, por ítems, y el último pago de una cuenta ya dividida)', async () => {
+      politicaDivision = 'SOLO_GERENTE';
+      const c = await abrirCuenta(lite('MESERO'), {}, [ITEM_SIN_COCINA, ITEM_COCINA]);
+      const err: any = await cobrar(c.id, parcial, erp('CAJERO')).catch((e) => e);
+      expect(err).toBeInstanceOf(ForbiddenException);
+      expect(err.message).toMatch(/Dividir la cuenta no está permitido/);
+      await expect(cobrar(c.id, { formaPago: 'EFECTIVO', itemIndexes: [0] }, erp('CAJERO'))).rejects.toBeInstanceOf(ForbiddenException);
+      expect(venta(c.id).formasPago ?? []).toHaveLength(0);
+
+      await cobrar(c.id, parcial, erp('GERENTE'));
+      // el saldo restante ya es parte de una cuenta dividida: tampoco lo cobra el cajero
+      await expect(cobrar(c.id, COMPLETO, erp('CAJERO'))).rejects.toBeInstanceOf(ForbiddenException);
+      await cobrar(c.id, COMPLETO, erp('GERENTE'));
+      expect(venta(c.id).status).toBe('PAGADA');
+      expect(venta(c.id).formasPago.every((p: any) => p.dividido)).toBe(true);
+    });
+
+    it('SOLO_GERENTE: ADMIN siempre puede dividir; cobrar completo de una vez no es dividir', async () => {
+      politicaDivision = 'SOLO_GERENTE';
+      const c1 = await abrirCuenta(lite('MESERO'), {}, [ITEM_SIN_COCINA], 'mesa-1');
+      await cobrar(c1.id, parcial, erp('ADMIN'));
+      expect(venta(c1.id).formasPago[0].dividido).toBe(true);
+      const c2 = await abrirCuenta(lite('MESERO'), {}, [ITEM_SIN_COCINA], 'mesa-2');
+      await cobrar(c2.id, COMPLETO, erp('CAJERO'));
+      expect(venta(c2.id).status).toBe('PAGADA');
+    });
+
+    it('mesero con MESERO_EN_MESA: cobra completo, pero dividir depende de la política de división', async () => {
+      politicaCobro = 'MESERO_EN_MESA';
+      const c = await abrirCuenta(lite('MESERO'));
+      await expect(cobrar(c.id, parcial, lite('MESERO'))).rejects.toBeInstanceOf(ForbiddenException); // default: el mesero no divide
+      politicaDivision = 'TODOS';
+      await cobrar(c.id, parcial, lite('MESERO'));
+      await cobrar(c.id, COMPLETO, lite('MESERO'));
+      expect(venta(c.id).status).toBe('PAGADA');
+      expect(venta(c.id).formasPago).toHaveLength(2);
+      expect(venta(c.id).formasPago.map((p: any) => p.monto)).toEqual([40, 60]);
+    });
+
+    it('con TODOS pero SOLO_CAJA el mesero tampoco divide: primero debe poder cobrar', async () => {
+      politicaDivision = 'TODOS';
+      const c = await abrirCuenta(lite('MESERO'));
+      await expect(cobrar(c.id, parcial, lite('MESERO'))).rejects.toThrow('solo se cobran en caja');
+    });
+  });
+
+  // ── quitar ítem y cancelar ───────────────────────────────────────────────────────────────────────────────
+  describe('mesero: quitar ítems y cancelar', () => {
+    // Cuenta con dos ítems; el 1 ya salió a cocina (nota emitida).
+    async function cuentaConCocina(tableId = 'mesa-1') {
+      const c = await abrirCuenta(lite('MESERO'), {}, [ITEM_SIN_COCINA, ITEM_COCINA], tableId);
+      venta(c.id).items[1].notaCocinaId = 'nota-x';
+      return c;
+    }
+
+    it('el mesero quita un ítem sin nota de cocina; con nota recibe 403 y la cuenta no cambia', async () => {
+      const c = await cuentaConCocina();
+      const err: any = await sales.quitarItem(c.id, 1, TENANT_A, lite('MESERO')).catch((e) => e);
+      expect(err).toBeInstanceOf(ForbiddenException);
+      expect(err.message).toMatch(/aún no salieron a cocina o barra/);
+      expect(venta(c.id).items[1].anulado).toBeFalsy();
+      await sales.quitarItem(c.id, 0, TENANT_A, lite('MESERO'));
+      expect(venta(c.id).items[0].anulado).toBe(true);
+    });
+
+    it('capitán y gerente sí quitan un ítem ya enviado (el comportamiento de siempre)', async () => {
+      const c1 = await cuentaConCocina('mesa-1');
+      await sales.quitarItem(c1.id, 1, TENANT_A, lite('CAPITAN'));
+      expect(venta(c1.id).items[1].anulado).toBe(true);
+      const c2 = await cuentaConCocina('mesa-2');
+      await sales.quitarItem(c2.id, 1, TENANT_A, erp('GERENTE'));
+      expect(venta(c2.id).items[1].anulado).toBe(true);
+    });
+
+    it('el mesero cancela una cuenta sin ítems enviados: stock devuelto y mesa libre', async () => {
+      const c = await abrirCuenta(lite('MESERO'));
+      expect(stock()).toBe(98);
+      await sales.cancel(c.id, 'cliente se fue', TENANT_A, lite('MESERO'));
+      expect(venta(c.id).status).toBe('CANCELADA');
+      expect(stock()).toBe(100);
+      expect(mesa()).toBe('AVAILABLE');
+    });
+
+    it('el mesero NO cancela una cuenta con ítems enviados (403, nada cambia); el capitán sí', async () => {
+      const c = await cuentaConCocina();
+      const stockAntes = stock();
+      const err: any = await sales.cancel(c.id, 'x', TENANT_A, lite('MESERO')).catch((e) => e);
+      expect(err).toBeInstanceOf(ForbiddenException);
+      expect(err.message).toMatch(/sin ítems enviados a cocina o barra/);
+      expect(venta(c.id).status).toBe('ABIERTA');
+      expect(stock()).toBe(stockAntes);
+      expect(mesa()).toBe('OCCUPIED');
+      await sales.cancel(c.id, 'error de captura', TENANT_A, lite('CAPITAN'));
+      expect(venta(c.id).status).toBe('CANCELADA');
+    });
+
+    it('una cuenta con pagos no se cancela, ni el mesero ni nadie (400)', async () => {
+      const c = await abrirCuenta(lite('MESERO'));
+      await cobrar(c.id, { formaPago: 'EFECTIVO', monto: 40 }, erp('GERENTE'));
+      await expect(sales.cancel(c.id, 'x', TENANT_A, lite('MESERO'))).rejects.toBeInstanceOf(BadRequestException);
+      await expect(sales.cancel(c.id, 'x', TENANT_A, erp('GERENTE'))).rejects.toBeInstanceOf(BadRequestException);
+      expect(venta(c.id).status).toBe('ABIERTA');
+    });
+  });
+
+  // ── corte Z y getSummary: efectivo por persona ───────────────────────────────────────────────────────────
+  describe('efectivo fuera de caja por persona — corte Z y getSummary', () => {
+    // mesero Ana (100, y otros 100 en otra cuenta), capitán Beto (60 efectivo + 30 tarjeta) y un cajero ERP (100).
+    async function turnoConCobros() {
+      politicaCobro = 'MESERO_EN_MESA';
+      politicaDivision = 'TODOS';
+      const ana = { ...lite('MESERO'), id: 'u-ana', email: 'ana@lite' };
+      const beto = { ...lite('CAPITAN'), id: 'u-beto', email: 'beto@lite' };
+      mesas.set('mesa-3', { id: 'mesa-3', tenantId: TENANT_A, number: 3, status: 'AVAILABLE', isActive: true });
+      mesas.set('mesa-4', { id: 'mesa-4', tenantId: TENANT_A, number: 4, status: 'AVAILABLE', isActive: true });
+      const c1 = await abrirCuenta(ana, {}, [ITEM_SIN_COCINA], 'mesa-1');
+      await cobrar(c1.id, COMPLETO, ana);
+      const c2 = await abrirCuenta(ana, {}, [ITEM_SIN_COCINA], 'mesa-1');
+      await cobrar(c2.id, COMPLETO, ana);
+      const c3 = await abrirCuenta(beto, {}, [{ ...ITEM_SIN_COCINA, subtotal: 90 }], 'mesa-2');
+      await cobrar(c3.id, { formaPago: 'EFECTIVO', monto: 60 }, beto);
+      await cobrar(c3.id, { formaPago: 'TARJETA' }, beto);
+      const c4 = await abrirCuenta(erp('CAJERO'), {}, [ITEM_SIN_COCINA], 'mesa-3');
+      await cobrar(c4.id, COMPLETO, erp('CAJERO'));
+      return { ana, beto };
+    }
+
+    it('las cuentas de mesa abiertas por la tableta entran al turno abierto de la sucursal', async () => {
+      await turnoConCobros();
+      const todas = [...ventas.values()];
+      expect(todas).toHaveLength(4);
+      expect(todas.every((v) => v.turnoId === 'turno-1')).toBe(true);
+    });
+
+    it('corte Z: el efectivo del corte no cambia y se agrega el desglose por persona (solo origen MESA)', async () => {
+      await turnoConCobros();
+      const cerrado: any = await shiftsService.closeShift('turno-1', { efectivoContado: 360 }, TENANT_A);
+      // 100 + 100 (Ana) + 60 (Beto) + 100 (cajero) = 360 — mismo número que sin desglose; la tarjeta aparte
+      expect(cerrado.totalEfectivo).toBe(360);
+      expect(cerrado.totalTarjeta).toBe(30);
+      expect(cerrado.totalVentas).toBe(390);
+      expect(turnos.get('turno-1').totalEfectivo).toBe(360);
+      expect(cerrado.efectivoPorPersona).toEqual({
+        personas: [
+          { email: 'ana@lite', id: 'u-ana', rol: 'MESERO', monto: 200 },
+          { email: 'beto@lite', id: 'u-beto', rol: 'CAPITAN', monto: 60 },
+        ],
+        total: 260,
+      });
+    });
+
+    it('getSummary: mismo desglose, y efectivoEsperado sigue incluyendo todo el efectivo (también el de mesa)', async () => {
+      await turnoConCobros();
+      turnos.get('turno-1').fondoInicial = 500;
+      const s: any = await shiftsService.getSummary('turno-1', TENANT_A);
+      expect(s.calculatedTotals.totalVentasEfectivo).toBe(360);
+      expect(s.calculatedTotals.efectivoEsperado).toBe(860);
+      expect(s.calculatedTotals.efectivoPorPersona.total).toBe(260);
+      expect(s.calculatedTotals.efectivoPorPersona.personas.map((p: any) => [p.email, p.monto])).toEqual([['ana@lite', 200], ['beto@lite', 60]]);
+    });
+
+    it('getSummary vuelve a dar el desglose de un turno ya cerrado, igual que el corte', async () => {
+      await turnoConCobros();
+      const cerrado: any = await shiftsService.closeShift('turno-1', {}, TENANT_A);
+      const s: any = await shiftsService.getSummary('turno-1', TENANT_A);
+      expect(s.calculatedTotals.efectivoPorPersona).toEqual(cerrado.efectivoPorPersona);
+    });
+
+    it('sin cobros desde mesa: desglose vacío y el corte no cambia', async () => {
+      const c = await abrirCuenta(erp('CAJERO'));
+      await cobrar(c.id, COMPLETO, erp('CAJERO'));
+      const cerrado: any = await shiftsService.closeShift('turno-1', {}, TENANT_A);
+      expect(cerrado.totalEfectivo).toBe(100);
+      expect(cerrado.efectivoPorPersona).toEqual({ personas: [], total: 0 });
+    });
+
+    it('el corte sigue bloqueado mientras haya cuentas abiertas en mesas', async () => {
+      await abrirCuenta(lite('MESERO'));
+      await expect(shiftsService.closeShift('turno-1', {}, TENANT_A)).rejects.toThrow(/cuenta\(s\) abierta\(s\) en mesas/);
+      expect(turnos.get('turno-1').status).toBe('ABIERTO');
+    });
+  });
+
+  // ── aislamiento de tenant ────────────────────────────────────────────────────────────────────────────────
+  describe('aislamiento de tenant', () => {
+    it('otro tenant no cobra, quita ítems, cancela ni cobra por /pay una cuenta ajena; nada cambia', async () => {
+      const c = await abrirCuenta(lite('MESERO'), {}, [ITEM_SIN_COCINA, ITEM_COCINA]);
+      const antes = JSON.stringify(venta(c.id));
+      await expect(cobrar(c.id, COMPLETO, erp('ADMIN'), TENANT_B)).rejects.toThrow();
+      await expect(sales.quitarItem(c.id, 0, TENANT_B, erp('ADMIN'))).rejects.toThrow();
+      await expect(sales.cancel(c.id, 'x', TENANT_B, erp('ADMIN'))).rejects.toThrow();
+      await expect(sales.pay(c.id, { formaPago: 'EFECTIVO', montoRecibido: 100, cambio: 0 }, TENANT_B, erp('ADMIN'))).rejects.toThrow();
+      expect(JSON.stringify(venta(c.id))).toBe(antes);
+      expect(mesa()).toBe('OCCUPIED');
+    });
+
+    it('otro tenant no ve ni cierra el turno ni su efectivo por persona', async () => {
+      politicaCobro = 'MESERO_EN_MESA';
+      const c = await abrirCuenta(lite('MESERO'));
+      await cobrar(c.id, COMPLETO, lite('MESERO'));
+      await expect(shiftsService.getSummary('turno-1', TENANT_B)).rejects.toThrow('Turno no encontrado');
+      await expect(shiftsService.closeShift('turno-1', {}, TENANT_B)).rejects.toThrow('Turno no encontrado');
+      expect(turnos.get('turno-1').status).toBe('ABIERTO');
     });
   });
 });

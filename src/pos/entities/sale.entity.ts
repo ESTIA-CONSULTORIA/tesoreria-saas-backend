@@ -65,6 +65,16 @@ export class Sale {
     itemIndexes?: number[];
     montoRecibido?: number;
     cambio?: number;
+    // Cuentas de mesa: quién cobró este pago (estampado en el servidor desde el token) y desde dónde. origen CAJA =
+    // sesión ERP con ADMIN/GERENTE/CAJERO; MESA = POS Lite, o ERP con MESERO/CAPITAN. dividido: este pago es parte de
+    // un cobro dividido (parcial, por persona o por ítems) y divididoPor* es quien lo dividió. Es JSON: sin migración.
+    cobradoPorId?: string;
+    cobradoPorEmail?: string;
+    cobradoPorRol?: string;
+    origen?: 'CAJA' | 'MESA';
+    dividido?: boolean;
+    divididoPorId?: string;
+    divididoPorEmail?: string;
   }>;
 
   @Column({ default: 'ABIERTA' })

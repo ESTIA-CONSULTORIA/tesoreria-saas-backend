@@ -67,25 +67,25 @@ export class SalesController {
   @Delete(':id/items/:index')
   removeItem(@Param('id') id: string, @Param('index') index: string, @Request() req?: any) {
     const tenantId = req?.user?.tenantId;
-    return this.salesService.quitarItem(id, Number(index), tenantId);
+    return this.salesService.quitarItem(id, Number(index), tenantId, req?.user ?? {});
   }
 
   @Post(':id/pagos')
   cobrarCuenta(@Param('id') id: string, @Body() data: any, @Request() req?: any) {
     const tenantId = req?.user?.tenantId;
-    return this.salesService.cobrarCuenta(id, data, tenantId);
+    return this.salesService.cobrarCuenta(id, data, tenantId, req?.user ?? {});
   }
 
   @Put(':id/pay')
   paySale(@Param('id') id: string, @Body() data: any, @Request() req?: any) {
     const tenantId = req?.user?.tenantId;
-    return this.salesService.pay(id, data, tenantId);
+    return this.salesService.pay(id, data, tenantId, req?.user ?? {});
   }
 
   @Put(':id/cancel')
   cancelSale(@Param('id') id: string, @Body() data: { motivo: string }, @Request() req?: any) {
     const tenantId = req?.user?.tenantId;
-    return this.salesService.cancel(id, data.motivo, tenantId);
+    return this.salesService.cancel(id, data.motivo, tenantId, req?.user ?? {});
   }
 
   @Put(':id/discount')

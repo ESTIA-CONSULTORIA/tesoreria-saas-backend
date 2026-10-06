@@ -15,7 +15,7 @@ import { NotaCocina } from './entities/nota-cocina.entity';
 import { Shift } from './entities/shift.entity';
 import { PoliticaDevolucion, ROLES_GERENTE } from '../config/politica-devoluciones.config';
 
-import { ActorMesas, contextoCobro, puedeCobrar, puedeDividir } from '../config/politicas-pos.config';
+import { ActorMesas, contextoCobro, PoliticaCobro, PoliticaDivision, puedeCobrar, puedeDividir } from '../config/politicas-pos.config';
 
 // Quien ejecuta una operación (req.user del JWT): id, email, roleCode y si la sesión es POS Lite.
 type Actor = ActorMesas;
@@ -793,7 +793,7 @@ export class SalesService {
   // stock; ítems con NotaCocina emitida → sin devolución, merma. Todo (stock, merma, notas,
   // estado de la venta, mesa) en UNA transacción con lock sobre la venta: si algo falla a medio
   // camino se revierte completo.
-  private async cancelarCuentaAbierta(id: string, motivo: string, tenantId: string): Promise<void> {
+  private async cancelarCuentaAbierta(id: string, motivo: string, tenantId: string, actor?: Actor): Promise<void> {
     const ventaServicioHabilitada = await this.tenantSettingsService.hasPosCapability(tenantId, 'venta_de_servicio');
     await this.dataSource.transaction(async (manager) => {
       const sale = await manager.findOne(Sale, { where: { id, tenantId }, lock: { mode: 'pessimistic_write' } });
@@ -804,6 +804,11 @@ export class SalesService {
       }
 
       const vivos = (sale.items || []).filter((it) => !it.anulado);
+      // El mesero solo cancela cuentas sin ítems enviados a cocina/barra (y sin pagos, ya validado arriba). Se revisa
+      // aquí, con la cuenta bajo lock: un ítem agregado y enviado justo antes no se le escapa.
+      if (actor?.roleCode === 'MESERO' && vivos.some((it) => !!it.notaCocinaId)) {
+        throw new ForbiddenException('El mesero solo puede cancelar cuentas sin ítems enviados a cocina o barra. Pide a un capitán o gerente.');
+      }
       const aDevolver = vivos.filter((it) => !it.notaCocinaId);
       const aMerma = vivos.filter((it) => !!it.notaCocinaId);
 
@@ -916,7 +921,7 @@ export class SalesService {
   // ítems no se desplazan si otro cajero cobra al mismo tiempo. El total baja en proporción
   // (conserva impuestos/descuento). Un ítem ya cobrado no se puede quitar, ni uno que deje el
   // total por debajo de lo ya cobrado.
-  async quitarItem(id: string, index: number, tenantId?: string) {
+  async quitarItem(id: string, index: number, tenantId?: string, actor?: Actor) {
     const t = await this.assertCuentasAbiertasHabilitada(tenantId);
     const idx = Number(index);
     if (!Number.isInteger(idx) || idx < 0) {
@@ -935,6 +940,11 @@ export class SalesService {
       const linea = items[idx];
       if (!linea || linea.anulado) {
         throw new BadRequestException(`Ítem ${idx} no existe en la cuenta.`);
+      }
+      // El mesero solo quita ítems que aún no salieron a cocina o barra (los demás roles conservan el comportamiento
+      // de siempre: quitar un ítem enviado lo registra como merma).
+      if (actor?.roleCode === 'MESERO' && linea.notaCocinaId) {
+        throw new ForbiddenException('El mesero solo puede quitar ítems que aún no salieron a cocina o barra. Pide a un capitán o gerente.');
       }
       const pagos = Array.isArray(sale.formasPago) ? sale.formasPago : [];
       if (pagos.some((p) => (p.itemIndexes || []).includes(idx))) {
@@ -999,8 +1009,26 @@ export class SalesService {
       autorizadoPor?: string;
     },
     tenantId?: string,
+    actor?: Actor,
   ) {
     const t = await this.assertCuentasAbiertasHabilitada(tenantId);
+    // Reglas de rol (el controller siempre pasa el usuario). Cobro completo: según politicaCobro y desde dónde
+    // (caja o mesa). Cobro dividido: además politicaDivisionCuentas (se decide abajo, ya con el saldo bajo lock).
+    let politicaCobro: PoliticaCobro | undefined;
+    let politicaDivision: PoliticaDivision | undefined;
+    if (actor) {
+      [politicaCobro, politicaDivision] = await Promise.all([
+        this.tenantSettingsService.getPoliticaCobro(t),
+        this.tenantSettingsService.getPoliticaDivisionCuentas(t),
+      ]);
+      if (!puedeCobrar(actor, politicaCobro)) {
+        throw new ForbiddenException(
+          contextoCobro(actor) === 'MESA' && politicaCobro === 'SOLO_CAJA'
+            ? 'Con la política de cobro de este negocio las cuentas solo se cobran en caja. Pasa la cuenta a caja.'
+            : 'Tu rol no puede cobrar cuentas desde mesa con la política de cobro de este negocio. Pasa la cuenta a caja.',
+        );
+      }
+    }
     const FORMAS = ['EFECTIVO', 'TARJETA', 'DEBITO', 'CREDITO', 'TRANSFERENCIA', 'CORTESIA'];
     if (!data || !FORMAS.includes(data.formaPago)) {
       throw new BadRequestException('formaPago inválida.');
@@ -1059,9 +1087,27 @@ export class SalesService {
         throw new BadRequestException(`El monto (${monto}) excede el saldo pendiente (${saldo}).`);
       }
 
+      // Dividir = cualquier cobro que no liquide la cuenta completa de una vez: ya hay pagos antes, o este no
+      // cubre todo el saldo (monto parcial, por persona o por ítems). El último pago de una cuenta dividida también.
+      const esDividido = pagos.length > 0 || monto < saldo;
+      if (actor && esDividido && !puedeDividir(actor, politicaCobro!, politicaDivision!)) {
+        throw new ForbiddenException(
+          'Dividir la cuenta no está permitido para tu rol con la política de este negocio. Pide a un gerente que la divida o cobra la cuenta completa de una vez.',
+        );
+      }
+
       const entrada: NonNullable<Sale['formasPago']>[number] = {
         forma: data.formaPago as any,
         monto,
+        ...(actor
+          ? {
+              cobradoPorId: actor.id,
+              cobradoPorEmail: actor.email,
+              cobradoPorRol: actor.roleCode,
+              origen: contextoCobro(actor),
+              ...(esDividido ? { dividido: true, divididoPorId: actor.id, divididoPorEmail: actor.email } : {}),
+            }
+          : {}),
         ...(indices ? { itemIndexes: indices } : {}),
         ...(data.montoRecibido !== undefined ? { montoRecibido: Number(data.montoRecibido) } : {}),
         ...(data.cambio !== undefined ? { cambio: Number(data.cambio) } : {}),
@@ -1101,7 +1147,7 @@ export class SalesService {
     formaPago: string;
     montoRecibido: number;
     cambio: number;
-  }, tenantId?: string) {
+  }, tenantId?: string, actor?: Actor) {
     try {
       const sale = await this.salesRepo.findOne({ where: tenantId ? { id, tenantId } : { id } });
       if (!sale) {
@@ -1116,7 +1162,7 @@ export class SalesService {
         throw new Error('La cuenta tiene pagos parciales: cobra el saldo desde el cobro de cuenta abierta (/pagos).');
       }
 
-      const cambiosPago = {
+      const cambiosPago: Record<string, any> = {
         formaPago: data.formaPago as any,
         montoRecibido: data.montoRecibido,
         cambio: data.cambio,
@@ -1130,6 +1176,29 @@ export class SalesService {
         sale.tenantId &&
         (await this.tenantSettingsService.hasPosCapability(sale.tenantId, 'mesas_cuenta_abierta'))
       );
+
+      // Este endpoint también cobra una cuenta de mesa completa: pasa por la misma política de cobro que
+      // cobrarCuenta() (si no, un mesero se saltaría SOLO_CAJA) y deja quién cobró para el corte por persona.
+      if (liberaMesa && actor) {
+        const politicaCobro = await this.tenantSettingsService.getPoliticaCobro(sale.tenantId as string);
+        if (!puedeCobrar(actor, politicaCobro)) {
+          throw new ForbiddenException(
+            contextoCobro(actor) === 'MESA' && politicaCobro === 'SOLO_CAJA'
+              ? 'Con la política de cobro de este negocio las cuentas solo se cobran en caja. Pasa la cuenta a caja.'
+              : 'Tu rol no puede cobrar cuentas desde mesa con la política de cobro de este negocio. Pasa la cuenta a caja.',
+          );
+        }
+        cambiosPago.formasPago = [{
+          forma: data.formaPago as any,
+          monto: this.round2(Number(sale.total)),
+          cobradoPorId: actor.id,
+          cobradoPorEmail: actor.email,
+          cobradoPorRol: actor.roleCode,
+          origen: contextoCobro(actor),
+          ...(data.montoRecibido !== undefined ? { montoRecibido: Number(data.montoRecibido) } : {}),
+          ...(data.cambio !== undefined ? { cambio: Number(data.cambio) } : {}),
+        }];
+      }
 
       if ((sale.citaId && sale.tenantId) || liberaMesa) {
         // Venta ligada a una cita (capacidad ligar_venta_a_cita, validada al crearla) y/o a una
@@ -1149,11 +1218,12 @@ export class SalesService {
       return this.salesRepo.findOne({ where: { id } });
     } catch (error) {
       console.error('SalesService.pay error:', error);
+      if (error instanceof HttpException) throw error;
       throw new Error(`Error al procesar pago: ${error.message}`);
     }
   }
 
-  async cancel(id: string, motivo: string, tenantId?: string) {
+  async cancel(id: string, motivo: string, tenantId?: string, actor?: Actor) {
     try {
       const sale = await this.salesRepo.findOne({ where: tenantId ? { id, tenantId } : { id } });
       if (!sale) {
@@ -1184,10 +1254,14 @@ export class SalesService {
         sale.status === 'ABIERTA' &&
         (await this.tenantSettingsService.hasPosCapability(sale.tenantId, 'mesas_cuenta_abierta'))
       );
+      // El mesero solo cancela cuentas de mesa (la regla de ítems enviados se aplica dentro de la transacción).
+      if (actor?.roleCode === 'MESERO' && !liberaMesa) {
+        throw new ForbiddenException('El mesero solo puede cancelar cuentas de mesa.');
+      }
       if (liberaMesa) {
         // Cuenta abierta de mesa: devuelve stock de lo que no salió a cocina/barra, registra merma
         // de lo que sí salió, cancela notas pendientes y libera la mesa (una sola transacción).
-        await this.cancelarCuentaAbierta(id, motivo, sale.tenantId);
+        await this.cancelarCuentaAbierta(id, motivo, sale.tenantId, actor);
       } else {
         await this.salesRepo.update(id, {
           status: 'CANCELADA',

@@ -5,6 +5,24 @@ import { Shift } from './entities/shift.entity';
 import { Sale } from './entities/sale.entity';
 import { resolveEventTimestamp } from '../common/resolve-event-timestamp.util';
 
+// Efectivo cobrado FUERA DE CAJA (origen MESA: POS Lite, o ERP con MESERO/CAPITAN), por persona. Sale de
+// formasPago[].cobradoPor* de las cuentas de mesa (JSON, sin migración). Es efectivo que físicamente tiene quien lo
+// cobró y que el efectivo esperado ya incluye: este desglose permite cuadrarlo con cada quien.
+export function efectivoFueraDeCaja(sales: Sale[]) {
+  const porPersona = new Map<string, { email: string; id: string | null; rol: string | null; monto: number }>();
+  for (const sale of sales) {
+    for (const p of Array.isArray(sale.formasPago) ? sale.formasPago : []) {
+      if (p.forma !== 'EFECTIVO' || p.origen !== 'MESA') continue;
+      const email = p.cobradoPorEmail || 'sin asignar';
+      const e = porPersona.get(email) ?? { email, id: p.cobradoPorId ?? null, rol: p.cobradoPorRol ?? null, monto: 0 };
+      e.monto = Math.round((e.monto + (Number(p.monto) || 0)) * 100) / 100;
+      porPersona.set(email, e);
+    }
+  }
+  const personas = [...porPersona.values()].sort((a, b) => b.monto - a.monto);
+  return { personas, total: Math.round(personas.reduce((s, x) => s + x.monto, 0) * 100) / 100 };
+}
+
 @Injectable()
 export class ShiftsService {
   constructor(
@@ -250,7 +268,10 @@ export class ShiftsService {
         notas: data.notas || shift.notas,
       });
 
-      return this.shiftsRepo.findOne({ where: { id } });
+      const cerrado = await this.shiftsRepo.findOne({ where: { id } });
+      // El desglose no se guarda (Shift no tiene columna para él): se calcula de las ventas y se puede volver a pedir
+      // en getSummary() también para un turno ya cerrado.
+      return cerrado ? { ...cerrado, efectivoPorPersona: efectivoFueraDeCaja(sales) } : cerrado;
     } catch (error) {
       console.error('ShiftsService.closeShift error:', error);
       if (error instanceof HttpException) throw error;
@@ -415,6 +436,8 @@ export class ShiftsService {
           totalRetiros,
           totalDepositos,
           efectivoEsperado,
+          // Efectivo cobrado fuera de caja (mesa), por persona: ya está incluido en efectivoEsperado.
+          efectivoPorPersona: efectivoFueraDeCaja(sales),
         },
       };
     } catch (error) {
