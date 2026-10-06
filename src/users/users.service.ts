@@ -2,9 +2,9 @@ import { Injectable, BadRequestException, NotFoundException } from '@nestjs/comm
 import { InjectRepository } from '@nestjs/typeorm';
 import { User } from './entities/user.entity';
 import { Tenant } from '../tenants/entities/tenant.entity';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
-import { ROLES_CON_SUCURSAL } from '../config/roles-pos.config';
+import { ROLES_CON_SUCURSAL, ROLES_NIP } from '../config/roles-pos.config';
 
 @Injectable()
 export class UsersService {
@@ -42,6 +42,7 @@ export class UsersService {
     // sales.service.ts exige sucursalId para registrar una venta. No aplica a SOPORTE ni
     // otros roles porque no operan sobre datos scoped a una sucursal específica.
     this.assertCompanyBranchIfRequired(roleCode, companyId, branchId);
+    await this.assertNipUnico(tenantId, roleCode, password);
 
     const hashedPassword = await bcrypt.hash(password, 10);
     const hashedPin = executivePin ? await bcrypt.hash(executivePin, 10) : undefined;
@@ -160,6 +161,7 @@ export class UsersService {
     const finalCompanyId = companyIdToBackfill ?? existing.companyId;
     const finalBranchId = data.branchId !== undefined ? data.branchId : existing.branchId;
     this.assertCompanyBranchIfRequired(finalRoleCode, finalCompanyId, finalBranchId);
+    if (data.password) await this.assertNipUnico(existing.tenantId, finalRoleCode, data.password, id);
 
     const toSave: Record<string, any> = { ...data };
     if (companyIdToBackfill) toSave.companyId = companyIdToBackfill;
@@ -201,6 +203,23 @@ export class UsersService {
     }
     await this.usersRepository.delete(id);
     return { deleted: true };
+  }
+
+  // El NIP del POS Lite identifica al usuario (loginWithNip busca el NIP entre los usuarios de NIP del tenant): si
+  // dos usuarios comparten NIP, el primero que coincida inicia sesión por el otro y el efectivo cobrado quedaría
+  // atribuido a la persona equivocada. Por eso un NIP de 4 dígitos no puede repetirse dentro del tenant.
+  private async assertNipUnico(tenantId: string | undefined, roleCode: string | undefined, nip: string | undefined, excluirUserId?: string) {
+    if (!tenantId || !roleCode || !ROLES_NIP.includes(roleCode) || !nip || !/^\d{4}$/.test(nip)) return;
+    const candidatos = await this.usersRepository.find({
+      where: { tenantId, roleCode: In(ROLES_NIP), isActive: true },
+      select: ['id', 'password'],
+    });
+    for (const u of candidatos) {
+      if (u.id === excluirUserId) continue;
+      if (u.password && (await bcrypt.compare(nip, u.password))) {
+        throw new BadRequestException('Ese NIP ya lo usa otro usuario del negocio. Elige uno distinto.');
+      }
+    }
   }
 
   private assertCompanyBranchIfRequired(roleCode?: string, companyId?: string, branchId?: string) {

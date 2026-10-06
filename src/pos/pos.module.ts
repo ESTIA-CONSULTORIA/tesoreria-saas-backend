@@ -18,6 +18,7 @@ import { ShiftsController } from './shifts.controller';
 import { ShiftsService } from './shifts.service';
 import { CashiersController } from './cashiers.controller';
 import { CashiersService } from './cashiers.service';
+import { NipThrottleService } from './nip-throttle.service';
 import { CorteFieldsController } from './corte-fields.controller';
 import { CorteFieldsService } from './corte-fields.service';
 import { CorteField } from './entities/corte-field.entity';
@@ -92,6 +93,7 @@ import { CostsModule } from '../costs/costs.module';
     SalesService,
     ShiftsService,
     CashiersService,
+    NipThrottleService,
     CorteFieldsService,
     InsumoAlertsService,
     NotasCocinaService,

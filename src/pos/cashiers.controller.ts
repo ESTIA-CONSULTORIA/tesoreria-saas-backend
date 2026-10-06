@@ -6,11 +6,14 @@ import {
   Request,
   Res,
   UnauthorizedException,
+  HttpException,
+  HttpStatus,
 } from '@nestjs/common';
 import type { Response } from 'express';
 import { Throttle } from '@nestjs/throttler';
 import { JwtService } from '@nestjs/jwt';
 import { CashiersService } from './cashiers.service';
+import { NipThrottleService } from './nip-throttle.service';
 import { Public } from '../auth/public.decorator';
 import { setPosLiteCookie, clearPosLiteCookie } from '../auth/auth-cookies.util';
 
@@ -19,6 +22,7 @@ export class CashiersController {
   constructor(
     private cashiersService: CashiersService,
     private jwtService: JwtService,
+    private nipThrottle: NipThrottleService,
   ) {}
 
   // 5 intentos / 15 min — mismo hueco de fuerza bruta que /auth/login y
@@ -41,15 +45,35 @@ export class CashiersController {
   // hay ninguna cookie todavía, el tenant se resuelve antes por slug, sin autenticar) — ya lo
   // manda en el body hoy, así que no hace falta tocar ese frontend.
   @Public()
-  @Throttle({ default: { limit: 5, ttl: 900_000 } })
+  // El límite real de fallos (por tenant+IP, tenant y tenant+usuario+IP) lo lleva NipThrottleService; este
+  // @Throttle solo frena una inundación de peticiones por IP (antes: 5 / 15 min, que bloqueaba a todas las
+  // tabletas de un local detrás de la misma IP).
+  @Throttle({ default: { limit: 60, ttl: 60_000 } })
   @Post('nip')
   async loginWithNip(
-    @Body() body: { nip: string; tenantId?: string },
+    @Body() body: { nip: string; tenantId?: string; userId?: string },
     @Request() req: any,
     @Res({ passthrough: true }) res: Response,
   ) {
     const tenantId = req?.user?.tenantId || body.tenantId;
-    const { access_token, ...rest } = await this.cashiersService.loginWithNip(body.nip, tenantId);
+    // Detrás del proxy de Railway req.ip es la IP del proxy: se prefiere el primer valor de x-forwarded-for.
+    // Es falsificable, por eso el tope por tenant (todas las IPs) es el que frena la fuerza bruta distribuida.
+    const forwarded = String(req?.headers?.['x-forwarded-for'] || '').split(',')[0].trim();
+    const ip = forwarded || req?.ip || 'desconocida';
+    const userId = typeof body.userId === 'string' && body.userId ? body.userId : undefined;
+
+    this.nipThrottle.assertAllowed(tenantId, userId, ip);
+    let result;
+    try {
+      result = await this.cashiersService.loginWithNip(body.nip, tenantId, userId);
+    } catch (error) {
+      if (error instanceof HttpException && error.getStatus() === HttpStatus.UNAUTHORIZED) {
+        this.nipThrottle.registerFailure(tenantId, userId, ip);
+      }
+      throw error;
+    }
+    this.nipThrottle.registerSuccess(tenantId, userId, ip);
+    const { access_token, ...rest } = result;
     setPosLiteCookie(res, access_token);
     return rest;
   }

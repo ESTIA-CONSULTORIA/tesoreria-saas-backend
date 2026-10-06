@@ -13,10 +13,10 @@ import { ROLES_CON_SUCURSAL, ROLES_NIP, ROLES_CAJA } from '../config/roles-pos.c
 // sucursal (regla de aplicación; la CHECK de BD solo cubre CAJERO/GERENTE). Los roles son globales.
 describe('roles del POS — CAPITAN y MESERO', () => {
   let users: UsersService;
-  let usersRepo: { create: jest.Mock; save: jest.Mock; count: jest.Mock };
+  let usersRepo: { create: jest.Mock; save: jest.Mock; count: jest.Mock; find: jest.Mock };
 
   beforeEach(async () => {
-    usersRepo = { create: jest.fn((d) => d), save: jest.fn((d) => Promise.resolve({ id: 'u1', ...d })), count: jest.fn() };
+    usersRepo = { create: jest.fn((d) => d), save: jest.fn((d) => Promise.resolve({ id: 'u1', ...d })), count: jest.fn(), find: jest.fn().mockResolvedValue([]) };
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         UsersService,
