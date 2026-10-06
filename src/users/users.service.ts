@@ -4,6 +4,7 @@ import { User } from './entities/user.entity';
 import { Tenant } from '../tenants/entities/tenant.entity';
 import { Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
+import { ROLES_CON_SUCURSAL } from '../config/roles-pos.config';
 
 @Injectable()
 export class UsersService {
@@ -203,7 +204,7 @@ export class UsersService {
   }
 
   private assertCompanyBranchIfRequired(roleCode?: string, companyId?: string, branchId?: string) {
-    if ((roleCode === 'CAJERO' || roleCode === 'GERENTE') && (!companyId || !branchId)) {
+    if (roleCode && ROLES_CON_SUCURSAL.includes(roleCode) && (!companyId || !branchId)) {
       throw new BadRequestException(
         `Los usuarios ${roleCode} requieren empresa y sucursal asignadas.`,
       );

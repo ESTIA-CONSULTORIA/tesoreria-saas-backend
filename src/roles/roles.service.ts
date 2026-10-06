@@ -77,6 +77,8 @@ export class RolesService {
       { code: 'ADMIN', name: 'Administrador', description: 'Acceso administrativo' },
       { code: 'CONTADOR', name: 'Contador', description: 'Acceso a contabilidad y reportes' },
       { code: 'CAJERO', name: 'Cajero', description: 'Acceso a movimientos y tesorería' },
+      { code: 'CAPITAN', name: 'Capitán de meseros', description: 'Mesas y cuentas abiertas; sin caja salvo que la política lo permita' },
+      { code: 'MESERO', name: 'Mesero', description: 'Abre cuentas, agrega ítems y quita los que no salieron a cocina' },
       { code: 'VIEWER', name: 'Visualizador', description: 'Solo lectura' },
     ];
 
