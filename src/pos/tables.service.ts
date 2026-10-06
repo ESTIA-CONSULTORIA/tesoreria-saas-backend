@@ -2,12 +2,14 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Table } from './entities/table.entity';
+import { AreasService } from './areas.service';
 
 @Injectable()
 export class TablesService {
   constructor(
     @InjectRepository(Table)
     private tablesRepo: Repository<Table>,
+    private areasService: AreasService,
   ) {}
 
   // Aislamiento por tenant (capacidad mesas_cuenta_abierta): antes findAll() devolvía las
@@ -40,6 +42,14 @@ export class TablesService {
     if (!tenantId) {
       throw new BadRequestException('No se puede crear una mesa sin tenant.');
     }
+    return this.crearValidada(data, tenantId);
+  }
+
+  private async crearValidada(data: Partial<Table>, tenantId: string) {
+    // La sucursal y el área de la mesa deben ser del tenant: si no, la mesa (con SU tenantId) aparecería
+    // dentro del área de otro tenant.
+    await this.areasService.assertBranchOwned(data.branchId, tenantId);
+    if (data.areaId) await this.areasService.assertAreaOwned(data.areaId, tenantId);
     const table = this.tablesRepo.create({ ...data, tenantId });
     return this.tablesRepo.save(table);
   }
@@ -49,6 +59,8 @@ export class TablesService {
     if (!existing) throw new NotFoundException('Mesa no encontrada');
     // tenantId e id fuera del body: no se puede reasignar la mesa a otro tenant.
     const { tenantId: _ignoredTenantId, id: _ignoredId, ...safeData } = data as any;
+    if (tenantId && safeData.branchId !== undefined) await this.areasService.assertBranchOwned(safeData.branchId, tenantId);
+    if (tenantId && safeData.areaId) await this.areasService.assertAreaOwned(safeData.areaId, tenantId);
     await this.tablesRepo.update(id, { ...safeData, updatedAt: new Date() });
     return this.tablesRepo.findOne({ where: { id } });
   }

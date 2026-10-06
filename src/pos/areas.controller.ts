@@ -10,7 +10,7 @@ export class AreasController {
   @Get()
   findAll(@Req() req: any, @Headers('x-branch-id') headerBranchId?: string) {
     const branchId = headerBranchId || req.user?.branchId;
-    return this.areasService.findAll(branchId);
+    return this.areasService.findAll(branchId, req.user?.tenantId);
   }
 
   @Get(':id')
@@ -20,8 +20,8 @@ export class AreasController {
   }
 
   @Post()
-  create(@Body() data: any) {
-    return this.areasService.create(data);
+  create(@Body() data: any, @Req() req?: any) {
+    return this.areasService.create(data, req?.user?.tenantId);
   }
 
   @Put(':id')

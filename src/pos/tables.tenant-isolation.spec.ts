@@ -4,6 +4,7 @@ import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { TablesService } from './tables.service';
 import { TablesController } from './tables.controller';
 import { Table } from './entities/table.entity';
+import { AreasService } from './areas.service';
 
 // Capacidad mesas_cuenta_abierta (aislamiento de tenant desde el día uno): TablesController no
 // tomaba el tenant del JWT al crear (mesa huérfana si el body no lo traía — en producción había 11
@@ -29,7 +30,11 @@ describe('TablesService — aislamiento por tenant', () => {
       update: jest.fn().mockResolvedValue(undefined),
     };
     const module: TestingModule = await Test.createTestingModule({
-      providers: [TablesService, { provide: getRepositoryToken(Table), useValue: tablesRepo }],
+      providers: [
+        TablesService,
+        { provide: getRepositoryToken(Table), useValue: tablesRepo },
+        { provide: AreasService, useValue: { assertBranchOwned: jest.fn().mockResolvedValue(undefined), assertAreaOwned: jest.fn().mockResolvedValue(undefined) } },
+      ],
     }).compile();
     service = module.get(TablesService);
   });

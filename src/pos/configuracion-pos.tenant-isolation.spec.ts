@@ -98,7 +98,11 @@ describe('TablesService — aislamiento por tenant', () => {
       delete: jest.fn().mockResolvedValue(undefined),
     };
     const module: TestingModule = await Test.createTestingModule({
-      providers: [TablesService, { provide: getRepositoryToken(Table), useValue: tablesRepo }],
+      providers: [
+        TablesService,
+        { provide: getRepositoryToken(Table), useValue: tablesRepo },
+        { provide: AreasService, useValue: { assertBranchOwned: jest.fn().mockResolvedValue(undefined), assertAreaOwned: jest.fn().mockResolvedValue(undefined) } },
+      ],
     }).compile();
     service = module.get<TablesService>(TablesService);
   });

@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Put, Delete, Body, Param, Req } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Body, Param, Query, Req, Headers } from '@nestjs/common';
 import { TablesService } from './tables.service';
 import { Modulo } from '../auth/modulo.decorator';
 
@@ -8,8 +8,15 @@ export class TablesController {
   constructor(private tablesService: TablesService) {}
 
   @Get()
-  findAll(@Req() req?: any, @Param('branchId') branchId?: string, @Param('areaId') areaId?: string) {
-    return this.tablesService.findAll(branchId, areaId, req?.user?.tenantId);
+  // Filtros por query (?branchId=&areaId=) o header x-branch-id. Antes eran @Param de una ruta que no
+  // los tiene, así que nunca llegaban: el filtro de sucursal no funcionaba.
+  findAll(
+    @Req() req?: any,
+    @Query('branchId') branchId?: string,
+    @Query('areaId') areaId?: string,
+    @Headers('x-branch-id') headerBranchId?: string,
+  ) {
+    return this.tablesService.findAll(branchId || headerBranchId, areaId, req?.user?.tenantId);
   }
 
   @Get(':id')
