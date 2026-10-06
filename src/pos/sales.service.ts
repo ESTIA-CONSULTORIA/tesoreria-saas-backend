@@ -172,7 +172,7 @@ export class SalesService {
     citaId?: string; // POS flexible, capacidad ligar_venta_a_cita (se ignora si la capacidad está inactiva)
     folio?: string; // generado en el cliente (Fase A1, modo offline). Si no viene,
                      // se genera server-side como siempre — retrocompatible.
-  }) {
+  }, actor?: Actor) {
     // notaCocinaId/anulado son marcas del servidor (cancelación de cuentas abiertas): lo que
     // venga del cliente se descarta para que nadie pueda simular "ya salió a cocina".
     data = { ...data, items: (data.items || []).map(({ notaCocinaId: _n, anulado: _a, ...resto }: any) => resto) };
@@ -220,6 +220,12 @@ export class SalesService {
     // ANTES de la transacción (mesa inexistente/ajena → 404 claro, no un 500 genérico).
     const nacePagada = !!(data.formasPago && data.formasPago.length > 0);
     const abreCuentaEnMesa = !nacePagada && (await this.resolveMesaParaCuentaAbierta(data.tableId, data.tenantId));
+    // Con usuario autenticado (el controller siempre lo pasa), una cuenta de mesa se estampa en el SERVIDOR: el
+    // mesero de la cuenta sale del token (no del texto `cajero` que manda el cliente) y el turno es el abierto
+    // de la sucursal (una tableta POS Lite no tiene turno: antes la cuenta quedaba sin turnoId y su efectivo no
+    // entraba a ningún corte).
+    const estampa = !!(abreCuentaEnMesa && actor);
+    const cajeroFinal = estampa ? (actor!.email ?? actor!.id ?? data.cajero) : data.cajero;
 
     let savedSale: Sale;
     let lowStockInsumos: LowStockInsumo[] = [];
@@ -247,6 +253,12 @@ export class SalesService {
           }
         }
 
+        let turnoIdFinal = data.turnoId;
+        if (estampa) {
+          const turno = await this.resolverTurnoDeCuenta(manager, data.turnoId, data.sucursalId, data.tenantId);
+          turnoIdFinal = turno.id;
+        }
+
         const sale = manager.create(Sale, {
           folio,
           fecha: now,
@@ -260,8 +272,8 @@ export class SalesService {
           formasPago: data.formasPago || [],
           // Mark as PAGADA immediately when payment forms are included
           status: (data.formasPago && data.formasPago.length > 0) ? 'PAGADA' : 'ABIERTA',
-          cajero: data.cajero,
-          turnoId: data.turnoId,
+          cajero: cajeroFinal,
+          turnoId: turnoIdFinal,
           sucursalId: data.sucursalId,
           tenantId: data.tenantId,
           notas: data.notas || '',
@@ -306,8 +318,9 @@ export class SalesService {
         return saved;
       });
     } catch (error) {
-      // 409 de cuenta abierta (mesa ya ocupada por otra cuenta): llega tal cual al cliente.
-      if (error instanceof ConflictException) {
+      // 409 de cuenta abierta (mesa ya ocupada por otra cuenta) y 400 de turno inválido o sin turno abierto:
+      // llegan tal cual al cliente.
+      if (error instanceof ConflictException || error instanceof BadRequestException) {
         throw error;
       }
       // Colisión de folio (23505 = unique_violation de Postgres): error específico y
@@ -1232,6 +1245,24 @@ export class SalesService {
     if (!tenantId) throw new ForbiddenException('Se requiere un tenant.');
     const politica = await this.tenantSettingsService.getPoliticaDevoluciones(tenantId);
     return { politicaDevoluciones: politica, puedeDevolver: this.puedeDevolver(politica, actor) };
+  }
+
+  // Turno al que pertenece una cuenta de mesa. Con turnoId (el POS manda su turno actual): debe ser un turno ABIERTO
+  // del tenant y de la sucursal. Sin turnoId: el turno abierto más reciente de la sucursal. Sin turno abierto, 400:
+  // sin turno, el efectivo cobrado en mesa no entraría a ningún corte.
+  private async resolverTurnoDeCuenta(manager: EntityManager, turnoId: string | undefined, sucursalId: string, tenantId: string): Promise<Shift> {
+    if (turnoId) {
+      const pedido = await manager.findOne(Shift, { where: { id: turnoId, tenantId } });
+      if (!pedido || pedido.status !== 'ABIERTO' || pedido.sucursalId !== sucursalId) {
+        throw new BadRequestException('El turno indicado no es un turno abierto de esta sucursal.');
+      }
+      return pedido;
+    }
+    const turno = await manager.findOne(Shift, { where: { tenantId, sucursalId, status: 'ABIERTO' }, order: { createdAt: 'DESC' } });
+    if (!turno) {
+      throw new BadRequestException('No hay un turno abierto en esta sucursal: abre turno antes de abrir cuentas de mesa.');
+    }
+    return turno;
   }
 
   // Informativo para el POS (mostrar u ocultar botones): políticas vigentes y qué puede hacer ESTE usuario con

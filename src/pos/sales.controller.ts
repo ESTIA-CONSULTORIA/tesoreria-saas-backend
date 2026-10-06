@@ -11,7 +11,7 @@ export class SalesController {
     return this.salesService.create({
       ...data,
       tenantId,
-    });
+    }, req.user ?? {});
   }
 
   @Get()
