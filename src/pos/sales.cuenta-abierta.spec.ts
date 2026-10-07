@@ -77,6 +77,9 @@ describe('SalesService — capacidad mesas_cuenta_abierta', () => {
     'p-cocina-ins': { id: 'p-cocina-ins', type: 'SIMPLE', insumoId: 'ins-1', recipeId: null, tenantId: TENANT_A, name: 'Tacos al pastor', esServicio: false, estacionPreparacion: 'COCINA' },
     'p-B': { id: 'p-B', type: 'SIMPLE', insumoId: 'ins-1', recipeId: null, tenantId: TENANT_B, name: 'Ajeno', esServicio: false },
   };
+  // Precio de catálogo: en una cuenta abierta el servidor pone precio e IVA (no el cliente).
+  const PRECIO: Record<string, number> = { 'p-simple': 50, 'p-servicio': 100, 'p-cocina': 80, 'p-simple-2': 20, 'p-cocina-ins': 60, 'p-B': 50 };
+  for (const p of Object.values(PRODUCTS)) p.price = PRECIO[p.id];
   const productLookup = (where: any) => {
     const p = PRODUCTS[where.id];
     return Promise.resolve(p && (where.tenantId === undefined || p.tenantId === where.tenantId) ? { ...p } : null);
@@ -137,9 +140,9 @@ describe('SalesService — capacidad mesas_cuenta_abierta', () => {
   }
 
   // ── fixtures ────────────────────────────────────────────────────────────────────────────
-  function crearVenta(extra: Record<string, any> = {}, items: any[] = [{ productoId: 'p-simple', nombre: 'Taco', cantidad: 2, precioUnitario: 50, descuento: 0, subtotal: 100 }]) {
+  async function crearVenta(extra: Record<string, any> = {}, items: any[] = [{ productoId: 'p-simple', nombre: 'Taco', cantidad: 2, precioUnitario: 50, descuento: 0, subtotal: 100 }]) {
     const total = items.reduce((s, i) => s + i.subtotal, 0);
-    return service.create({
+    const creada: any = await service.create({
       items: items as any,
       subtotal: total, descuento: 0, impuestos: 0, total,
       cajero: 'cajero-1', turnoId: 'turno-1', sucursalId: 'sucursal-A', tenantId: TENANT_A,
@@ -147,6 +150,14 @@ describe('SalesService — capacidad mesas_cuenta_abierta', () => {
       folio: `VTA-${++nextId}`,
       ...extra,
     } as any);
+    // create() recalcula precio e IVA en el servidor. Estas pruebas son de cobro / quitar / dividir y necesitan importes
+    // exactos y raros (centavos, IVA 8%, descuento global): se fijan a mano sobre la fila ya creada. Lo que crea el
+    // servidor (precio, IVA) se prueba en su propio bloque más abajo.
+    const fila = sales.get(creada.id);
+    if (!fila || extra.tableId === null || !creada.tableId) return creada;
+    fila.items = fila.items.map((it: any, i: number) => ({ ...it, precioUnitario: items[i].precioUnitario, descuento: items[i].descuento ?? 0, subtotal: items[i].subtotal }));
+    Object.assign(fila, { subtotal: total, descuento: extra.descuento ?? 0, impuestos: extra.impuestos ?? 0, total: extra.total ?? total });
+    return { ...fila };
   }
 
   beforeEach(async () => {
@@ -442,9 +453,10 @@ describe('SalesService — capacidad mesas_cuenta_abierta', () => {
     it('agregar ítems después de un cobro parcial sube el saldo y el cobro final lo liquida todo', async () => {
       const v2 = await crearVenta({ tableId: 'mesa-2' }); // total 100
       await service.cobrarCuenta(v2.id, { formaPago: 'EFECTIVO', monto: 40 }, TENANT_A);
+      // el servidor pone precio de catálogo ($80) e IVA (16%): +92.80
       await service.agregarItems(v2.id, { items: [{ productoId: 'p-cocina', nombre: 'Postre', cantidad: 1, precioUnitario: 30, descuento: 0, subtotal: 30 }] }, TENANT_A);
       const r: any = await service.cobrarCuenta(v2.id, { formaPago: 'TARJETA' }, TENANT_A);
-      expect(r.sale.formasPago.map((p: any) => p.monto)).toEqual([40, 90]); // total 130
+      expect(r.sale.formasPago.map((p: any) => p.monto)).toEqual([40, 152.8]); // total 192.80
       expect(r.cerrada).toBe(true);
     });
 

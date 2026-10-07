@@ -11,3 +11,11 @@ export const ROLES_NIP = ['CAJERO', 'MESERO', 'CAPITAN'];
 // "Caja": sesión ERP con uno de estos roles. Todo lo demás es "mesa" (sesión POS Lite, o sesión ERP con
 // MESERO o CAPITAN): así un mesero con sesión ERP no se salta la política.
 export const ROLES_CAJA = ['ADMIN', 'GERENTE', 'CAJERO'];
+
+// Quién puede aplicar descuento a una cuenta abierta (PUT /pos/sales/:id/discount). El mesero no.
+export const ROLES_DESCUENTO = ['ADMIN', 'GERENTE', 'CAPITAN', 'CAJERO'];
+
+// IVA del POS (el mismo 16% del POS normal del frontend: precios sin IVA, IVA sobre el neto). Las cuentas abiertas lo
+// calculan en el SERVIDOR con esta tasa; el cliente no decide ni precio ni impuesto.
+export const IVA_TASA = 0.16;
+export const calcularIva = (neto: number): number => Math.round(neto * IVA_TASA * 100) / 100;

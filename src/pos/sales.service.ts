@@ -14,6 +14,7 @@ import { resolveActiveInsumoChain } from '../costs/insumo-resolution';
 import { NotaCocina } from './entities/nota-cocina.entity';
 import { Shift } from './entities/shift.entity';
 import { PoliticaDevolucion, ROLES_GERENTE } from '../config/politica-devoluciones.config';
+import { calcularIva, ROLES_DESCUENTO } from '../config/roles-pos.config';
 
 import { ActorMesas, contextoCobro, PoliticaCobro, PoliticaDivision, puedeCobrar, puedeDividir } from '../config/politicas-pos.config';
 
@@ -109,6 +110,20 @@ export class SalesService {
   // inventario lo ignoran); lo que se rechaza es un producto que SÍ existe pero no es de este
   // tenant (de otro, o huérfano). Mensaje igual al de "no existe" para no revelar a qué
   // tenant pertenece.
+  // Cuentas abiertas (mesas): el precio, el subtotal y el IVA los pone el SERVIDOR. Del cliente solo se toma qué producto y
+  // cuántos: antes un mesero podía mandar precioUnitario/total a su gusto y la cuenta se cobraba por ese total.
+  // Descuentos de ítem: no hay (el descuento va por PUT /discount, solo roles autorizados).
+  private async preciosDeServidor(items: SaleItem[], tenantId: string): Promise<SaleItem[]> {
+    const salida: SaleItem[] = [];
+    for (const it of items) {
+      const p = await this.productRepo.findOne({ where: { id: it.productoId, tenantId } });
+      if (!p) throw new BadRequestException(`Producto no encontrado: ${it.productoId}`);
+      const precioUnitario = this.round2(Number(p.price) || 0);
+      salida.push({ ...it, nombre: p.name, precioUnitario, descuento: 0, subtotal: this.round2(precioUnitario * Number(it.cantidad)) });
+    }
+    return salida;
+  }
+
   private async assertProductsBelongToTenant(items: SaleItem[], tenantId?: string): Promise<void> {
     if (!tenantId) return;
     for (const item of items) {
@@ -224,6 +239,12 @@ export class SalesService {
     // mesero de la cuenta sale del token (no del texto `cajero` que manda el cliente) y el turno es el abierto
     // de la sucursal (una tableta POS Lite no tiene turno: antes la cuenta quedaba sin turnoId y su efectivo no
     // entraba a ningún corte).
+    if (abreCuentaEnMesa) {
+      const items = await this.preciosDeServidor(data.items, data.tenantId);
+      const subtotal = this.round2(items.reduce((s, it) => s + it.subtotal, 0));
+      const impuestos = calcularIva(subtotal);
+      data = { ...data, items, subtotal, descuento: 0, impuestos, total: this.round2(subtotal + impuestos) };
+    }
     const estampa = !!(abreCuentaEnMesa && actor);
     const cajeroFinal = estampa ? (actor!.email ?? actor!.id ?? data.cajero) : data.cajero;
 
@@ -863,11 +884,7 @@ export class SalesService {
   // ítems siguen siendo válidos.
   async agregarItems(id: string, data: { items: any[]; impuestos?: number }, tenantId?: string) {
     const t = await this.assertCuentasAbiertasHabilitada(tenantId);
-    const nuevos = this.normalizarItems(data?.items);
-    const deltaImpuestos = this.round2(Number(data?.impuestos ?? 0));
-    if (!Number.isFinite(deltaImpuestos) || deltaImpuestos < 0) {
-      throw new BadRequestException('impuestos inválido.');
-    }
+    const normalizados = this.normalizarItems(data?.items);
 
     const existente = await this.salesRepo.findOne({ where: { id, tenantId: t } });
     if (!existente) throw new NotFoundException('Venta no encontrada');
@@ -875,12 +892,13 @@ export class SalesService {
       throw new BadRequestException('Solo se pueden agregar ítems a una cuenta abierta.');
     }
 
-    await this.assertProductsBelongToTenant(nuevos, t);
+    const nuevos = await this.preciosDeServidor(normalizados, t);
     const ventaServicioHabilitada = await this.tenantSettingsService.hasPosCapability(t, 'venta_de_servicio');
     const notasCocinaHabilitada = await this.tenantSettingsService.hasPosCapability(t, 'notas_cocina_barra');
     await this.checkStockAvailability(nuevos, t, ventaServicioHabilitada);
     const costoNuevos = await this.calculateCostoReal(nuevos, t, ventaServicioHabilitada);
     const deltaSubtotal = this.round2(nuevos.reduce((s, it) => s + it.subtotal, 0));
+    const deltaImpuestos = calcularIva(deltaSubtotal); // el IVA lo calcula el servidor, no el cliente
 
     let lowStockInsumos: LowStockInsumo[] = [];
     const actualizada = await this.dataSource.transaction(async (manager) => {
@@ -1277,7 +1295,11 @@ export class SalesService {
     }
   }
 
-  async applyDiscount(id: string, descuento: number, nuevoTotal: number, tenantId?: string) {
+  async applyDiscount(id: string, descuento: number, nuevoTotal: number, tenantId?: string, actor?: Actor) {
+    // El mesero no aplica descuentos (el controller siempre pasa el usuario; sin rol reconocido también es 403).
+    if (actor && !ROLES_DESCUENTO.includes(actor.roleCode ?? '')) {
+      throw new ForbiddenException('Tu rol no puede aplicar descuentos. Pide a un capitán o gerente.');
+    }
     try {
       const sale = await this.salesRepo.findOne({ where: tenantId ? { id, tenantId } : { id } });
       if (!sale) {
@@ -1289,15 +1311,25 @@ export class SalesService {
       if (this.sumPagos(sale.formasPago) > 0) {
         throw new Error('No se puede aplicar descuento a una cuenta con pagos parciales ya cobrados.');
       }
+      // Un descuento no sube el total ni lo deja negativo (antes el total llegaba tal cual del cliente).
+      const desc = Number(descuento);
+      const nuevo = Number(nuevoTotal);
+      if (!Number.isFinite(desc) || desc < 0 || !Number.isFinite(nuevo) || nuevo < 0) {
+        throw new BadRequestException('descuento y nuevoTotal deben ser números mayores o iguales a cero.');
+      }
+      if (nuevo > Number(sale.total)) {
+        throw new BadRequestException('El nuevo total no puede ser mayor al total actual de la cuenta.');
+      }
 
       await this.salesRepo.update(id, {
-        descuento,
-        total: nuevoTotal,
+        descuento: desc,
+        total: nuevo,
       });
 
       return this.salesRepo.findOne({ where: { id } });
     } catch (error) {
       console.error('SalesService.applyDiscount error:', error);
+      if (error instanceof HttpException) throw error;
       throw new Error(`Error al aplicar descuento: ${error.message}`);
     }
   }

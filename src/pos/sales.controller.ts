@@ -95,7 +95,7 @@ export class SalesController {
     @Request() req?: any,
   ) {
     const tenantId = req?.user?.tenantId;
-    return this.salesService.applyDiscount(id, data.descuento, data.nuevoTotal, tenantId);
+    return this.salesService.applyDiscount(id, data.descuento, data.nuevoTotal, tenantId, req?.user ?? {});
   }
 
   // El servicio decide según la política del tenant (SOLO_GERENTE | CAJERO_LIBRE) y el rol de quien llama.

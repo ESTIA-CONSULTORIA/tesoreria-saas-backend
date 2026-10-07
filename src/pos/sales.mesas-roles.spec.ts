@@ -68,8 +68,8 @@ describe('SalesService — cuentas de mesa: roles, estampado y corte', () => {
     entity === Sale ? ventas : entity === Shift ? turnos : entity === Table ? mesas : entity === Insumo ? insumos : null;
 
   const PRODUCTS: Record<string, any> = {
-    'p-simple': { id: 'p-simple', type: 'SIMPLE', insumoId: 'ins-1', recipeId: null, tenantId: TENANT_A, name: 'Taco', esServicio: false },
-    'p-cocina-ins': { id: 'p-cocina-ins', type: 'SIMPLE', insumoId: 'ins-1', recipeId: null, tenantId: TENANT_A, name: 'Tacos al pastor', esServicio: false, estacionPreparacion: 'COCINA' },
+    'p-simple': { id: 'p-simple', type: 'SIMPLE', insumoId: 'ins-1', recipeId: null, tenantId: TENANT_A, name: 'Taco', price: 50, esServicio: false },
+    'p-cocina-ins': { id: 'p-cocina-ins', type: 'SIMPLE', insumoId: 'ins-1', recipeId: null, tenantId: TENANT_A, name: 'Tacos al pastor', price: 60, esServicio: false, estacionPreparacion: 'COCINA' },
   };
   const productLookup = (where: any) => {
     const p = PRODUCTS[where.id];
@@ -122,7 +122,9 @@ describe('SalesService — cuentas de mesa: roles, estampado y corte', () => {
     totalRetiros: 0, totalDepositos: 0, createdAt: new Date('2026-10-05T08:00:00Z'), ...extra,
   });
 
-  const ITEM_SIN_COCINA = { productoId: 'p-simple', nombre: 'Taco', cantidad: 2, precioUnitario: 50, descuento: 0, subtotal: 100 };
+  // El servidor pone precio e IVA: 2 x $50 = $100 + 16% = $116 (sin importar lo que mande el cliente).
+const TOTAL_2_TACOS = 116;
+const ITEM_SIN_COCINA = { productoId: 'p-simple', nombre: 'Taco', cantidad: 2, precioUnitario: 50, descuento: 0, subtotal: 100 };
   const ITEM_COCINA = { productoId: 'p-cocina-ins', nombre: 'Tacos al pastor', cantidad: 1, precioUnitario: 60, descuento: 0, subtotal: 60 };
 
   // Abre una cuenta de mesa como `actor` (el controller siempre pasa req.user).
@@ -298,7 +300,7 @@ describe('SalesService — cuentas de mesa: roles, estampado y corte', () => {
         expect(venta(c.id).status).toBe('PAGADA');
         expect(mesa()).toBe('AVAILABLE');
         const pago = venta(c.id).formasPago[0];
-        expect(pago).toMatchObject({ forma: 'EFECTIVO', monto: 100, origen: 'CAJA', cobradoPorEmail: `${rol.toLowerCase()}@erp`, cobradoPorRol: rol });
+        expect(pago).toMatchObject({ forma: 'EFECTIVO', monto: TOTAL_2_TACOS, origen: 'CAJA', cobradoPorEmail: `${rol.toLowerCase()}@erp`, cobradoPorRol: rol });
         expect(pago.dividido).toBeUndefined();
       });
 
@@ -347,18 +349,18 @@ describe('SalesService — cuentas de mesa: roles, estampado y corte', () => {
     it('MESERO_EN_MESA: el mesero cobra la cuenta completa desde mesa y queda estampado', async () => {
       politicaCobro = 'MESERO_EN_MESA';
       const c = await abrirCuenta(lite('MESERO'));
-      await cobrar(c.id, { formaPago: 'EFECTIVO', montoRecibido: 200, cambio: 100 }, lite('MESERO'));
-      expect(venta(c.id).formasPago[0]).toMatchObject({ monto: 100, origen: 'MESA', cobradoPorId: 'u-MESERO-lite', cobradoPorEmail: 'mesero@lite', montoRecibido: 200, cambio: 100 });
+      await cobrar(c.id, { formaPago: 'EFECTIVO', montoRecibido: 200, cambio: 84 }, lite('MESERO'));
+      expect(venta(c.id).formasPago[0]).toMatchObject({ monto: TOTAL_2_TACOS, origen: 'MESA', cobradoPorId: 'u-MESERO-lite', cobradoPorEmail: 'mesero@lite', montoRecibido: 200, cambio: 84 });
     });
 
     it('PUT /pay (cobro de un solo pago) respeta la misma política: mesero 403 con SOLO_CAJA; cajero ERP cobra y queda estampado', async () => {
       const c = await abrirCuenta(lite('MESERO'));
-      const pay = (actor: any) => sales.pay(c.id, { formaPago: 'EFECTIVO', montoRecibido: 100, cambio: 0 }, TENANT_A, actor);
+      const pay = (actor: any) => sales.pay(c.id, { formaPago: 'EFECTIVO', montoRecibido: 120, cambio: 4 }, TENANT_A, actor);
       await expect(pay(lite('MESERO'))).rejects.toBeInstanceOf(ForbiddenException);
       expect(venta(c.id).status).toBe('ABIERTA');
       await pay(erp('CAJERO'));
       expect(venta(c.id).status).toBe('PAGADA');
-      expect(venta(c.id).formasPago[0]).toMatchObject({ forma: 'EFECTIVO', monto: 100, origen: 'CAJA', cobradoPorEmail: 'cajero@erp' });
+      expect(venta(c.id).formasPago[0]).toMatchObject({ forma: 'EFECTIVO', monto: TOTAL_2_TACOS, origen: 'CAJA', cobradoPorEmail: 'cajero@erp' });
       expect(mesa()).toBe('AVAILABLE');
     });
   });
@@ -412,7 +414,7 @@ describe('SalesService — cuentas de mesa: roles, estampado y corte', () => {
       await cobrar(c.id, COMPLETO, lite('MESERO'));
       expect(venta(c.id).status).toBe('PAGADA');
       expect(venta(c.id).formasPago).toHaveLength(2);
-      expect(venta(c.id).formasPago.map((p: any) => p.monto)).toEqual([40, 60]);
+      expect(venta(c.id).formasPago.map((p: any) => p.monto)).toEqual([40, 76]);
     });
 
     it('con TODOS pero SOLO_CAJA el mesero tampoco divide: primero debe poder cobrar', async () => {
@@ -483,7 +485,7 @@ describe('SalesService — cuentas de mesa: roles, estampado y corte', () => {
 
   // ── corte Z y getSummary: efectivo por persona ───────────────────────────────────────────────────────────
   describe('efectivo fuera de caja por persona — corte Z y getSummary', () => {
-    // mesero Ana (100, y otros 100 en otra cuenta), capitán Beto (60 efectivo + 30 tarjeta) y un cajero ERP (100).
+    // mesero Ana (2 cuentas de $116), capitán Beto (cuenta de $116: 60 efectivo + 56 tarjeta) y un cajero ERP ($116).
     async function turnoConCobros() {
       politicaCobro = 'MESERO_EN_MESA';
       politicaDivision = 'TODOS';
@@ -495,7 +497,7 @@ describe('SalesService — cuentas de mesa: roles, estampado y corte', () => {
       await cobrar(c1.id, COMPLETO, ana);
       const c2 = await abrirCuenta(ana, {}, [ITEM_SIN_COCINA], 'mesa-1');
       await cobrar(c2.id, COMPLETO, ana);
-      const c3 = await abrirCuenta(beto, {}, [{ ...ITEM_SIN_COCINA, subtotal: 90 }], 'mesa-2');
+      const c3 = await abrirCuenta(beto, {}, [ITEM_SIN_COCINA], 'mesa-2');
       await cobrar(c3.id, { formaPago: 'EFECTIVO', monto: 60 }, beto);
       await cobrar(c3.id, { formaPago: 'TARJETA' }, beto);
       const c4 = await abrirCuenta(erp('CAJERO'), {}, [ITEM_SIN_COCINA], 'mesa-3');
@@ -512,18 +514,18 @@ describe('SalesService — cuentas de mesa: roles, estampado y corte', () => {
 
     it('corte Z: el efectivo del corte no cambia y se agrega el desglose por persona (solo origen MESA)', async () => {
       await turnoConCobros();
-      const cerrado: any = await shiftsService.closeShift('turno-1', { efectivoContado: 360 }, TENANT_A);
-      // 100 + 100 (Ana) + 60 (Beto) + 100 (cajero) = 360 — mismo número que sin desglose; la tarjeta aparte
-      expect(cerrado.totalEfectivo).toBe(360);
-      expect(cerrado.totalTarjeta).toBe(30);
-      expect(cerrado.totalVentas).toBe(390);
-      expect(turnos.get('turno-1').totalEfectivo).toBe(360);
+      const cerrado: any = await shiftsService.closeShift('turno-1', { efectivoContado: 408 }, TENANT_A);
+      // 116 + 116 (Ana) + 60 (Beto) + 116 (cajero) = 408 — mismo número que sin desglose; la tarjeta aparte
+      expect(cerrado.totalEfectivo).toBe(408);
+      expect(cerrado.totalTarjeta).toBe(56);
+      expect(cerrado.totalVentas).toBe(464);
+      expect(turnos.get('turno-1').totalEfectivo).toBe(408);
       expect(cerrado.efectivoPorPersona).toEqual({
         personas: [
-          { email: 'ana@lite', id: 'u-ana', rol: 'MESERO', monto: 200 },
+          { email: 'ana@lite', id: 'u-ana', rol: 'MESERO', monto: 232 },
           { email: 'beto@lite', id: 'u-beto', rol: 'CAPITAN', monto: 60 },
         ],
-        total: 260,
+        total: 292,
       });
     });
 
@@ -531,10 +533,10 @@ describe('SalesService — cuentas de mesa: roles, estampado y corte', () => {
       await turnoConCobros();
       turnos.get('turno-1').fondoInicial = 500;
       const s: any = await shiftsService.getSummary('turno-1', TENANT_A);
-      expect(s.calculatedTotals.totalVentasEfectivo).toBe(360);
-      expect(s.calculatedTotals.efectivoEsperado).toBe(860);
-      expect(s.calculatedTotals.efectivoPorPersona.total).toBe(260);
-      expect(s.calculatedTotals.efectivoPorPersona.personas.map((p: any) => [p.email, p.monto])).toEqual([['ana@lite', 200], ['beto@lite', 60]]);
+      expect(s.calculatedTotals.totalVentasEfectivo).toBe(408);
+      expect(s.calculatedTotals.efectivoEsperado).toBe(908);
+      expect(s.calculatedTotals.efectivoPorPersona.total).toBe(292);
+      expect(s.calculatedTotals.efectivoPorPersona.personas.map((p: any) => [p.email, p.monto])).toEqual([["ana@lite", 232], ['beto@lite', 60]]);
     });
 
     it('getSummary vuelve a dar el desglose de un turno ya cerrado, igual que el corte', async () => {
@@ -548,7 +550,7 @@ describe('SalesService — cuentas de mesa: roles, estampado y corte', () => {
       const c = await abrirCuenta(erp('CAJERO'));
       await cobrar(c.id, COMPLETO, erp('CAJERO'));
       const cerrado: any = await shiftsService.closeShift('turno-1', {}, TENANT_A);
-      expect(cerrado.totalEfectivo).toBe(100);
+      expect(cerrado.totalEfectivo).toBe(116);
       expect(cerrado.efectivoPorPersona).toEqual({ personas: [], total: 0 });
     });
 
@@ -579,6 +581,79 @@ describe('SalesService — cuentas de mesa: roles, estampado y corte', () => {
       await expect(shiftsService.getSummary('turno-1', TENANT_B)).rejects.toThrow('Turno no encontrado');
       await expect(shiftsService.closeShift('turno-1', {}, TENANT_B)).rejects.toThrow('Turno no encontrado');
       expect(turnos.get('turno-1').status).toBe('ABIERTO');
+    });
+  });
+
+  // ── precio e IVA los pone el servidor ────────────────────────────────────────────────────────────────────
+  describe('cuenta abierta — precio e IVA en el servidor (el cliente no decide)', () => {
+    it('abrir cuenta: ignora precioUnitario, subtotal y total del cliente; IVA 16% sobre el neto', async () => {
+      const tramposo = { ...ITEM_SIN_COCINA, precioUnitario: 0.01, subtotal: 0.02 };
+      const c = await abrirCuenta(lite('MESERO'), { total: 1, subtotal: 1, impuestos: 0, descuento: 99 }, [tramposo]);
+      expect(venta(c.id)).toMatchObject({ subtotal: 100, impuestos: 16, total: 116, descuento: 0 });
+      expect(venta(c.id).items[0]).toMatchObject({ precioUnitario: 50, subtotal: 100, descuento: 0, nombre: 'Taco' });
+    });
+
+    it('agregar ítems: precio de catálogo e IVA del servidor, aunque el cliente mande otros', async () => {
+      const c = await abrirCuenta(lite('MESERO'));
+      await sales.agregarItems(c.id, { items: [{ ...ITEM_COCINA, precioUnitario: 1, subtotal: 1, descuento: 50 }], impuestos: 0 }, TENANT_A);
+      expect(venta(c.id)).toMatchObject({ subtotal: 160, impuestos: 25.6, total: 185.6 });
+      expect(venta(c.id).items[1]).toMatchObject({ precioUnitario: 60, subtotal: 60, descuento: 0 });
+    });
+
+    it('mismo cálculo que el POS normal: neto × 16%, a centavos', async () => {
+      const c = await abrirCuenta(lite('MESERO'), {}, [{ ...ITEM_SIN_COCINA, cantidad: 3 }]);
+      expect(venta(c.id)).toMatchObject({ subtotal: 150, impuestos: 24, total: 174 });
+    });
+
+    it('producto inexistente o de otro tenant: 400 y no queda nada', async () => {
+      await expect(abrirCuenta(lite('MESERO'), {}, [{ ...ITEM_SIN_COCINA, productoId: 'no-existe' }])).rejects.toBeInstanceOf(BadRequestException);
+      expect(ventas.size).toBe(0);
+      expect(mesa()).toBe('AVAILABLE');
+      const c = await abrirCuenta(lite('MESERO'));
+      await expect(sales.agregarItems(c.id, { items: [{ ...ITEM_SIN_COCINA, productoId: 'no-existe' }] }, TENANT_A)).rejects.toBeInstanceOf(BadRequestException);
+      expect(venta(c.id).total).toBe(116);
+    });
+  });
+
+  // ── descuento: ADMIN, GERENTE, CAPITAN y CAJERO ──────────────────────────────────────────────────────────
+  describe('PUT /discount — solo ADMIN, GERENTE, CAPITAN y CAJERO', () => {
+    it.each(['ADMIN', 'GERENTE', 'CAPITAN', 'CAJERO'])('%s (ERP o POS Lite) aplica el descuento', async (rol) => {
+      const mesas2 = ['mesa-1', 'mesa-2'];
+      for (const [i, actor] of [erp(rol), lite(rol)].entries()) {
+        const c = await abrirCuenta(lite('MESERO'), {}, [ITEM_SIN_COCINA], mesas2[i]);
+        await sales.applyDiscount(c.id, 16, 100, TENANT_A, actor);
+        expect(venta(c.id)).toMatchObject({ descuento: 16, total: 100 });
+      }
+    });
+
+    it('el mesero (ERP o POS Lite) y cualquier otro rol reciben 403 y la cuenta no cambia', async () => {
+      const c = await abrirCuenta(lite('MESERO'));
+      for (const actor of [lite('MESERO'), erp('MESERO'), erp('CONTADOR'), erp('SOPORTE'), {}]) {
+        const err: any = await sales.applyDiscount(c.id, 50, 66, TENANT_A, actor as any).catch((e) => e);
+        expect(err).toBeInstanceOf(ForbiddenException);
+      }
+      expect(venta(c.id)).toMatchObject({ total: 116, descuento: 0 });
+    });
+
+    it('un descuento no sube el total ni lo deja negativo; números inválidos: 400', async () => {
+      const c = await abrirCuenta(lite('MESERO'));
+      await expect(sales.applyDiscount(c.id, 0, 200, TENANT_A, erp('GERENTE'))).rejects.toThrow('mayor al total actual');
+      await expect(sales.applyDiscount(c.id, 10, -1, TENANT_A, erp('GERENTE'))).rejects.toBeInstanceOf(BadRequestException);
+      await expect(sales.applyDiscount(c.id, -5, 100, TENANT_A, erp('GERENTE'))).rejects.toBeInstanceOf(BadRequestException);
+      await expect(sales.applyDiscount(c.id, NaN, 100, TENANT_A, erp('GERENTE'))).rejects.toBeInstanceOf(BadRequestException);
+      expect(venta(c.id).total).toBe(116);
+    });
+
+    it('con pagos parciales no se aplica descuento', async () => {
+      const c = await abrirCuenta(lite('MESERO'));
+      await cobrar(c.id, { formaPago: 'EFECTIVO', monto: 40 }, erp('GERENTE'));
+      await expect(sales.applyDiscount(c.id, 10, 106, TENANT_A, erp('GERENTE'))).rejects.toThrow(/pagos parciales/);
+    });
+
+    it('aislamiento de tenant: otro tenant no descuenta una cuenta ajena', async () => {
+      const c = await abrirCuenta(lite('MESERO'));
+      await expect(sales.applyDiscount(c.id, 50, 66, TENANT_B, erp('ADMIN'))).rejects.toThrow('Venta no encontrada');
+      expect(venta(c.id)).toMatchObject({ total: 116, descuento: 0 });
     });
   });
 });
