@@ -112,6 +112,38 @@ export class SalesService {
   //  · Un producto inexistente o de otro tenant: 400 (mismo mensaje en ambos casos, no revela de quién es).
   //  · Descuento: entre 0 y 100; mayor a cero solo para ADMIN/GERENTE/CAPITAN/CAJERO (igual que PUT /discount).
   //  · Una cuenta abierta de mesa no lleva descuento por ítem: se aplica con PUT /discount.
+  // El 400 "ya existe" de un folio repetido. ¿Es la MISMA venta (el primer envío sí llegó y se perdió la respuesta) o un folio
+  // igual de otra? Misma = mismo tenant, sucursal, cajero y hora del evento. El motor offline solo la da por sincronizada si
+  // es la misma. Solo se mira dentro del tenant de quien envía (un folio de otro tenant no se revela).
+  private async errorFolioDuplicado(folio: string, d: { tenantId: string; sucursalId: string; cajero: string }, now: Date): Promise<BadRequestException> {
+    const previa = await Promise.resolve().then(() => this.salesRepo.findOne({ where: { folio, tenantId: d.tenantId } })).catch(() => null);
+    // `fecha` es una columna date (sin hora): la hora del evento se compara con `hora` (HH:MM:SS), ambas del servidor.
+    const ymd = (v: Date | string) => {
+      if (typeof v === 'string') return v.slice(0, 10);
+      const p = (n: number) => String(n).padStart(2, '0');
+      return `${v.getFullYear()}-${p(v.getMonth() + 1)}-${p(v.getDate())}`;
+    };
+    const mismoRegistro =
+      !!previa &&
+      previa.sucursalId === d.sucursalId &&
+      previa.cajero === d.cajero &&
+      ymd(previa.fecha as any) === ymd(now) &&
+      previa.hora === now.toTimeString().slice(0, 8);
+    return new BadRequestException({
+      statusCode: 400,
+      error: 'Bad Request',
+      message: `El folio '${folio}' ya existe, no se pudo registrar la venta.`,
+      code: 'FOLIO_DUPLICADO',
+      mismoRegistro,
+    });
+  }
+
+  // Para la revisión de ventas offline fallidas: el mismo cálculo de create(), con descuento permitido (lo resuelve un
+  // gerente o admin) y sin tocar nada.
+  async calcularImportesVenta(items: any[], tenantId: string, actor?: Actor) {
+    return this.calcularImportes(items, tenantId, { actor, permitirDescuento: true });
+  }
+
   private async calcularImportes(
     items: any[],
     tenantId: string,
@@ -265,6 +297,14 @@ export class SalesService {
     // Fuera del try (más abajo): un clientTimestamp inválido debe llegar al cliente como
     // 400 (BadRequestException), no enmascararse como 500 por el catch genérico de la venta.
     const now = resolveEventTimestamp(data.clientTimestamp);
+
+    // Un folio que ya está registrado (reintento tras perder la respuesta) se detecta ANTES de recalcular nada: si el precio
+    // cambió entre el primer envío y el reintento, el pago ya no cubriría y el error sería "no cubren" en vez de "ya existe".
+    if (data.folio) {
+      // Si la consulta falla no se bloquea la venta: la restricción única de la BD (23505, más abajo) sigue siendo la red.
+      const duplicada = await Promise.resolve().then(() => this.salesRepo.findOne({ where: { folio, tenantId: data.tenantId } })).catch(() => null);
+      if (duplicada) throw await this.errorFolioDuplicado(folio, { tenantId: data.tenantId, sucursalId: data.sucursalId, cajero: data.cajero }, now);
+    }
 
     // POS flexible, capacidad mesas_cuenta_abierta: con la capacidad activa y un tableId, la venta que nace ABIERTA (sin
     // formasPago) es una cuenta abierta ligada a esa mesa. Se valida ANTES de la transacción (mesa inexistente/ajena → 404
@@ -437,7 +477,7 @@ export class SalesService {
       // no enmascarado como 500 — mismo cuidado que con clientTimestamp más arriba.
       if ((error as any)?.code === '23505') {
         console.error(`SalesService.create: folio duplicado (folio ${folio}):`, error);
-        throw new BadRequestException(`El folio '${folio}' ya existe, no se pudo registrar la venta.`);
+        throw await this.errorFolioDuplicado(folio, { tenantId: data.tenantId, sucursalId: data.sucursalId, cajero: cajeroFinal }, now);
       }
       // Detalle técnico completo al log (para soporte/diagnóstico), mensaje genérico
       // y accionable al cajero: la causa más probable es momentánea (red, timeout) y

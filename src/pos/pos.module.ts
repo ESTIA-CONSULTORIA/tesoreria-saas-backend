@@ -14,6 +14,8 @@ import { TablesController } from './tables.controller';
 import { TablesService } from './tables.service';
 import { SalesController } from './sales.controller';
 import { SalesService } from './sales.service';
+import { OfflineVentasService } from './offline-ventas.service';
+import { AuditModule } from '../audit/audit.module';
 import { ShiftsController } from './shifts.controller';
 import { ShiftsService } from './shifts.service';
 import { CashiersController } from './cashiers.controller';
@@ -65,6 +67,8 @@ import { CostsModule } from '../costs/costs.module';
     // TenantSettingsService.hasPosCapability() directo (cross-module DI normal, mismo
     // patrón que AuthModule con varios services de otros módulos).
     TenantSettingsModule,
+    // Resoluciones de ventas offline fallidas: quedan en audit_log (quién, cuándo, qué).
+    AuditModule,
     // POS flexible, capacidad ligar_venta_a_cita: SalesService usa AppointmentsService.
     AppointmentsModule,
     // POS flexible, capacidad mesas_cuenta_abierta: SalesService registra mermas por la vía de
@@ -91,6 +95,7 @@ import { CostsModule } from '../costs/costs.module';
     AreasService,
     TablesService,
     SalesService,
+    OfflineVentasService,
     ShiftsService,
     CashiersService,
     NipThrottleService,

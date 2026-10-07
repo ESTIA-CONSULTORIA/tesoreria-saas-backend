@@ -1,9 +1,12 @@
-import { Controller, Get, Post, Put, Delete, Body, Param, Query, Request } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Body, Param, Query, Request, UseGuards } from '@nestjs/common';
 import { SalesService } from './sales.service';
+import { OfflineVentasService } from './offline-ventas.service';
+import { RolesGuard } from '../auth/roles.guard';
+import { Roles } from '../auth/roles.decorator';
 
 @Controller('pos/sales')
 export class SalesController {
-  constructor(private salesService: SalesService) {}
+  constructor(private salesService: SalesService, private offlineVentas: OfflineVentasService) {}
 
   @Post()
   createSale(@Body() data: any, @Request() req) {
@@ -50,6 +53,29 @@ export class SalesController {
   @Get('politicas-mesas')
   getPoliticasMesas(@Request() req) {
     return this.salesService.getPoliticasMesasParaUsuario(req.user?.tenantId, req.user);
+  }
+
+  // Ventas offline que el servidor rechazó al sincronizar (precio que subió): evaluar, registrar al precio vigente o descartar
+  // con motivo. Solo ADMIN y GERENTE; el tenant sale del token, nunca del payload. Antes de ':id'.
+  @UseGuards(RolesGuard)
+  @Roles('ADMIN', 'GERENTE')
+  @Post('offline-fallidas/evaluar')
+  evaluarVentaOffline(@Body() body: { payload: any }, @Request() req) {
+    return this.offlineVentas.evaluar(body?.payload, req.user?.tenantId);
+  }
+
+  @UseGuards(RolesGuard)
+  @Roles('ADMIN', 'GERENTE')
+  @Post('offline-fallidas/registrar')
+  registrarVentaOffline(@Body() body: { payload: any; confirmarDiferencia?: boolean }, @Request() req) {
+    return this.offlineVentas.registrar(body?.payload, { confirmarDiferencia: body?.confirmarDiferencia === true }, req.user?.tenantId, req.user ?? {}, { ip: req.ip, userAgent: req.headers?.['user-agent'] });
+  }
+
+  @UseGuards(RolesGuard)
+  @Roles('ADMIN', 'GERENTE')
+  @Post('offline-fallidas/descartar')
+  descartarVentaOffline(@Body() body: { folio: string; motivo: string; resumen?: any }, @Request() req) {
+    return this.offlineVentas.descartar(body, req.user?.tenantId, req.user ?? {}, { ip: req.ip, userAgent: req.headers?.['user-agent'] });
   }
 
   @Get(':id')
