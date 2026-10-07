@@ -65,8 +65,8 @@ describe('SalesService.returnSale() — devolución total', () => {
     entity === Sale ? ventas : entity === Shift ? turnos : entity === Insumo ? insumos : null;
 
   const PRODUCTS: Record<string, any> = {
-    'p-simple': { id: 'p-simple', type: 'SIMPLE', insumoId: 'ins-1', recipeId: null, tenantId: TENANT_A, name: 'Taco', esServicio: false },
-    'p-cocina-ins': { id: 'p-cocina-ins', type: 'SIMPLE', insumoId: 'ins-1', recipeId: null, tenantId: TENANT_A, name: 'Tacos al pastor', esServicio: false, estacionPreparacion: 'COCINA' },
+    'p-simple': { id: 'p-simple', type: 'SIMPLE', insumoId: 'ins-1', recipeId: null, tenantId: TENANT_A, name: 'Taco', price: 50, esServicio: false },
+    'p-cocina-ins': { id: 'p-cocina-ins', type: 'SIMPLE', insumoId: 'ins-1', recipeId: null, tenantId: TENANT_A, name: 'Tacos al pastor', price: 60, esServicio: false, estacionPreparacion: 'COCINA' },
   };
   const productLookup = (where: any) => {
     const p = PRODUCTS[where.id];
@@ -126,8 +126,21 @@ describe('SalesService.returnSale() — devolución total', () => {
       cajero: 'cajero-1', turnoId: opts.turnoId ?? 'turno-1', sucursalId: 'sucursal-A', tenantId: opts.tenantId ?? TENANT_A,
       folio: `VTA-${++nextId}`,
     };
-    if (opts.formasPago) return sales.create({ ...base, formasPago: opts.formasPago } as any);
+    // create() recalcula precio e IVA en el servidor y exige que el pago cubra el total real. Estas pruebas son de devolución
+    // y necesitan importes exactos y propios: se crea la venta y se fijan a mano sobre la fila ya creada.
+    const fijar = (id: string, extra: Record<string, any> = {}) => {
+      const fila = ventas.get(id);
+      // se conservan las marcas del servidor (notaCocinaId) y solo se fijan los importes
+      const conImportes = fila.items.map((it: any, i: number) => ({ ...it, precioUnitario: items[i].precioUnitario, descuento: items[i].descuento ?? 0, subtotal: items[i].subtotal }));
+      Object.assign(fila, { items: conImportes, subtotal: total, descuento: 0, impuestos: 0, total, ...extra });
+    };
+    if (opts.formasPago) {
+      const v = await sales.create({ ...base, formasPago: [{ forma: 'EFECTIVO', monto: total * 2 }] } as any);
+      fijar(v.id, { formasPago: opts.formasPago, formaPago: opts.formasPago[0]?.forma });
+      return { ...ventas.get(v.id) };
+    }
     const abierta = await sales.create(base as any);
+    fijar(abierta.id);
     return sales.pay(abierta.id, { formaPago: opts.formaPago ?? 'EFECTIVO', montoRecibido: total, cambio: 0 } as any, base.tenantId);
   }
 

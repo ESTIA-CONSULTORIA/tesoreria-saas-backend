@@ -31,6 +31,7 @@ function buildProduct(overrides: Partial<Product> = {}): Product {
   return {
     id: 'producto-1',
     name: 'Consulta',
+    price: 100,
     type: 'SIMPLE',
     insumoId: INSUMO.id, // vinculado "por error" a un insumo
     recipeId: null,

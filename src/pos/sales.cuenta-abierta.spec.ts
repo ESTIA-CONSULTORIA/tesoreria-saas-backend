@@ -286,7 +286,7 @@ describe('SalesService — capacidad mesas_cuenta_abierta', () => {
 
     it('venta que nace PAGADA con tableId: no ocupa la mesa ni choca con una cuenta abierta', async () => {
       await crearVenta();
-      const pagada = await crearVenta({ folio: 'PAGADA-1', formasPago: [{ forma: 'EFECTIVO', monto: 100 }] });
+      const pagada = await crearVenta({ folio: 'PAGADA-1', formasPago: [{ forma: 'EFECTIVO', monto: 116 }] }); // 2 x $50 + IVA 16% del servidor
       expect(pagada.status).toBe('PAGADA');
       expect(mesa()).toBe('OCCUPIED'); // sigue por la cuenta abierta
     });

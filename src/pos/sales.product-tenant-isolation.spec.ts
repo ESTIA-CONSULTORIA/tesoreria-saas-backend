@@ -96,8 +96,8 @@ describe('SalesService.create() — no vende ni descuenta productos de otro tena
     expect(managerUpdate).toHaveBeenCalledWith(Insumo, INSUMO.id, { stockActual: 8 });
   });
 
-  it('id de producto que no existe en absoluto: conserva el comportamiento de siempre (no descuenta, no falla)', async () => {
-    await expect(service.create(saleOf('no-existe', TENANT_A) as any)).resolves.toBeDefined();
+  it('id de producto que no existe en absoluto: 400 igual que uno de otro tenant (el servidor pone el precio, no hay precio que inventar)', async () => {
+    await expect(service.create(saleOf('no-existe', TENANT_A) as any)).rejects.toThrow('Producto no encontrado');
     expect(managerUpdate).not.toHaveBeenCalled();
   });
 

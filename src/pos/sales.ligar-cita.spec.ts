@@ -39,9 +39,9 @@ describe('SalesService — capacidad ligar_venta_a_cita', () => {
 
   function saleData(extra: Record<string, any> = {}, pagada = true) {
     return {
-      items: [{ productoId: 'no-existe', cantidad: 1 }] as any, // sin producto: solo interesa el vínculo
-      subtotal: 100, descuento: 0, impuestos: 0, total: 100,
-      formasPago: pagada ? [{ forma: 'EFECTIVO', monto: 100 }] : [],
+      items: [{ productoId: 'prod-cita', cantidad: 1 }] as any, // el servidor pone el precio ($100 + 16% = $116); solo interesa el vínculo
+      subtotal: 100, descuento: 0, impuestos: 16, total: 116,
+      formasPago: pagada ? [{ forma: 'EFECTIVO', monto: 116 }] : [],
       cajero: 'cajero-1', turnoId: 'turno-1', sucursalId: 'sucursal-A',
       tenantId: TENANT_A, folio: 'VTA-TEST-001',
       ...extra,
@@ -98,7 +98,7 @@ describe('SalesService — capacidad ligar_venta_a_cita', () => {
         { provide: getRepositoryToken(Cita), useValue: citasRepo },
         { provide: getRepositoryToken(Patient), useValue: {} },
         { provide: getRepositoryToken(Sale), useValue: salesRepo },
-        { provide: getRepositoryToken(Product), useValue: { findOne: jest.fn().mockResolvedValue(null) } },
+        { provide: getRepositoryToken(Product), useValue: { findOne: jest.fn().mockResolvedValue({ id: 'prod-cita', name: 'Consulta', price: 100, type: 'SIMPLE', esServicio: false, tenantId: TENANT_A }) } },
         { provide: getRepositoryToken(Recipe), useValue: { findOne: jest.fn() } },
         { provide: getRepositoryToken(Insumo), useValue: { findOne: jest.fn(), manager: { findOne: jest.fn() } } },
         { provide: getRepositoryToken(TenantSetting), useValue: { findOne: jest.fn().mockResolvedValue(null) } },

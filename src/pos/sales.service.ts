@@ -106,34 +106,104 @@ export class SalesService {
     return tenantId ? { id, tenantId } : { id };
   }
 
-  // Un id que no existe en absoluto conserva el comportamiento de siempre (las ramas de
-  // inventario lo ignoran); lo que se rechaza es un producto que SÍ existe pero no es de este
-  // tenant (de otro, o huérfano). Mensaje igual al de "no existe" para no revelar a qué
-  // tenant pertenece.
-  // Cuentas abiertas (mesas): el precio, el subtotal y el IVA los pone el SERVIDOR. Del cliente solo se toma qué producto y
-  // cuántos: antes un mesero podía mandar precioUnitario/total a su gusto y la cuenta se cobraba por ese total.
-  // Descuentos de ítem: no hay (el descuento va por PUT /discount, solo roles autorizados).
-  private async preciosDeServidor(items: SaleItem[], tenantId: string): Promise<SaleItem[]> {
+  // Del cliente SOLO se toma qué producto, cuántos y el descuento por ítem (porcentaje). El precio sale del catálogo del
+  // tenant y subtotal, descuento en dinero, IVA y total los calcula el servidor (mismo cálculo del POS normal: neto × 16%).
+  // Antes todo eso llegaba tal cual del cliente: un mesero o un cajero podía mandar el precio o el total que quisiera.
+  //  · Un producto inexistente o de otro tenant: 400 (mismo mensaje en ambos casos, no revela de quién es).
+  //  · Descuento: entre 0 y 100; mayor a cero solo para ADMIN/GERENTE/CAPITAN/CAJERO (igual que PUT /discount).
+  //  · Una cuenta abierta de mesa no lleva descuento por ítem: se aplica con PUT /discount.
+  private async calcularImportes(
+    items: any[],
+    tenantId: string,
+    opts: { actor?: Actor; permitirDescuento: boolean },
+  ): Promise<{ items: SaleItem[]; subtotal: number; descuento: number; impuestos: number; total: number }> {
+    if (!Array.isArray(items) || items.length === 0) {
+      throw new BadRequestException('Se requiere al menos un ítem.');
+    }
     const salida: SaleItem[] = [];
-    for (const it of items) {
+    let subtotal = 0;
+    let descuento = 0;
+    for (const [i, it] of items.entries()) {
+      const cantidad = Number(it?.cantidad);
+      if (!it || typeof it.productoId !== 'string' || !it.productoId || !Number.isFinite(cantidad) || !(cantidad > 0)) {
+        throw new BadRequestException(`Ítem ${i + 1} inválido: productoId y cantidad mayor a cero son requeridos.`);
+      }
+      const pct = Number(it.descuento ?? 0);
+      if (!Number.isFinite(pct) || pct < 0 || pct > 100) {
+        throw new BadRequestException(`Ítem ${i + 1} inválido: el descuento debe estar entre 0 y 100.`);
+      }
+      if (pct > 0) {
+        if (!opts.permitirDescuento) {
+          throw new BadRequestException('El descuento de una cuenta abierta se aplica con PUT /pos/sales/:id/discount.');
+        }
+        if (opts.actor && !ROLES_DESCUENTO.includes(opts.actor.roleCode ?? '')) {
+          throw new ForbiddenException('Tu rol no puede aplicar descuentos. Pide a un capitán o gerente.');
+        }
+      }
       const p = await this.productRepo.findOne({ where: { id: it.productoId, tenantId } });
       if (!p) throw new BadRequestException(`Producto no encontrado: ${it.productoId}`);
       const precioUnitario = this.round2(Number(p.price) || 0);
-      salida.push({ ...it, nombre: p.name, precioUnitario, descuento: 0, subtotal: this.round2(precioUnitario * Number(it.cantidad)) });
+      const bruto = this.round2(precioUnitario * cantidad);
+      const desc = this.round2((bruto * pct) / 100);
+      const { notaCocinaId: _n, anulado: _a, ...limpio } = it;
+      salida.push({ ...limpio, productoId: it.productoId, nombre: p.name, cantidad, precioUnitario, descuento: pct, subtotal: this.round2(bruto - desc) });
+      subtotal += bruto;
+      descuento += desc;
     }
-    return salida;
+    subtotal = this.round2(subtotal);
+    descuento = this.round2(descuento);
+    const neto = this.round2(subtotal - descuento);
+    const impuestos = calcularIva(neto);
+    return { items: salida, subtotal, descuento, impuestos, total: this.round2(neto + impuestos) };
   }
 
-  private async assertProductsBelongToTenant(items: SaleItem[], tenantId?: string): Promise<void> {
-    if (!tenantId) return;
-    for (const item of items) {
-      const owned = await this.productRepo.findOne({ where: { id: item.productoId, tenantId } });
-      if (owned) continue;
-      const existsElsewhere = await this.productRepo.findOne({ where: { id: item.productoId } });
-      if (existsElsewhere) {
-        throw new BadRequestException(`Producto no encontrado: ${item.productoId}`);
+  // Formas de pago de una venta que nace PAGADA: solo los campos conocidos; quién cobró y desde dónde se estampa del token
+  // (lo que mande el cliente en cobradoPor*, origen, dividido* o itemIndexes se descarta). Deben cubrir el total del servidor.
+  private sanearPagos(pagos: any[], total: number, actor?: Actor): NonNullable<Sale['formasPago']> {
+    const FORMAS = ['EFECTIVO', 'TARJETA', 'DEBITO', 'CREDITO', 'TRANSFERENCIA', 'CORTESIA'];
+    const limpios = pagos.map((p, i) => {
+      const monto = this.round2(Number(p?.monto));
+      if (!p || !FORMAS.includes(p.forma) || !Number.isFinite(monto) || monto < 0) {
+        throw new BadRequestException(`Forma de pago ${i + 1} inválida.`);
+      }
+      return {
+        forma: p.forma as any,
+        monto,
+        ...(p.montoRecibido !== undefined ? { montoRecibido: Number(p.montoRecibido) } : {}),
+        ...(p.cambio !== undefined ? { cambio: Number(p.cambio) } : {}),
+        ...(p.ultimos4Digitos ? { ultimos4Digitos: p.ultimos4Digitos } : {}),
+        ...(p.folioVoucher ? { folioVoucher: p.folioVoucher } : {}),
+        ...(p.claveRastreo ? { claveRastreo: p.claveRastreo } : {}),
+        ...(p.bancoOrigen ? { bancoOrigen: p.bancoOrigen } : {}),
+        ...(p.motivo ? { motivo: p.motivo } : {}),
+        ...(p.autorizadoPor ? { autorizadoPor: p.autorizadoPor } : {}),
+        ...(actor ? { cobradoPorId: actor.id, cobradoPorEmail: actor.email, cobradoPorRol: actor.roleCode, origen: contextoCobro(actor) } : {}),
+      };
+    });
+    const pagado = this.round2(limpios.reduce((s, p) => s + p.monto, 0));
+    if (pagado < this.round2(total - 0.01)) {
+      throw new BadRequestException(`Las formas de pago (${pagado}) no cubren el total de la venta (${total}). Actualiza el catálogo e intenta de nuevo.`);
+    }
+    // Un pago de más (efectivo con cambio) no infla el corte: el excedente sale de la línea en efectivo y queda como cambio
+    // (montoRecibido = lo que entregó el cliente). El corte suma formasPago[].monto, así que debe sumar exactamente el total.
+    let exceso = this.round2(pagado - total);
+    if (exceso > 0.01) {
+      for (let i = limpios.length - 1; i >= 0 && exceso > 0.001; i--) {
+        if (limpios[i].forma !== 'EFECTIVO') continue;
+        const quitar = Math.min(exceso, limpios[i].monto);
+        limpios[i] = {
+          ...limpios[i],
+          montoRecibido: limpios[i].montoRecibido ?? limpios[i].monto,
+          monto: this.round2(limpios[i].monto - quitar),
+          cambio: this.round2((limpios[i].cambio ?? 0) + quitar),
+        };
+        exceso = this.round2(exceso - quitar);
+      }
+      if (exceso > 0.01) {
+        throw new BadRequestException(`Los pagos que no son en efectivo (${this.round2(pagado - total)} de más) exceden el total de la venta (${total}).`);
       }
     }
+    return limpios;
   }
 
   private async calculateCostoReal(items: SaleItem[], tenantId: string, ventaServicioHabilitada: boolean): Promise<number> {
@@ -196,10 +266,36 @@ export class SalesService {
     // 400 (BadRequestException), no enmascararse como 500 por el catch genérico de la venta.
     const now = resolveEventTimestamp(data.clientTimestamp);
 
-    // Aislamiento por tenant: antes los productos se buscaban solo por id, así que una venta
-    // podía incluir (y descontar inventario de) un producto de OTRO tenant, o uno huérfano
-    // sin tenantId, conociendo su UUID. Se rechaza ANTES de calcular nada.
-    await this.assertProductsBelongToTenant(data.items, data.tenantId);
+    // POS flexible, capacidad mesas_cuenta_abierta: con la capacidad activa y un tableId, la venta que nace ABIERTA (sin
+    // formasPago) es una cuenta abierta ligada a esa mesa. Se valida ANTES de la transacción (mesa inexistente/ajena → 404
+    // claro, no un 500 genérico).
+    const nacePagada = !!(data.formasPago && data.formasPago.length > 0);
+    const abreCuentaEnMesa = !nacePagada && (await this.resolveMesaParaCuentaAbierta(data.tableId, data.tenantId));
+
+    // Precio de catálogo, descuento, IVA y total: los calcula el servidor (ver calcularImportes). Aislamiento por tenant: un
+    // producto inexistente o de otro tenant es 400, ANTES de calcular o tocar nada. Esto vale también para una venta que
+    // la cola offline reenvía al sincronizar: se recalcula, y si el pago cobrado ya no cubre el total real se rechaza.
+    const calculado = await this.calcularImportes(data.items, data.tenantId, { actor, permitirDescuento: !abreCuentaEnMesa });
+    if (Math.abs(this.round2(Number(data.total)) - calculado.total) > Math.max(0.02, 0.01 * calculado.items.length)) {
+      console.warn(`SalesService.create: el total del cliente (${data.total}) no coincide con el del servidor (${calculado.total}), folio ${folio}; se usa el del servidor.`);
+    }
+    // El mesero y el capitán no cobran una venta directa fuera de la política de cobro (el POS normal no es suyo).
+    if (nacePagada && actor && ['MESERO', 'CAPITAN'].includes(actor.roleCode ?? '')) {
+      const politicaCobro = await this.tenantSettingsService.getPoliticaCobro(data.tenantId);
+      if (!puedeCobrar(actor, politicaCobro)) {
+        throw new ForbiddenException('Con la política de cobro de este negocio las cuentas solo se cobran en caja. Pasa la cuenta a caja.');
+      }
+    }
+    const formasPagoFinal = nacePagada ? this.sanearPagos(data.formasPago as any[], calculado.total, actor) : [];
+    data = {
+      ...data,
+      items: calculado.items,
+      subtotal: calculado.subtotal,
+      descuento: calculado.descuento,
+      impuestos: calculado.impuestos,
+      total: calculado.total,
+      formasPago: formasPagoFinal,
+    };
 
     // POS flexible, capacidad ligar_venta_a_cita: validado ANTES de abrir la transacción
     // (cita ajena/cancelada → rechazo sin tocar la BD).
@@ -230,21 +326,10 @@ export class SalesService {
       'notas_cocina_barra',
     );
 
-    // POS flexible, capacidad mesas_cuenta_abierta: con la capacidad activa y un tableId, la
-    // venta que nace ABIERTA (sin formasPago) es una cuenta abierta ligada a esa mesa. Se valida
-    // ANTES de la transacción (mesa inexistente/ajena → 404 claro, no un 500 genérico).
-    const nacePagada = !!(data.formasPago && data.formasPago.length > 0);
-    const abreCuentaEnMesa = !nacePagada && (await this.resolveMesaParaCuentaAbierta(data.tableId, data.tenantId));
     // Con usuario autenticado (el controller siempre lo pasa), una cuenta de mesa se estampa en el SERVIDOR: el
     // mesero de la cuenta sale del token (no del texto `cajero` que manda el cliente) y el turno es el abierto
     // de la sucursal (una tableta POS Lite no tiene turno: antes la cuenta quedaba sin turnoId y su efectivo no
     // entraba a ningún corte).
-    if (abreCuentaEnMesa) {
-      const items = await this.preciosDeServidor(data.items, data.tenantId);
-      const subtotal = this.round2(items.reduce((s, it) => s + it.subtotal, 0));
-      const impuestos = calcularIva(subtotal);
-      data = { ...data, items, subtotal, descuento: 0, impuestos, total: this.round2(subtotal + impuestos) };
-    }
     const estampa = !!(abreCuentaEnMesa && actor);
     const cajeroFinal = estampa ? (actor!.email ?? actor!.id ?? data.cajero) : data.cajero;
 
@@ -289,10 +374,10 @@ export class SalesService {
           descuento: data.descuento,
           impuestos: data.impuestos,
           total: data.total,
-          formaPago: (data.formaPago || data.formasPago?.[0]?.forma) as any,
-          formasPago: data.formasPago || [],
+          formaPago: (formasPagoFinal[0]?.forma ?? data.formaPago) as any,
+          formasPago: formasPagoFinal,
           // Mark as PAGADA immediately when payment forms are included
-          status: (data.formasPago && data.formasPago.length > 0) ? 'PAGADA' : 'ABIERTA',
+          status: nacePagada ? 'PAGADA' : 'ABIERTA',
           cajero: cajeroFinal,
           turnoId: turnoIdFinal,
           sucursalId: data.sucursalId,
@@ -892,7 +977,7 @@ export class SalesService {
       throw new BadRequestException('Solo se pueden agregar ítems a una cuenta abierta.');
     }
 
-    const nuevos = await this.preciosDeServidor(normalizados, t);
+    const nuevos = (await this.calcularImportes(normalizados, t, { permitirDescuento: false })).items;
     const ventaServicioHabilitada = await this.tenantSettingsService.hasPosCapability(t, 'venta_de_servicio');
     const notasCocinaHabilitada = await this.tenantSettingsService.hasPosCapability(t, 'notas_cocina_barra');
     await this.checkStockAvailability(nuevos, t, ventaServicioHabilitada);

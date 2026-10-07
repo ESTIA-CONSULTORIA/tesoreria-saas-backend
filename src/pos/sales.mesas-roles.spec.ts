@@ -279,7 +279,7 @@ const ITEM_SIN_COCINA = { productoId: 'p-simple', nombre: 'Taco', cantidad: 2, p
       expect(apagada.turnoId).toBe('turno-y');
 
       caps.mesas_cuenta_abierta = true;
-      const sinMesa = await sales.create({ items: [ITEM_SIN_COCINA], subtotal: 100, descuento: 0, impuestos: 0, total: 100, cajero: 'caja-1', turnoId: 'turno-z', sucursalId: SUC, tenantId: TENANT_A, formasPago: [{ forma: 'EFECTIVO', monto: 100 }], folio: 'V-SIN-MESA' } as any, erp('CAJERO'));
+      const sinMesa = await sales.create({ items: [ITEM_SIN_COCINA], subtotal: 100, descuento: 0, impuestos: 16, total: 116, cajero: 'caja-1', turnoId: 'turno-z', sucursalId: SUC, tenantId: TENANT_A, formasPago: [{ forma: 'EFECTIVO', monto: 116 }], folio: 'V-SIN-MESA' } as any, erp('CAJERO'));
       expect(sinMesa.cajero).toBe('caja-1');
       expect(sinMesa.turnoId).toBe('turno-z');
     });
@@ -595,9 +595,15 @@ const ITEM_SIN_COCINA = { productoId: 'p-simple', nombre: 'Taco', cantidad: 2, p
 
     it('agregar ítems: precio de catálogo e IVA del servidor, aunque el cliente mande otros', async () => {
       const c = await abrirCuenta(lite('MESERO'));
-      await sales.agregarItems(c.id, { items: [{ ...ITEM_COCINA, precioUnitario: 1, subtotal: 1, descuento: 50 }], impuestos: 0 }, TENANT_A);
+      await sales.agregarItems(c.id, { items: [{ ...ITEM_COCINA, precioUnitario: 1, subtotal: 1 }], impuestos: 0 }, TENANT_A);
       expect(venta(c.id)).toMatchObject({ subtotal: 160, impuestos: 25.6, total: 185.6 });
       expect(venta(c.id).items[1]).toMatchObject({ precioUnitario: 60, subtotal: 60, descuento: 0 });
+    });
+
+    it('agregar ítems con descuento por ítem: 400 (el descuento va por PUT /discount)', async () => {
+      const c = await abrirCuenta(lite('MESERO'));
+      await expect(sales.agregarItems(c.id, { items: [{ ...ITEM_COCINA, descuento: 50 }] }, TENANT_A)).rejects.toBeInstanceOf(BadRequestException);
+      expect(venta(c.id).total).toBe(116);
     });
 
     it('mismo cálculo que el POS normal: neto × 16%, a centavos', async () => {
