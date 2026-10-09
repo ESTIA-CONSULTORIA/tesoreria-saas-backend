@@ -14,7 +14,7 @@ import { resolveActiveInsumoChain } from '../costs/insumo-resolution';
 import { NotaCocina } from './entities/nota-cocina.entity';
 import { Shift } from './entities/shift.entity';
 import { PoliticaDevolucion, ROLES_GERENTE } from '../config/politica-devoluciones.config';
-import { calcularIva, ROLES_DESCUENTO, topeDescuentoPct } from '../config/roles-pos.config';
+import { calcularIva, ROLES_CORTESIA, ROLES_DESCUENTO, topeDescuentoPct } from '../config/roles-pos.config';
 
 import { ActorMesas, contextoCobro, PoliticaCobro, PoliticaDivision, puedeCobrar, puedeDividir } from '../config/politicas-pos.config';
 
@@ -202,6 +202,18 @@ export class SalesService {
 
   // Formas de pago de una venta que nace PAGADA: solo los campos conocidos; quién cobró y desde dónde se estampa del token
   // (lo que mande el cliente en cobradoPor*, origen, dividido* o itemIndexes se descarta). Deben cubrir el total del servidor.
+  // CORTESIA es una venta sin cobro: solo GERENTE y ADMIN. Quien la autoriza sale del token (autorizadoPor del cliente
+  // se descarta), así queda en el corte y en la venta quién regaló qué.
+  private assertCortesiaPermitida(actor?: Actor): void {
+    if (!ROLES_CORTESIA.includes(actor?.roleCode ?? '')) {
+      throw new ForbiddenException('Solo un gerente o administrador puede registrar una cortesía. Pide a un gerente que la autorice.');
+    }
+  }
+
+  private autorizadoPorDe(actor?: Actor): string | undefined {
+    return actor?.email ?? actor?.id;
+  }
+
   private sanearPagos(pagos: any[], total: number, actor?: Actor): NonNullable<Sale['formasPago']> {
     const FORMAS = ['EFECTIVO', 'TARJETA', 'DEBITO', 'CREDITO', 'TRANSFERENCIA', 'CORTESIA'];
     const limpios = pagos.map((p, i) => {
@@ -219,10 +231,11 @@ export class SalesService {
         ...(p.claveRastreo ? { claveRastreo: p.claveRastreo } : {}),
         ...(p.bancoOrigen ? { bancoOrigen: p.bancoOrigen } : {}),
         ...(p.motivo ? { motivo: p.motivo } : {}),
-        ...(p.autorizadoPor ? { autorizadoPor: p.autorizadoPor } : {}),
+        ...(p.forma === 'CORTESIA' ? { autorizadoPor: this.autorizadoPorDe(actor) } : {}),
         ...(actor ? { cobradoPorId: actor.id, cobradoPorEmail: actor.email, cobradoPorRol: actor.roleCode, origen: contextoCobro(actor) } : {}),
       };
     });
+    if (limpios.some((p) => p.forma === 'CORTESIA')) this.assertCortesiaPermitida(actor);
     const pagado = this.round2(limpios.reduce((s, p) => s + p.monto, 0));
     if (pagado < this.round2(total - 0.01)) {
       throw new BadRequestException(`Las formas de pago (${pagado}) no cubren el total de la venta (${total}). Actualiza el catálogo e intenta de nuevo.`);
@@ -1187,6 +1200,7 @@ export class SalesService {
     if (!data || !FORMAS.includes(data.formaPago)) {
       throw new BadRequestException('formaPago inválida.');
     }
+    if (data.formaPago === 'CORTESIA') this.assertCortesiaPermitida(actor);
     if (data.monto !== undefined && data.itemIndexes !== undefined) {
       throw new BadRequestException('Manda monto o itemIndexes, no ambos.');
     }
@@ -1270,7 +1284,7 @@ export class SalesService {
         ...(data.claveRastreo ? { claveRastreo: data.claveRastreo } : {}),
         ...(data.bancoOrigen ? { bancoOrigen: data.bancoOrigen } : {}),
         ...(data.motivo ? { motivo: data.motivo } : {}),
-        ...(data.autorizadoPor ? { autorizadoPor: data.autorizadoPor } : {}),
+        ...(data.formaPago === 'CORTESIA' ? { autorizadoPor: this.autorizadoPorDe(actor) } : {}),
       };
       pagos.push(entrada);
 
@@ -1302,6 +1316,11 @@ export class SalesService {
     montoRecibido: number;
     cambio: number;
   }, tenantId?: string, actor?: Actor) {
+    const FORMAS_PAY = ['EFECTIVO', 'TARJETA', 'DEBITO', 'CREDITO', 'TRANSFERENCIA', 'CORTESIA'];
+    if (!data || !FORMAS_PAY.includes(data.formaPago)) {
+      throw new BadRequestException('formaPago inválida.');
+    }
+    if (data.formaPago === 'CORTESIA') this.assertCortesiaPermitida(actor);
     try {
       const sale = await this.salesRepo.findOne({ where: tenantId ? { id, tenantId } : { id } });
       if (!sale) {
@@ -1349,8 +1368,17 @@ export class SalesService {
           cobradoPorEmail: actor.email,
           cobradoPorRol: actor.roleCode,
           origen: contextoCobro(actor),
+          ...(data.formaPago === 'CORTESIA' ? { autorizadoPor: this.autorizadoPorDe(actor) } : {}),
           ...(data.montoRecibido !== undefined ? { montoRecibido: Number(data.montoRecibido) } : {}),
           ...(data.cambio !== undefined ? { cambio: Number(data.cambio) } : {}),
+        }];
+      } else if (data.formaPago === 'CORTESIA') {
+        // Sin mesa: la cortesía también deja constancia de quién la autorizó (el corte la cuenta desde formasPago).
+        cambiosPago.formasPago = [{
+          forma: 'CORTESIA' as const,
+          monto: this.round2(Number(sale.total)),
+          autorizadoPor: this.autorizadoPorDe(actor),
+          ...(actor ? { cobradoPorId: actor.id, cobradoPorEmail: actor.email, cobradoPorRol: actor.roleCode, origen: contextoCobro(actor) } : {}),
         }];
       }
 
@@ -1436,46 +1464,52 @@ export class SalesService {
     if (actor && !ROLES_DESCUENTO.includes(actor.roleCode ?? '')) {
       throw new ForbiddenException('Tu rol no puede aplicar descuentos. Pide a un capitán o gerente.');
     }
+    // Números inválidos: se rechazan antes de abrir la transacción (no necesitan la venta).
+    const desc = Number(descuento);
+    const nuevo = Number(nuevoTotal);
+    if (!Number.isFinite(desc) || desc < 0 || !Number.isFinite(nuevo) || nuevo < 0) {
+      throw new BadRequestException('descuento y nuevoTotal deben ser números mayores o iguales a cero.');
+    }
     try {
-      const sale = await this.salesRepo.findOne({ where: tenantId ? { id, tenantId } : { id } });
-      if (!sale) {
-        throw new Error('Venta no encontrada');
-      }
-      if (sale.status !== 'ABIERTA') {
-        throw new Error('Solo se puede aplicar descuento a ventas abiertas');
-      }
-      if (this.sumPagos(sale.formasPago) > 0) {
-        throw new Error('No se puede aplicar descuento a una cuenta con pagos parciales ya cobrados.');
-      }
-      // Un descuento no sube el total ni lo deja negativo (antes el total llegaba tal cual del cliente).
-      const desc = Number(descuento);
-      const nuevo = Number(nuevoTotal);
-      if (!Number.isFinite(desc) || desc < 0 || !Number.isFinite(nuevo) || nuevo < 0) {
-        throw new BadRequestException('descuento y nuevoTotal deben ser números mayores o iguales a cero.');
-      }
-      if (nuevo > Number(sale.total)) {
-        throw new BadRequestException('El nuevo total no puede ser mayor al total actual de la cuenta.');
-      }
+      // Una sola transacción con lock sobre la venta (igual que cobrarCuenta): un cobro parcial concurrente espera el
+      // lock y, al entrar, este descuento ve los pagos ya guardados y se rechaza; o al revés, el cobro ve el nuevo total.
+      // Antes se leía sin lock y el cobro parcial podía colarse entre la lectura y la escritura.
+      return await this.dataSource.transaction(async (manager) => {
+        const sale = await manager.findOne(Sale, { where: tenantId ? { id, tenantId } : { id }, lock: { mode: 'pessimistic_write' } });
+        if (!sale) {
+          throw new Error('Venta no encontrada');
+        }
+        if (sale.status !== 'ABIERTA') {
+          throw new Error('Solo se puede aplicar descuento a ventas abiertas');
+        }
+        if (this.sumPagos(sale.formasPago) > 0) {
+          throw new Error('No se puede aplicar descuento a una cuenta con pagos parciales ya cobrados.');
+        }
+        // Un descuento no sube el total ni lo deja negativo (antes el total llegaba tal cual del cliente).
+        if (nuevo > Number(sale.total)) {
+          throw new BadRequestException('El nuevo total no puede ser mayor al total actual de la cuenta.');
+        }
 
-      // Importe sin descuento de la cuenta (total con IVA que ve el cliente). El total siempre es base − descuento, así que
-      // nuevoTotal tiene que cuadrar con descuento: si no, el tope por rol se evadiría mandando un descuento chico y un
-      // total en cero.
-      const base = this.round2(Number(sale.total) + Number(sale.descuento ?? 0));
-      const esperado = this.round2(base - desc);
-      if (Math.abs(esperado - nuevo) > 0.01) {
-        throw new BadRequestException(`El nuevo total (${nuevo}) no cuadra con el descuento: ${base} − ${desc} = ${esperado}.`);
-      }
-      const tope = topeDescuentoPct(actor?.roleCode);
-      if (actor && desc > this.round2((base * tope) / 100)) {
-        throw new ForbiddenException(this.mensajeTopeDescuento(actor.roleCode, tope, base > 0 ? (desc / base) * 100 : 100));
-      }
+        // Importe sin descuento de la cuenta (total con IVA que ve el cliente). El total siempre es base − descuento, así que
+        // nuevoTotal tiene que cuadrar con descuento: si no, el tope por rol se evadiría mandando un descuento chico y un
+        // total en cero.
+        const base = this.round2(Number(sale.total) + Number(sale.descuento ?? 0));
+        const esperado = this.round2(base - desc);
+        if (Math.abs(esperado - nuevo) > 0.01) {
+          throw new BadRequestException(`El nuevo total (${nuevo}) no cuadra con el descuento: ${base} − ${desc} = ${esperado}.`);
+        }
+        const tope = topeDescuentoPct(actor?.roleCode);
+        if (actor && desc > this.round2((base * tope) / 100)) {
+          throw new ForbiddenException(this.mensajeTopeDescuento(actor.roleCode, tope, base > 0 ? (desc / base) * 100 : 100));
+        }
 
-      await this.salesRepo.update(id, {
-        descuento: desc,
-        total: esperado,
+        await manager.update(Sale, id, {
+          descuento: desc,
+          total: esperado,
+        });
+
+        return manager.findOne(Sale, { where: { id } });
       });
-
-      return this.salesRepo.findOne({ where: { id } });
     } catch (error) {
       console.error('SalesService.applyDiscount error:', error);
       if (error instanceof HttpException) throw error;

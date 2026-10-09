@@ -36,6 +36,9 @@ describe('SalesService — aislamiento por tenant', () => {
       cajero: 'cajero-1',
       turnoId: 'turno-1',
       sucursalId: 'suc-1',
+      total: 100,
+      descuento: 0,
+      formasPago: [],
     });
   }
 
@@ -59,7 +62,18 @@ describe('SalesService — aislamiento por tenant', () => {
         { provide: getRepositoryToken(Recipe), useValue: { findOne: jest.fn() } },
         { provide: getRepositoryToken(Insumo), useValue: { findOne: jest.fn() } },
         { provide: getRepositoryToken(TenantSetting), useValue: { findOne: jest.fn() } },
-        { provide: getDataSourceToken(), useValue: { transaction: jest.fn() } },
+        {
+          provide: getDataSourceToken(),
+          useValue: {
+            // applyDiscount() corre en una transacción con lock: el manager lee con el mismo filtro de tenant.
+            transaction: jest.fn((cb: (m: any) => Promise<any>) =>
+              cb({
+                findOne: (_e: any, opts: any) => fakeSaleLookup(opts.where),
+                update: (_e: any, id: string, patch: any) => salesRepo.update(id, patch),
+              }),
+            ),
+          },
+        },
         { provide: InsumoAlertsService, useValue: { upsert: jest.fn() } },
         { provide: TenantSettingsService, useValue: {} },
         { provide: AppointmentsService, useValue: {} },

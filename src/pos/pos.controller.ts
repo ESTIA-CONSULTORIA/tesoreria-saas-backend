@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Put, Body, Param, Req } from '@nestjs/common';
+import { Controller, Get, Post, Put, Body, Param, Req, Headers } from '@nestjs/common';
 import { PosService } from './pos.service';
 import { Modulo } from '../auth/modulo.decorator';
 
@@ -28,7 +28,11 @@ export class PosController {
   }
 
   @Post('products/import')
-  async importProducts(@Body() data: { productos: any[] }, @Req() req?: any) {
-    return this.posService.importProducts(data.productos, req?.user?.tenantId);
+  async importProducts(
+    @Body() data: { productos: any[]; branchId?: string },
+    @Req() req?: any,
+    @Headers('x-branch-id') headerBranchId?: string,
+  ) {
+    return this.posService.importProducts(data.productos, req?.user?.tenantId, data.branchId || headerBranchId);
   }
 }

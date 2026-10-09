@@ -11,7 +11,8 @@ sesión indicada (cookie de login); en el navegador, abre la sesión y usa la co
 
 ## 0. Antes de empezar (una vez por entorno, no por cliente)
 
-- [ ] Los roles globales **CAPITAN** y **MESERO** existen en la tabla `role`. Si no: **SQL** `roles-capitan-mesero-prod.sql`
+- [x] Los roles globales **CAPITAN** y **MESERO** **ya están creados en producción** (son globales: valen para todos los
+      tenants, no se crean por cliente). Solo en una base nueva o local: **SQL** `roles-capitan-mesero-prod.sql`
       (termina en `ROLLBACK`; revisa los SELECT y cámbialo a `COMMIT`). Verifica:
       `SELECT code, "isActive" FROM role WHERE code IN ('CAPITAN','MESERO');` → 2 filas.
 - [ ] Migraciones al día en la base (`npm run migration:run`). Una base atrasada da 500 al activar módulos.
@@ -77,13 +78,16 @@ WHERE "tenantId" = 'TENANT';
 
 Roles y qué pueden hacer (los topes son del servidor):
 
-| Rol | Entra con | Descuento | Cobra |
-|---|---|---|---|
-| ADMIN | correo + contraseña | sin tope | caja y mesa |
-| GERENTE | correo + contraseña | sin tope | caja y mesa |
-| CAJERO | NIP (4 dígitos) o correo | hasta **10 %** | caja |
-| CAPITAN | NIP o correo | hasta **20 %** | mesa, según política |
-| MESERO | NIP o correo | no | mesa, solo con `MESERO_EN_MESA` |
+| Rol | Entra con | Descuento | Cortesía | Cobra |
+|---|---|---|---|---|
+| ADMIN | correo + contraseña | sin tope | sí | caja y mesa |
+| GERENTE | correo + contraseña | sin tope | sí | caja y mesa |
+| CAJERO | NIP (4 dígitos) o correo | hasta **10 %** | **no (403)** | caja |
+| CAPITAN | NIP o correo | hasta **20 %** | **no (403)** | mesa, según política |
+| MESERO | NIP o correo | no | **no (403)** | mesa, solo con `MESERO_EN_MESA` |
+
+La **cortesía** (venta sin cobro) solo la registran GERENTE y ADMIN; queda estampado su correo como `autorizadoPor`.
+Un cajero que necesite dar una cortesía pide al gerente que la cobre desde su sesión.
 
 Reglas del servidor al crear:
 
@@ -100,15 +104,23 @@ Mínimo para operar un local: 1 GERENTE, 1 CAJERO, 1 CAPITAN, 1+ MESERO, todos c
    Una por familia (Bebidas, Alimentos…), en la sucursal correcta. Deben existir **antes** de importar productos.
 2. **Áreas y mesas** — menú **Mesas** → configuración (interfaz, `/mesas`): primero áreas (Terraza, Salón, Barra), luego
    mesas con número y capacidad. Se ligan a la sucursal elegida.
-3. **Productos** — POS → importar productos CSV (interfaz). Columnas exactas: `nombre,categoria,precio,imagenUrl`;
-   `categoria` debe coincidir **tal cual** con una categoría ya creada; `precio` **sin IVA** (el servidor suma 16 %).
-   El precio que cobra el POS sale siempre de aquí, no del cliente.
+3. **Productos** — POS → importar productos CSV (interfaz), **con la sucursal activa del usuario** (el producto queda en esa
+   sucursal; con varias sucursales importa una vez por cada una). Columnas: `nombre,categoria,precio,impuesto,descripcion,estacion`
+   (la plantilla del botón ya las trae):
+   - `categoria`: tal cual una categoría **de esa sucursal** (con dos sucursales el mismo nombre es otra categoría en cada una).
+   - `precio`: **sin IVA** (el servidor suma 16 %). El precio que cobra el POS sale siempre de aquí, no del cliente.
+   - `estacion`: `COCINA` o `BARRA` (obligatoria si usas notas de cocina/barra; vacía = el producto no genera nota). Otro valor
+     rechaza esa fila. La respuesta trae `sinEstacion` = cuántas filas quedaron sin estación.
+   - API equivalente: `POST $API/pos/products/import` con `{"productos":[...],"branchId":"<sucursal>"}` (o header `x-branch-id`).
+     Con una sola sucursal, `branchId` es opcional; con varias es obligatorio (400 si falta).
 4. **Lo que el CSV no deja (SQL o `PUT $API/pos/products/:id`)**, por producto:
-   - `branchId` (el import lo deja vacío; revisa que aparezcan en la sucursal correcta),
-   - `estacionPreparacion` = `COCINA` | `BARRA` (solo si usas notas de cocina/barra),
    - `type = 'PREPARADO'` + `recipeId`, o `type = 'SIMPLE'` + `insumoId`, para que la venta **descuente inventario**.
-5. **Inventario** — módulo Costos: insumos, recetas y existencias iniciales (interfaz). Decide `stockPolicy`
-   (`PUT $API/tenant-settings/TENANT {"stockPolicy":"BLOQUEAR"}`; el default es `PERMITIR_NEGATIVO`: vende sin existencia).
+5. **Inventario** — módulo Costos: insumos, recetas y existencias iniciales (interfaz). Después define `stockPolicy`:
+   - **Hay insumos y existencias cargadas → `BLOQUEAR`**: no se vende lo que no hay.
+     `PUT $API/tenant-settings/TENANT {"stockPolicy":"BLOQUEAR"}` (ADMIN del tenant o SOPORTE).
+   - **No hay insumos cargados (solo se opera el POS y el corte) → `PERMITIR_NEGATIVO`**, que es el default: con `BLOQUEAR` y sin
+     existencias no se podría vender nada.
+   Verifica: `GET $API/tenant-settings/TENANT` → `stockPolicy`. No lo dejes en el default por omisión si ya cargaste insumos.
 
 ## 6. Las tres políticas (ADMIN del cliente; interfaz o API)
 
@@ -135,17 +147,22 @@ Marca todo lo de prueba con "[PRUEBA]" en nota/motivo.
 
 1. **Mesa:** MESERO abre cuenta en una mesa, agrega 2 productos (uno de cocina) → total = precio × cant. × **1.16**.
 2. **Descuento:** CAJERO aplica 10 % → pasa; intenta 10.01 % → **403** con mensaje claro. CAPITAN: 20 % pasa, 20.01 % → 403.
-   GERENTE: cualquier porcentaje.
-3. **Cobro** según la política del paso 6 (con `SOLO_CAJA`, el mesero **no** cobra: 403).
-4. **Venta directa** (sin mesa): una venta en efectivo con cambio; el corte debe sumar el total, no lo recibido.
-5. **Devolución:** GERENTE devuelve la venta de prueba → regresa inventario y dinero.
+   GERENTE: cualquier porcentaje. En una cuenta de $116: CAJERO hasta $11.60 (total $104.40), CAPITAN hasta $23.20 (total $92.80).
+   `PUT /pos/sales/:id/discount` recalcula el total en el servidor: `nuevoTotal` debe ser el total sin descuento menos `descuento`.
+3. **Cortesía:** CAJERO intenta cobrar como cortesía → **403**; GERENTE la cobra y en la venta queda su correo como `autorizadoPor`.
+4. **Cobro** según la política del paso 6 (con `SOLO_CAJA`, el mesero **no** cobra: 403).
+5. **Venta directa** (sin mesa): una venta en efectivo con cambio; el corte debe sumar el total, no lo recibido.
+6. **Devolución:** GERENTE devuelve la venta de prueba → regresa inventario y dinero.
 
 ## 9. Corte
 
 1. Con **cero cuentas abiertas** en mesas (el cierre se bloquea si hay alguna: cóbralas o cancélalas).
 2. CAJERO: precorte (opcional) y **cerrar turno** con el efectivo contado.
-3. Verifica en el resumen del turno: ventas pagadas, efectivo, tarjeta, cortesías, devoluciones y diferencia = esperado − contado.
-4. Corte aprobado por GERENTE/ADMIN (chat de aprobación del POS), según tu operación.
+3. El resumen del turno (`GET $API/pos/shifts/:id/summary`) y la respuesta del cierre traen `efectivoEsperado` =
+   fondo + efectivo de ventas + depósitos − retiros, y `diferencia` = contado − esperado (**negativo = faltante**).
+   Ejemplo: fondo $500, ventas en efectivo $292, depósito $50, retiro $100 → esperado **$742**; contado $735 → diferencia **−$7**.
+4. Aprobación: el cajero pide aprobación en el chat del corte y **solo ADMIN o GERENTE** aprueban o rechazan (otro rol: 403; el
+   chat de un turno de otro negocio no existe: 404). La aprobación queda registrada en el chat; el cierre del turno **no** la exige.
 
 ## 10. Cierre del alta
 
@@ -163,7 +180,8 @@ Marca todo lo de prueba con "[PRUEBA]" en nota/motivo.
 | 4 Usuarios y sucursales | Sí | — |
 | 5 Categorías | **No** | **API** (`POST /pos/categories`) |
 | 5 Áreas y mesas | Sí | — |
-| 5 Productos (alta masiva) | Sí (CSV) | **SQL/API** para `branchId`, estación, receta/insumo |
+| 5 Productos (alta masiva, con sucursal y estación) | Sí (CSV) | **SQL/API** solo para receta/insumo |
+| 5 `stockPolicy` | **No** | **API** (`PUT /tenant-settings/:id`) |
 | 6 Políticas | Sí (ADMIN) | Alternativa API |
-| 0 Roles CAPITAN/MESERO | No | **SQL** (una vez por base) |
+| 0 Roles CAPITAN/MESERO | No | Ya creados en producción; **SQL** solo en una base nueva |
 | 7 a 9 Turno, venta, corte | Sí | — |

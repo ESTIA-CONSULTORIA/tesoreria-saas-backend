@@ -164,11 +164,18 @@ describe('PosService.importProducts() — tenant del JWT y categorías solo del 
     expect(productRepo.create.mock.calls[0][0].categoryId).toBe('cat-A');
   });
 
-  it('categoría que solo existe en otro tenant: la fila se reporta como error y no crea producto', async () => {
-    branchRepo.find.mockResolvedValue([]); // el tenant no tiene sucursales → ninguna categoría visible
-    const r = await service.importProducts([{ nombre: 'Cola', categoria: 'Bebidas', precio: '20' }], TENANT_A);
-    expect(r.success).toBe(0);
-    expect(r.errors[0].message).toContain('no existe');
+  it('un tenant sin sucursales no puede importar: 400 y no crea producto', async () => {
+    branchRepo.find.mockResolvedValue([]); // el tenant no tiene sucursales → no hay a dónde importar
+    await expect(
+      service.importProducts([{ nombre: 'Cola', categoria: 'Bebidas', precio: '20' }], TENANT_A),
+    ).rejects.toThrow(BadRequestException);
+    expect(productRepo.save).not.toHaveBeenCalled();
+  });
+
+  it('una sucursal de OTRO tenant se rechaza: 400 "Sucursal no encontrada" y no crea producto', async () => {
+    await expect(
+      service.importProducts([{ nombre: 'Cola', categoria: 'Bebidas', precio: '20' }], TENANT_A, 'br-B'),
+    ).rejects.toThrow('Sucursal no encontrada');
     expect(productRepo.save).not.toHaveBeenCalled();
   });
 

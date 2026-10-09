@@ -70,11 +70,26 @@ export class ShiftsService {
   // closeShift()/findOne()/getSummary() no verificaban que el turno perteneciera al tenant
   // de quien llama — Shift sí tiene tenantId propio, se reutiliza el mismo mensaje "Turno no
   // encontrado" que ya usa cada catch, sin cambiar el formato de error existente.
+  private round2(n: number): number {
+    return Math.round((n + Number.EPSILON) * 100) / 100;
+  }
+
+  // Un retiro o depósito es un monto positivo: antes un monto negativo (o un texto, que se concatenaba) movía el efectivo
+  // esperado del corte a gusto de quien lo mandara.
+  private montoValido(monto: unknown): number {
+    const n = typeof monto === 'string' && monto.trim() !== '' ? Number(monto) : (monto as number);
+    if (typeof n !== 'number' || !Number.isFinite(n) || n <= 0) {
+      throw new BadRequestException('monto debe ser un número mayor a cero.');
+    }
+    return this.round2(n);
+  }
+
   async withdrawal(id: string, data: {
     monto: number;
     motivo: string;
     autorizadoPor: string;
   }, tenantId?: string) {
+    const monto = this.montoValido(data?.monto);
     try {
       const shift = await this.shiftsRepo.findOne({ where: tenantId ? { id, tenantId } : { id } });
       if (!shift) {
@@ -85,7 +100,7 @@ export class ShiftsService {
       }
 
       // Update shift totals
-      const newTotalRetiros = Number(shift.totalRetiros || 0) + data.monto;
+      const newTotalRetiros = this.round2(Number(shift.totalRetiros || 0) + monto);
       await this.shiftsRepo.update(id, {
         totalRetiros: newTotalRetiros,
       });
@@ -102,6 +117,7 @@ export class ShiftsService {
     origen: string;
     autorizadoPor: string;
   }, tenantId?: string) {
+    const monto = this.montoValido(data?.monto);
     try {
       const shift = await this.shiftsRepo.findOne({ where: tenantId ? { id, tenantId } : { id } });
       if (!shift) {
@@ -112,7 +128,7 @@ export class ShiftsService {
       }
 
       // Update shift totals - deposits increase effective cash
-      const newTotalDepositos = Number(shift.totalDepositos || 0) + data.monto;
+      const newTotalDepositos = this.round2(Number(shift.totalDepositos || 0) + monto);
       await this.shiftsRepo.update(id, {
         totalDepositos: newTotalDepositos,
       });
@@ -253,6 +269,14 @@ export class ShiftsService {
         .filter((s) => !(s.tableId && !huboCobro(s)))
         .reduce((sum, s) => sum + (Number(s.total) || 0), 0);
 
+      // Lo que debería haber en la caja y la diferencia contra lo contado (contado − esperado: negativo = faltante).
+      // No se guardan (Shift no tiene columnas para ellos, sin migración): se calculan aquí y en getSummary().
+      const efectivoContadoFinal = data.efectivoContado ?? Number(shift.efectivoContado) ?? 0;
+      const efectivoEsperado = this.round2(
+        (Number(shift.fondoInicial) || 0) + calcTotalEfectivo + (Number(shift.totalDepositos) || 0) - (Number(shift.totalRetiros) || 0),
+      );
+      const diferencia = this.round2(Number(efectivoContadoFinal) - efectivoEsperado);
+
       await this.shiftsRepo.update(id, {
         horaCierre: now.toTimeString().slice(0, 8),
         totalVentas: calcTotalVentas,
@@ -271,7 +295,7 @@ export class ShiftsService {
       const cerrado = await this.shiftsRepo.findOne({ where: { id } });
       // El desglose no se guarda (Shift no tiene columna para él): se calcula de las ventas y se puede volver a pedir
       // en getSummary() también para un turno ya cerrado.
-      return cerrado ? { ...cerrado, efectivoPorPersona: efectivoFueraDeCaja(sales) } : cerrado;
+      return cerrado ? { ...cerrado, efectivoEsperado, diferencia, efectivoPorPersona: efectivoFueraDeCaja(sales) } : cerrado;
     } catch (error) {
       console.error('ShiftsService.closeShift error:', error);
       if (error instanceof HttpException) throw error;
@@ -422,6 +446,9 @@ export class ShiftsService {
       const totalDepositos = Number(shift.totalDepositos) || 0;
       const fondoInicial = Number(shift.fondoInicial) || 0;
       const efectivoEsperado = fondoInicial + totalVentasEfectivo + totalDepositos - totalRetiros;
+      // contado − esperado (negativo = faltante); solo si ya hay un conteo (precorte o cierre).
+      const efectivoContado = shift.efectivoContado === null || shift.efectivoContado === undefined ? null : Number(shift.efectivoContado);
+      const diferencia = efectivoContado === null ? null : this.round2(efectivoContado - efectivoEsperado);
 
       // Return complete shift summary with calculated totals
       return {
@@ -436,6 +463,7 @@ export class ShiftsService {
           totalRetiros,
           totalDepositos,
           efectivoEsperado,
+          diferencia,
           // Efectivo cobrado fuera de caja (mesa), por persona: ya está incluido en efectivoEsperado.
           efectivoPorPersona: efectivoFueraDeCaja(sales),
         },

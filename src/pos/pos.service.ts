@@ -50,18 +50,30 @@ export class PosService {
   // sucursales pertenecen al tenant (branchId → Branch → Company.tenantId, mismo patrón de
   // dos saltos que categories.service.ts, porque PosCategory no tiene tenantId propio). Sin
   // tenant (SOPORTE) se rechaza: no hay a quién asignar los productos.
-  async importProducts(productos: any[], tenantId?: string) {
+  //
+  // Sucursal: cada producto queda en UNA sucursal (branchId) y su categoría se busca solo en esa sucursal (dos sucursales
+  // pueden tener una categoría con el mismo nombre). La sucursal debe ser del tenant; si no se indica y el tenant tiene
+  // una sola, se usa esa; con varias, hay que elegirla (400). `estacion` (COCINA | BARRA, opcional por fila) fija la
+  // estacionPreparacion del producto; vacío = sin estación; cualquier otro valor es error de esa fila.
+  async importProducts(productos: any[], tenantId?: string, branchIdElegida?: string) {
     if (!tenantId) {
       throw new BadRequestException('No se puede importar productos sin tenant.');
     }
-    const results = { success: 0, errors: [] as any[] };
+    const results = { success: 0, errors: [] as any[], branchId: undefined as string | undefined, sinEstacion: 0 };
     const companies = await this.companyRepo.find({ where: { tenantId } });
     const branches = companies.length
       ? await this.branchRepo.find({ where: { companyId: In(companies.map(c => c.id)) } })
       : [];
-    const categories = branches.length
-      ? await this.categoryRepo.find({ where: { isActive: true, branchId: In(branches.map(b => b.id)) } })
-      : [];
+    let branchId = branchIdElegida?.trim() || undefined;
+    if (branchId) {
+      if (!branches.some((b) => b.id === branchId)) throw new BadRequestException('Sucursal no encontrada.');
+    } else if (branches.length === 1) {
+      branchId = branches[0].id;
+    } else {
+      throw new BadRequestException('Indica la sucursal a la que se importan los productos (branchId).');
+    }
+    results.branchId = branchId;
+    const categories = await this.categoryRepo.find({ where: { isActive: true, branchId: In([branchId]) } });
 
     for (let i = 0; i < productos.length; i++) {
       const row = productos[i];
@@ -82,6 +94,13 @@ export class PosService {
           continue;
         }
 
+        const estacionRaw = String(row.estacion ?? row.estacionPreparacion ?? '').trim().toUpperCase();
+        if (estacionRaw && estacionRaw !== 'COCINA' && estacionRaw !== 'BARRA') {
+          results.errors.push({ row: rowNumber, message: `estacion debe ser COCINA o BARRA (llegó "${row.estacion ?? row.estacionPreparacion}")` });
+          continue;
+        }
+        if (!estacionRaw) results.sinEstacion++;
+
         // Create product
         const product = this.productRepo.create({
           name: row.nombre,
@@ -90,6 +109,8 @@ export class PosService {
           imageUrl: row.imagenUrl || null,
           isActive: true,
           tenantId,
+          branchId,
+          ...(estacionRaw ? { estacionPreparacion: estacionRaw as 'COCINA' | 'BARRA' } : {}),
         });
 
         await this.productRepo.save(product);

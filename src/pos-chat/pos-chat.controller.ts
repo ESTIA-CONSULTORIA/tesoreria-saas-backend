@@ -1,13 +1,14 @@
 import { Body, Controller, Get, Param, Post, Put, Request } from '@nestjs/common';
 import { PosChatService } from './pos-chat.service';
 
+// El tenant y el rol salen del token (nunca del body). Sin sesión válida el rol queda vacío y el servicio rechaza.
 @Controller('pos-chat')
 export class PosChatController {
   constructor(private readonly service: PosChatService) {}
 
   @Get(':turnoId/messages')
-  getMessages(@Param('turnoId') turnoId: string) {
-    return this.service.getMessages(turnoId);
+  getMessages(@Param('turnoId') turnoId: string, @Request() req?: any) {
+    return this.service.getMessages(turnoId, req?.user?.tenantId, req?.user?.roleCode);
   }
 
   @Post(':turnoId/messages')
@@ -16,10 +17,10 @@ export class PosChatController {
     @Body() body: { message: string; type?: string },
     @Request() req?: any,
   ) {
-    const userId = req?.user?.sub ?? 'unknown';
+    const userId = req?.user?.sub ?? req?.user?.id ?? 'unknown';
     const userName = req?.user?.name ?? req?.user?.email ?? 'Usuario';
     const role = req?.user?.roleCode ?? 'CAJERO';
-    return this.service.sendMessage(turnoId, userId, userName, role, body.message, body.type);
+    return this.service.sendMessage(turnoId, userId, userName, role, body.message, body.type, req?.user?.tenantId);
   }
 
   @Put(':turnoId/approve')
@@ -28,10 +29,9 @@ export class PosChatController {
     @Body() body: { comment?: string },
     @Request() req?: any,
   ) {
-    const userId = req?.user?.sub ?? 'unknown';
+    const userId = req?.user?.sub ?? req?.user?.id ?? 'unknown';
     const userName = req?.user?.name ?? req?.user?.email ?? 'Supervisor';
-    const role = req?.user?.roleCode ?? 'ADMIN';
-    return this.service.approve(turnoId, userId, userName, role, body.comment);
+    return this.service.approve(turnoId, userId, userName, req?.user?.roleCode ?? '', body.comment, req?.user?.tenantId);
   }
 
   @Put(':turnoId/reject')
@@ -40,9 +40,8 @@ export class PosChatController {
     @Body() body: { comment?: string },
     @Request() req?: any,
   ) {
-    const userId = req?.user?.sub ?? 'unknown';
+    const userId = req?.user?.sub ?? req?.user?.id ?? 'unknown';
     const userName = req?.user?.name ?? req?.user?.email ?? 'Supervisor';
-    const role = req?.user?.roleCode ?? 'ADMIN';
-    return this.service.reject(turnoId, userId, userName, role, body.comment);
+    return this.service.reject(turnoId, userId, userName, req?.user?.roleCode ?? '', body.comment, req?.user?.tenantId);
   }
 }

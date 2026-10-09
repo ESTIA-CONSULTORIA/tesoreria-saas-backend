@@ -15,6 +15,10 @@ export const ROLES_CAJA = ['ADMIN', 'GERENTE', 'CAJERO'];
 // Quién puede aplicar descuento a una cuenta abierta (PUT /pos/sales/:id/discount). El mesero no.
 export const ROLES_DESCUENTO = ['ADMIN', 'GERENTE', 'CAPITAN', 'CAJERO'];
 
+// Quién puede registrar un pago CORTESIA (la venta se da sin cobro). El resto de roles recibe 403. Un descuento tiene
+// tope por rol; una cortesía es 100 %, así que solo la autoriza quien no tiene tope.
+export const ROLES_CORTESIA = ['ADMIN', 'GERENTE'];
+
 // Tope de descuento por rol, en % del importe. Se valida en el SERVIDOR (create() por ítem y PUT /discount sobre el total
 // de la cuenta). ADMIN y GERENTE sin tope. Un rol fuera de ROLES_DESCUENTO no llega aquí (403 antes).
 export const TOPE_DESCUENTO_PCT: Record<string, number> = { CAJERO: 10, CAPITAN: 20 };
