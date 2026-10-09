@@ -627,9 +627,45 @@ const ITEM_SIN_COCINA = { productoId: 'p-simple', nombre: 'Taco', cantidad: 2, p
       const mesas2 = ['mesa-1', 'mesa-2'];
       for (const [i, actor] of [erp(rol), lite(rol)].entries()) {
         const c = await abrirCuenta(lite('MESERO'), {}, [ITEM_SIN_COCINA], mesas2[i]);
-        await sales.applyDiscount(c.id, 16, 100, TENANT_A, actor);
-        expect(venta(c.id)).toMatchObject({ descuento: 16, total: 100 });
+        await sales.applyDiscount(c.id, 11.6, 104.4, TENANT_A, actor); // 10% de $116: dentro del tope de los cuatro roles
+        expect(venta(c.id)).toMatchObject({ descuento: 11.6, total: 104.4 });
       }
+    });
+
+    // Cuenta de $116 (100 + IVA 16). CAJERO hasta 10% ($11.60), CAPITAN hasta 20% ($23.20), GERENTE y ADMIN sin tope.
+    describe('tope de descuento por rol', () => {
+      it('CAJERO: $11.60 (10%) pasa; $11.61 da 403 y la cuenta no cambia', async () => {
+        const c = await abrirCuenta(lite('MESERO'));
+        const err: any = await sales.applyDiscount(c.id, 11.61, 104.39, TENANT_A, erp('CAJERO')).catch((e) => e);
+        expect(err).toBeInstanceOf(ForbiddenException);
+        expect(err.message).toBe('Tu rol (CAJERO) puede dar hasta 10% de descuento y pediste 10.01%. Pide a un capitán o gerente.');
+        expect(venta(c.id)).toMatchObject({ descuento: 0, total: 116 });
+        await sales.applyDiscount(c.id, 11.6, 104.4, TENANT_A, erp('CAJERO'));
+        expect(venta(c.id)).toMatchObject({ descuento: 11.6, total: 104.4 });
+      });
+
+      it('CAPITAN: $23.20 (20%) pasa; $23.21 da 403', async () => {
+        const c = await abrirCuenta(lite('MESERO'));
+        await expect(sales.applyDiscount(c.id, 23.21, 92.79, TENANT_A, lite('CAPITAN'))).rejects.toBeInstanceOf(ForbiddenException);
+        expect(venta(c.id).total).toBe(116);
+        await sales.applyDiscount(c.id, 23.2, 92.8, TENANT_A, lite('CAPITAN'));
+        expect(venta(c.id)).toMatchObject({ descuento: 23.2, total: 92.8 });
+      });
+
+      it.each(['GERENTE', 'ADMIN'])('%s: 50% ($58) y hasta 100% ($116) sin tope', async (rol) => {
+        const c = await abrirCuenta(lite('MESERO'));
+        await sales.applyDiscount(c.id, 58, 58, TENANT_A, erp(rol));
+        expect(venta(c.id)).toMatchObject({ descuento: 58, total: 58 });
+        await sales.applyDiscount(c.id, 116, 0, TENANT_A, erp(rol));
+        expect(venta(c.id)).toMatchObject({ descuento: 116, total: 0 });
+      });
+
+      it('el tope no se evade mandando un descuento chico con un nuevoTotal en cero: no cuadra → 400, cuenta intacta', async () => {
+        const c = await abrirCuenta(lite('MESERO'));
+        await expect(sales.applyDiscount(c.id, 1, 0.01, TENANT_A, erp('CAJERO'))).rejects.toBeInstanceOf(BadRequestException);
+        await expect(sales.applyDiscount(c.id, 1, 0, TENANT_A, erp('GERENTE'))).rejects.toBeInstanceOf(BadRequestException);
+        expect(venta(c.id)).toMatchObject({ descuento: 0, total: 116 });
+      });
     });
 
     it('el mesero (ERP o POS Lite) y cualquier otro rol reciben 403 y la cuenta no cambia', async () => {

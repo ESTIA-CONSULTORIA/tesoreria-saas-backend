@@ -15,6 +15,11 @@ export const ROLES_CAJA = ['ADMIN', 'GERENTE', 'CAJERO'];
 // Quién puede aplicar descuento a una cuenta abierta (PUT /pos/sales/:id/discount). El mesero no.
 export const ROLES_DESCUENTO = ['ADMIN', 'GERENTE', 'CAPITAN', 'CAJERO'];
 
+// Tope de descuento por rol, en % del importe. Se valida en el SERVIDOR (create() por ítem y PUT /discount sobre el total
+// de la cuenta). ADMIN y GERENTE sin tope. Un rol fuera de ROLES_DESCUENTO no llega aquí (403 antes).
+export const TOPE_DESCUENTO_PCT: Record<string, number> = { CAJERO: 10, CAPITAN: 20 };
+export const topeDescuentoPct = (rol?: string): number => TOPE_DESCUENTO_PCT[rol ?? ''] ?? Number.POSITIVE_INFINITY;
+
 // IVA del POS (el mismo 16% del POS normal del frontend: precios sin IVA, IVA sobre el neto). Las cuentas abiertas lo
 // calculan en el SERVIDOR con esta tasa; el cliente no decide ni precio ni impuesto.
 export const IVA_TASA = 0.16;

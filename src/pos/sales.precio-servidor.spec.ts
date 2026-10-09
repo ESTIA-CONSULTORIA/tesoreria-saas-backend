@@ -144,6 +144,18 @@ const ITEM_SIN_COCINA = { productoId: 'p-simple', nombre: 'Taco', cantidad: 2, p
   const stock = () => insumos.get('ins-1').stockActual;
   const mesa = (id = 'mesa-1') => mesas.get(id).status;
 
+  // Las ventas encoladas llevan clientTimestamp fijo (2026-10-05): el servidor rechaza eventos de más de 48 h. Se fija solo
+  // la fecha (el resto del reloj sigue real) para que el spec no caduque con el calendario.
+  beforeAll(() => {
+    jest.useFakeTimers({
+      now: new Date('2026-10-05T14:00:00Z'),
+      doNotFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'setImmediate', 'clearImmediate', 'nextTick', 'queueMicrotask', 'hrtime', 'performance'],
+    });
+  });
+  afterAll(() => {
+    jest.useRealTimers();
+  });
+
   beforeEach(async () => {
     caps = { mesas_cuenta_abierta: true };
     politicaCobro = 'SOLO_CAJA';
@@ -298,10 +310,41 @@ const ITEM_SIN_COCINA = { productoId: 'p-simple', nombre: 'Taco', cantidad: 2, p
       expect(venta(v.id).items[0]).toMatchObject({ descuento: 10, subtotal: 90 });
     });
 
-    it.each(['ADMIN', 'GERENTE', 'CAPITAN', 'CAJERO'])('%s puede dar descuento', async (rol) => {
+    it.each(['ADMIN', 'GERENTE', 'CAPITAN', 'CAJERO'])('%s puede dar descuento (10%, dentro del tope de todos)', async (rol) => {
       politicaCobro = 'GERENTE_EN_MESA'; // el capitán solo cobra en mesa con esta política; el descuento es lo que se prueba
-      const v = await vender(erp(rol), [linea('p-simple', 2, 50)], efectivo(58));
-      expect(venta(v.id)).toMatchObject({ descuento: 50, total: 58 });
+      const v = await vender(erp(rol), [linea('p-simple', 2, 10)], efectivo(104.4));
+      expect(venta(v.id)).toMatchObject({ descuento: 10, total: 104.4 });
+    });
+
+    // Topes por rol (servidor): CAJERO 10%, CAPITAN 20%, GERENTE y ADMIN sin tope. Venta de 2 × $50 = $100 bruto.
+    describe('tope de descuento por rol', () => {
+      beforeEach(() => { politicaCobro = 'GERENTE_EN_MESA'; });
+
+      it('CAJERO: 10% pasa (neto 90, IVA 14.40, total 104.40); 10.01% da 403 con mensaje claro y no deja nada', async () => {
+        const ok = await vender(erp('CAJERO'), [linea('p-simple', 2, 10)], efectivo(104.4));
+        expect(venta(ok.id)).toMatchObject({ subtotal: 100, descuento: 10, impuestos: 14.4, total: 104.4 });
+        const antes = ventas.size;
+        const err: any = await vender(erp('CAJERO'), [linea('p-simple', 2, 10.01)], efectivo(104.4)).catch((e) => e);
+        expect(err).toBeInstanceOf(ForbiddenException);
+        expect(err.message).toBe('Tu rol (CAJERO) puede dar hasta 10% de descuento y pediste 10.01%. Pide a un capitán o gerente.');
+        expect(ventas.size).toBe(antes);
+      });
+
+      it('CAPITAN: 20% pasa (neto 80, IVA 12.80, total 92.80); 20.5% da 403', async () => {
+        const ok = await vender(erp('CAPITAN'), [linea('p-simple', 2, 20)], efectivo(92.8));
+        expect(venta(ok.id)).toMatchObject({ subtotal: 100, descuento: 20, impuestos: 12.8, total: 92.8 });
+        const err: any = await vender(erp('CAPITAN'), [linea('p-simple', 2, 20.5)], efectivo(92.8)).catch((e) => e);
+        expect(err).toBeInstanceOf(ForbiddenException);
+        expect(err.message).toContain('hasta 20%');
+        expect(err.message).toContain('Pide a un gerente o administrador');
+      });
+
+      it.each(['GERENTE', 'ADMIN'])('%s: 50% pasa (neto 50, IVA 8, total 58) y 100% también', async (rol) => {
+        const v = await vender(erp(rol), [linea('p-simple', 2, 50)], efectivo(58));
+        expect(venta(v.id)).toMatchObject({ subtotal: 100, descuento: 50, impuestos: 8, total: 58 });
+        const c = await vender(erp(rol), [linea('p-simple', 2, 100)], [{ forma: 'CORTESIA', monto: 0, motivo: 'cortesia_ejecutiva', autorizadoPor: 'dueño' }]);
+        expect(venta(c.id)).toMatchObject({ descuento: 100, total: 0 });
+      });
     });
 
     it('el mesero (ERP o POS Lite) y roles sin permiso reciben 403 si piden descuento', async () => {

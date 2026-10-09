@@ -14,7 +14,7 @@ import { resolveActiveInsumoChain } from '../costs/insumo-resolution';
 import { NotaCocina } from './entities/nota-cocina.entity';
 import { Shift } from './entities/shift.entity';
 import { PoliticaDevolucion, ROLES_GERENTE } from '../config/politica-devoluciones.config';
-import { calcularIva, ROLES_DESCUENTO } from '../config/roles-pos.config';
+import { calcularIva, ROLES_DESCUENTO, topeDescuentoPct } from '../config/roles-pos.config';
 
 import { ActorMesas, contextoCobro, PoliticaCobro, PoliticaDivision, puedeCobrar, puedeDividir } from '../config/politicas-pos.config';
 
@@ -138,6 +138,11 @@ export class SalesService {
     });
   }
 
+  private mensajeTopeDescuento(rol: string | undefined, tope: number, pedido: number): string {
+    const quien = rol === 'CAJERO' ? 'un capitán o gerente' : 'un gerente o administrador';
+    return `Tu rol (${rol}) puede dar hasta ${tope}% de descuento y pediste ${this.round2(pedido)}%. Pide a ${quien}.`;
+  }
+
   // Para la revisión de ventas offline fallidas: el mismo cálculo de create(), con descuento permitido (lo resuelve un
   // gerente o admin) y sin tocar nada.
   async calcularImportesVenta(items: any[], tenantId: string, actor?: Actor) {
@@ -170,6 +175,12 @@ export class SalesService {
         }
         if (opts.actor && !ROLES_DESCUENTO.includes(opts.actor.roleCode ?? '')) {
           throw new ForbiddenException('Tu rol no puede aplicar descuentos. Pide a un capitán o gerente.');
+        }
+        if (opts.actor) {
+          const tope = topeDescuentoPct(opts.actor.roleCode);
+          if (pct > tope) {
+            throw new ForbiddenException(this.mensajeTopeDescuento(opts.actor.roleCode, tope, pct));
+          }
         }
       }
       const p = await this.productRepo.findOne({ where: { id: it.productoId, tenantId } });
@@ -1446,9 +1457,22 @@ export class SalesService {
         throw new BadRequestException('El nuevo total no puede ser mayor al total actual de la cuenta.');
       }
 
+      // Importe sin descuento de la cuenta (total con IVA que ve el cliente). El total siempre es base − descuento, así que
+      // nuevoTotal tiene que cuadrar con descuento: si no, el tope por rol se evadiría mandando un descuento chico y un
+      // total en cero.
+      const base = this.round2(Number(sale.total) + Number(sale.descuento ?? 0));
+      const esperado = this.round2(base - desc);
+      if (Math.abs(esperado - nuevo) > 0.01) {
+        throw new BadRequestException(`El nuevo total (${nuevo}) no cuadra con el descuento: ${base} − ${desc} = ${esperado}.`);
+      }
+      const tope = topeDescuentoPct(actor?.roleCode);
+      if (actor && desc > this.round2((base * tope) / 100)) {
+        throw new ForbiddenException(this.mensajeTopeDescuento(actor.roleCode, tope, base > 0 ? (desc / base) * 100 : 100));
+      }
+
       await this.salesRepo.update(id, {
         descuento: desc,
-        total: nuevo,
+        total: esperado,
       });
 
       return this.salesRepo.findOne({ where: { id } });

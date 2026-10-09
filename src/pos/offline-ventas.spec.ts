@@ -152,6 +152,18 @@ const ITEM_SIN_COCINA = { productoId: 'p-simple', nombre: 'Taco', cantidad: 2, p
   const stock = () => insumos.get('ins-1').stockActual;
   const mesa = (id = 'mesa-1') => mesas.get(id).status;
 
+  // Las ventas encoladas llevan clientTimestamp fijo (2026-10-05): el servidor rechaza eventos de más de 48 h. Se fija solo
+  // la fecha (el resto del reloj sigue real) para que el spec no caduque con el calendario.
+  beforeAll(() => {
+    jest.useFakeTimers({
+      now: new Date('2026-10-05T14:00:00Z'),
+      doNotFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'setImmediate', 'clearImmediate', 'nextTick', 'queueMicrotask', 'hrtime', 'performance'],
+    });
+  });
+  afterAll(() => {
+    jest.useRealTimers();
+  });
+
   beforeEach(async () => {
     caps = { mesas_cuenta_abierta: true };
     politicaCobro = 'SOLO_CAJA';
