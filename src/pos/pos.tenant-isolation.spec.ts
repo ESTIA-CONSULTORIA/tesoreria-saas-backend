@@ -75,7 +75,7 @@ describe('SalesService — aislamiento por tenant', () => {
           },
         },
         { provide: InsumoAlertsService, useValue: { upsert: jest.fn() } },
-        { provide: TenantSettingsService, useValue: {} },
+        { provide: TenantSettingsService, useValue: { getIvaConfig: jest.fn(() => Promise.resolve({ ivaTasaDefault: '16', preciosIncluyenIva: false })) } },
         { provide: AppointmentsService, useValue: {} },
         { provide: CostsService, useValue: { createJustifiable: jest.fn() } },
       ],

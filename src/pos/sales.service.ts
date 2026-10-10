@@ -14,7 +14,8 @@ import { resolveActiveInsumoChain } from '../costs/insumo-resolution';
 import { NotaCocina } from './entities/nota-cocina.entity';
 import { Shift } from './entities/shift.entity';
 import { PoliticaDevolucion, ROLES_GERENTE } from '../config/politica-devoluciones.config';
-import { calcularIva, ROLES_CORTESIA, ROLES_DESCUENTO, topeDescuentoPct } from '../config/roles-pos.config';
+import { ROLES_CORTESIA, ROLES_DESCUENTO, topeDescuentoPct } from '../config/roles-pos.config';
+import { isValidTasaIva, montoDeItem, pesoDeItem, pesoImpuestoDeItem, tasaNumerica, totalesDeItems, TasaIva } from '../config/iva.config';
 
 import { ActorMesas, contextoCobro, PoliticaCobro, PoliticaDivision, puedeCobrar, puedeDividir } from '../config/politicas-pos.config';
 
@@ -107,7 +108,8 @@ export class SalesService {
   }
 
   // Del cliente SOLO se toma qué producto, cuántos y el descuento por ítem (porcentaje). El precio sale del catálogo del
-  // tenant y subtotal, descuento en dinero, IVA y total los calcula el servidor (mismo cálculo del POS normal: neto × 16%).
+  // tenant y subtotal, descuento en dinero, IVA y total los calcula el servidor. El IVA es el de cada producto (tasaIva) o,
+  // si no tiene, el del negocio (ivaTasaDefault); con preciosIncluyenIva el precio ya lo trae y se desglosa en vez de sumarse.
   // Antes todo eso llegaba tal cual del cliente: un mesero o un cajero podía mandar el precio o el total que quisiera.
   //  · Un producto inexistente o de otro tenant: 400 (mismo mensaje en ambos casos, no revela de quién es).
   //  · Descuento: entre 0 y 100; mayor a cero solo para ADMIN/GERENTE/CAPITAN/CAJERO (igual que PUT /discount).
@@ -157,9 +159,8 @@ export class SalesService {
     if (!Array.isArray(items) || items.length === 0) {
       throw new BadRequestException('Se requiere al menos un ítem.');
     }
+    const cfg = await this.tenantSettingsService.getIvaConfig(tenantId);
     const salida: SaleItem[] = [];
-    let subtotal = 0;
-    let descuento = 0;
     for (const [i, it] of items.entries()) {
       const cantidad = Number(it?.cantidad);
       if (!it || typeof it.productoId !== 'string' || !it.productoId || !Number.isFinite(cantidad) || !(cantidad > 0)) {
@@ -186,18 +187,16 @@ export class SalesService {
       const p = await this.productRepo.findOne({ where: { id: it.productoId, tenantId } });
       if (!p) throw new BadRequestException(`Producto no encontrado: ${it.productoId}`);
       const precioUnitario = this.round2(Number(p.price) || 0);
-      const bruto = this.round2(precioUnitario * cantidad);
-      const desc = this.round2((bruto * pct) / 100);
-      const { notaCocinaId: _n, anulado: _a, ...limpio } = it;
-      salida.push({ ...limpio, productoId: it.productoId, nombre: p.name, cantidad, precioUnitario, descuento: pct, subtotal: this.round2(bruto - desc) });
-      subtotal += bruto;
-      descuento += desc;
+      const tasaIva: TasaIva = isValidTasaIva(p.tasaIva) ? p.tasaIva : cfg.ivaTasaDefault;
+      const ivaIncluido = cfg.preciosIncluyenIva;
+      const montoLinea = montoDeItem({ cantidad, precioUnitario, descuento: pct });
+      // subtotal de la línea = SIN IVA (con precios que incluyen IVA se desglosa; sin IVA incluido es el neto de siempre).
+      const subtotalLinea = ivaIncluido ? this.round2(montoLinea / (1 + tasaNumerica(tasaIva))) : montoLinea;
+      const { notaCocinaId: _n, anulado: _a, tasaIva: _t, ivaIncluido: _i, ...limpio } = it;
+      salida.push({ ...limpio, productoId: it.productoId, nombre: p.name, cantidad, precioUnitario, descuento: pct, subtotal: subtotalLinea, tasaIva, ivaIncluido });
     }
-    subtotal = this.round2(subtotal);
-    descuento = this.round2(descuento);
-    const neto = this.round2(subtotal - descuento);
-    const impuestos = calcularIva(neto);
-    return { items: salida, subtotal, descuento, impuestos, total: this.round2(neto + impuestos) };
+    const t = totalesDeItems(salida);
+    return { items: salida, subtotal: t.subtotal, descuento: t.descuento, impuestos: t.impuestos, total: t.total };
   }
 
   // Formas de pago de una venta que nace PAGADA: solo los campos conocidos; quién cobró y desde dónde se estampa del token
@@ -1046,8 +1045,6 @@ export class SalesService {
     const notasCocinaHabilitada = await this.tenantSettingsService.hasPosCapability(t, 'notas_cocina_barra');
     await this.checkStockAvailability(nuevos, t, ventaServicioHabilitada);
     const costoNuevos = await this.calculateCostoReal(nuevos, t, ventaServicioHabilitada);
-    const deltaSubtotal = this.round2(nuevos.reduce((s, it) => s + it.subtotal, 0));
-    const deltaImpuestos = calcularIva(deltaSubtotal); // el IVA lo calcula el servidor, no el cliente
 
     let lowStockInsumos: LowStockInsumo[] = [];
     const actualizada = await this.dataSource.transaction(async (manager) => {
@@ -1064,11 +1061,15 @@ export class SalesService {
         nuevosMarcados = nuevos.map((it, i) => (notaIds[i] ? { ...it, notaCocinaId: notaIds[i] as string } : it));
       }
 
+      // Se suma lo NUEVO con su propio IVA (la tasa de cada ítem, ya estampada por calcularImportes); lo que ya estaba en la
+      // cuenta —incluido su descuento de cuenta— no se toca.
+      const delta = totalesDeItems(nuevos);
       await manager.update(Sale, id, {
         items: [...(sale.items || []), ...nuevosMarcados],
-        subtotal: this.round2(Number(sale.subtotal) + deltaSubtotal),
-        impuestos: this.round2(Number(sale.impuestos) + deltaImpuestos),
-        total: this.round2(Number(sale.total) + deltaSubtotal + deltaImpuestos),
+        subtotal: this.round2(Number(sale.subtotal) + delta.subtotal),
+        descuento: this.round2(Number(sale.descuento) + delta.descuento),
+        impuestos: this.round2(Number(sale.impuestos) + delta.impuestos),
+        total: this.round2(Number(sale.total) + delta.total),
         costoReal: this.round2(Number(sale.costoReal) + costoNuevos),
       });
       return manager.findOne(Sale, { where: { id } });
@@ -1118,11 +1119,16 @@ export class SalesService {
         throw new BadRequestException(`El ítem ${idx} ya fue cobrado: no se puede quitar.`);
       }
 
-      const subtotalActual = Number(sale.subtotal);
-      const nuevoSubtotal = this.round2(subtotalActual - Number(linea.subtotal));
-      const proporcion = subtotalActual > 0 ? nuevoSubtotal / subtotalActual : 0;
-      const nuevoTotal = this.round2(Number(sale.total) * proporcion);
-      const nuevoImpuestos = this.round2(Number(sale.impuestos) * proporcion);
+      // La cuenta baja en proporción a lo que pesa la línea CON su IVA (conserva el descuento de cuenta ya aplicado); el
+      // impuesto baja según la parte de IVA de esa línea, así quitar un ítem exento no mueve el IVA de los demás.
+      const vivos = items.filter((it) => !it.anulado);
+      const pesoVivos = vivos.reduce((s, it) => s + pesoDeItem(it), 0);
+      const impVivos = vivos.reduce((s, it) => s + pesoImpuestoDeItem(it), 0);
+      const nuevoSubtotal = this.round2(Number(sale.subtotal) - Number(linea.subtotal));
+      const pTotal = pesoVivos > 0 ? (pesoVivos - pesoDeItem(linea)) / pesoVivos : 0;
+      const pImp = impVivos > 0 ? (impVivos - pesoImpuestoDeItem(linea)) / impVivos : 0;
+      const nuevoTotal = this.round2(Number(sale.total) * pTotal);
+      const nuevoImpuestos = this.round2(Number(sale.impuestos) * pImp);
       const pagado = this.sumPagos(pagos);
       if (nuevoTotal < pagado) {
         throw new BadRequestException(`No se puede quitar el ítem: el nuevo total (${nuevoTotal}) quedaría por debajo de lo ya cobrado (${pagado}).`);
@@ -1238,9 +1244,11 @@ export class SalesService {
           }
         }
         const vivos = items.filter((it) => !it.anulado);
-        const sumaItems = vivos.reduce((s, it) => s + (Number(it.subtotal) || 0), 0);
+        // Cada línea pesa lo que cuesta CON su IVA: con tasas distintas (o precios con IVA incluido) repartir por el
+        // subtotal sin IVA cobraría de más o de menos a quien paga la línea exenta.
+        const sumaItems = vivos.reduce((s, it) => s + pesoDeItem(it), 0);
         const factor = sumaItems > 0 ? total / sumaItems : 1;
-        const seleccion = this.round2(indices.reduce((s, idx) => s + (Number(items[idx].subtotal) || 0), 0) * factor);
+        const seleccion = this.round2(indices.reduce((s, idx) => s + pesoDeItem(items[idx]), 0) * factor);
         const quedanSinCobrar = vivos.length - yaPagados.size - indices.length;
         monto = quedanSinCobrar === 0 ? saldo : seleccion;
       } else if (data.monto !== undefined) {
@@ -1490,10 +1498,11 @@ export class SalesService {
           throw new BadRequestException('El nuevo total no puede ser mayor al total actual de la cuenta.');
         }
 
-        // Importe sin descuento de la cuenta (total con IVA que ve el cliente). El total siempre es base − descuento, así que
-        // nuevoTotal tiene que cuadrar con descuento: si no, el tope por rol se evadiría mandando un descuento chico y un
-        // total en cero.
-        const base = this.round2(Number(sale.total) + Number(sale.descuento ?? 0));
+        // Importe sin descuento de la cuenta (total con IVA que ve el cliente), recalculado desde sus ítems con la tasa con
+        // que se vendieron. nuevoTotal tiene que cuadrar con descuento: si no, el tope por rol se evadiría mandando un
+        // descuento chico y un total en cero. Una venta sin ítems (dato viejo) cae al total + descuento guardados.
+        const pre = totalesDeItems(sale.items || []);
+        const base = pre.total > 0 ? pre.total : this.round2(Number(sale.total) + Number(sale.descuento ?? 0));
         const esperado = this.round2(base - desc);
         if (Math.abs(esperado - nuevo) > 0.01) {
           throw new BadRequestException(`El nuevo total (${nuevo}) no cuadra con el descuento: ${base} − ${desc} = ${esperado}.`);
@@ -1503,8 +1512,15 @@ export class SalesService {
           throw new ForbiddenException(this.mensajeTopeDescuento(actor.roleCode, tope, base > 0 ? (desc / base) * 100 : 100));
         }
 
+        // El descuento de cuenta es sobre el total con IVA: el IVA baja en la misma proporción (igual que si cada ítem
+        // hubiera llevado ese descuento), y `descuento` queda en base sin IVA, así subtotal − descuento + impuestos = total.
+        const k = base > 0 ? esperado / base : 0;
+        const impuestosPre = pre.total > 0 ? pre.impuestos : Number(sale.impuestos) || 0;
+        const subtotalPre = pre.total > 0 ? pre.subtotal : Number(sale.subtotal) || 0;
+        const impuestosNuevos = this.round2(impuestosPre * k);
         await manager.update(Sale, id, {
-          descuento: desc,
+          descuento: this.round2(subtotalPre - (esperado - impuestosNuevos)),
+          impuestos: impuestosNuevos,
           total: esperado,
         });
 

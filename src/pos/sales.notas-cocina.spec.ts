@@ -94,7 +94,7 @@ describe('SalesService.create() — generación de NotaCocina', () => {
         { provide: getRepositoryToken(TenantSetting), useValue: tenantSettingRepo },
         { provide: DataSource, useValue: dataSource },
         { provide: InsumoAlertsService, useValue: {} },
-        { provide: TenantSettingsService, useValue: { hasPosCapability } },
+        { provide: TenantSettingsService, useValue: { getIvaConfig: jest.fn(() => Promise.resolve({ ivaTasaDefault: '16', preciosIncluyenIva: false })), hasPosCapability } },
         { provide: AppointmentsService, useValue: {} },
         { provide: CostsService, useValue: { createJustifiable: jest.fn() } },
       ],

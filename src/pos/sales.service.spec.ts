@@ -51,7 +51,7 @@ describe('SalesService.resolveActiveInsumo() — resolución de cadena de reempl
         { provide: getRepositoryToken(TenantSetting), useValue: {} },
         { provide: DataSource, useValue: {} },
         { provide: InsumoAlertsService, useValue: {} },
-        { provide: TenantSettingsService, useValue: {} },
+        { provide: TenantSettingsService, useValue: { getIvaConfig: jest.fn(() => Promise.resolve({ ivaTasaDefault: '16', preciosIncluyenIva: false })) } },
         { provide: AppointmentsService, useValue: {} },
         { provide: CostsService, useValue: { createJustifiable: jest.fn() } },
       ],

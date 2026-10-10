@@ -41,6 +41,7 @@ describe('SalesService.returnSale() — devolución total', () => {
   let failRestoreOn: string | null;
   let failMermaWrite: boolean;
   let nextId: number;
+  let ivaCfg: { ivaTasaDefault: string; preciosIncluyenIva: boolean };
 
   type Service = SalesService;
 
@@ -151,6 +152,7 @@ describe('SalesService.returnSale() — devolución total', () => {
     caps = {};
     politicas = {};
     nextId = 0;
+    ivaCfg = { ivaTasaDefault: '16', preciosIncluyenIva: false };
     failRestoreOn = null;
     failMermaWrite = false;
     ventas = new Map();
@@ -216,7 +218,7 @@ describe('SalesService.returnSale() — devolución total', () => {
         { provide: getRepositoryToken(TenantSetting), useValue: { findOne: jest.fn(() => Promise.resolve(null)) } },
         { provide: DataSource, useValue: dataSource },
         { provide: InsumoAlertsService, useValue: { upsert: jest.fn() } },
-        { provide: TenantSettingsService, useValue: { hasPosCapability: jest.fn((_t: string, cap: string) => Promise.resolve(!!caps[cap])), getPoliticaDevoluciones: jest.fn((t: string) => Promise.resolve(politicas[t] ?? 'SOLO_GERENTE')) } },
+        { provide: TenantSettingsService, useValue: { getIvaConfig: jest.fn(() => Promise.resolve({ ...ivaCfg })), hasPosCapability: jest.fn((_t: string, cap: string) => Promise.resolve(!!caps[cap])), getPoliticaDevoluciones: jest.fn((t: string) => Promise.resolve(politicas[t] ?? 'SOLO_GERENTE')) } },
       ],
     }).compile();
     sales = module.get(SalesService);
@@ -613,4 +615,71 @@ describe('SalesService.returnSale() — devolución total', () => {
       await expect(sales.getPoliticaDevolucionesParaUsuario(undefined, CAJERO)).rejects.toThrow(ForbiddenException);
     });
   });
+
+  // ── IVA configurable: la devolución usa la tasa con la que se VENDIÓ ─────────────────────────────────────
+  describe('IVA configurable — devolución y corte', () => {
+    beforeEach(() => {
+      PRODUCTS['p-exento'] = { id: 'p-exento', type: 'SIMPLE', insumoId: 'ins-1', recipeId: null, tenantId: TENANT_A, name: 'Exento', price: 100, esServicio: false, tasaIva: 'EXENTO' };
+    });
+    afterEach(() => { delete PRODUCTS['p-exento']; });
+
+    const vendeReal = (items: any[], monto: number, extra: Record<string, any> = {}) =>
+      sales.create({
+        items, subtotal: 1, descuento: 0, impuestos: 0, total: 1, formasPago: [{ forma: 'EFECTIVO', monto }],
+        cajero: 'cajero-1', turnoId: 'turno-1', sucursalId: 'sucursal-A', tenantId: TENANT_A, folio: `VTA-${++nextId}`, ...extra,
+      } as any, { id: 'u-cajero', email: 'cajero@erp', roleCode: 'CAJERO' });
+    const taco = (cantidad: number) => ({ productoId: 'p-simple', nombre: 'x', cantidad, precioUnitario: 1, descuento: 0, subtotal: 1 });
+
+    it('vendida al 8 % y devuelta con el negocio ya en 16 %: la devolución es de $108 con IVA $8 (la tasa de venta, no la vigente)', async () => {
+      ivaCfg = { ivaTasaDefault: '8', preciosIncluyenIva: false };
+      const v = await vendeReal([taco(2)], 108);
+      expect(ventas.get(v.id)).toMatchObject({ subtotal: 100, impuestos: 8, total: 108 });
+      ivaCfg = { ivaTasaDefault: '16', preciosIncluyenIva: false };
+      const dev: any = await sales.returnSale(v.id, { motivo: 'cambio de tasa' }, TENANT_A, GERENTE);
+      expect(dev).toMatchObject({ status: 'DEVOLUCION', subtotal: 100, impuestos: 8, total: 108 });
+      expect(dev.items[0]).toMatchObject({ tasaIva: '8', ivaIncluido: false });
+      expect(dev.formasPago[0]).toMatchObject({ forma: 'EFECTIVO', monto: 108 });
+    });
+
+    it('vendida con IVA incluido y devuelta después con el negocio sin IVA incluido: regresa lo mismo, $100 (base 86.21 + IVA 13.79)', async () => {
+      ivaCfg = { ivaTasaDefault: '16', preciosIncluyenIva: true };
+      const v = await vendeReal([taco(2)], 100);
+      ivaCfg = { ivaTasaDefault: '16', preciosIncluyenIva: false };
+      const dev: any = await sales.returnSale(v.id, { motivo: 'x' }, TENANT_A, GERENTE);
+      expect(dev).toMatchObject({ subtotal: 86.21, impuestos: 13.79, total: 100 });
+      expect(dev.items[0]).toMatchObject({ ivaIncluido: true });
+    });
+
+    it('corte Z: venta al 16 % ($116) y al 8 % ($108) más la devolución de la de 8 % → IVA trasladado 16, efectivo 116, devoluciones 108', async () => {
+      const a = await vendeReal([taco(2)], 116); // 16 %
+      ivaCfg = { ivaTasaDefault: '8', preciosIncluyenIva: false };
+      const b = await vendeReal([taco(2)], 108); // 8 %
+      await sales.returnSale(b.id, { motivo: 'x' }, TENANT_A, GERENTE);
+      ivaCfg = { ivaTasaDefault: '16', preciosIncluyenIva: false }; // vuelve a 16 antes del corte: no debe cambiar nada
+      const cierre: any = await shiftsService.closeShift('turno-1', {}, TENANT_A);
+      expect(cierre).toMatchObject({ totalVentas: 224, totalEfectivo: 116, totalDevoluciones: 108 });
+      expect(cierre.iva.porTasa['16']).toEqual({ base: 100, impuestos: 16 });
+      expect(cierre.iva.porTasa['8']).toEqual({ base: 0, impuestos: 0 }); // 8 vendido − 8 devuelto
+      expect(cierre.iva.totalImpuestos).toBe(16);
+      expect(ventas.get(a.id).status).toBe('PAGADA');
+    });
+
+    it('un producto exento se devuelve sin IVA: 1 × $100 → devolución $100, IVA 0, y el corte lo muestra como exento', async () => {
+      const v = await vendeReal([{ ...taco(1), productoId: 'p-exento' }], 100);
+      const dev: any = await sales.returnSale(v.id, { motivo: 'x' }, TENANT_A, GERENTE);
+      expect(dev).toMatchObject({ subtotal: 100, impuestos: 0, total: 100 });
+      expect(dev.items[0].tasaIva).toBe('EXENTO');
+      const cierre: any = await shiftsService.closeShift('turno-1', {}, TENANT_A);
+      expect(cierre.iva.porTasa.EXENTO).toEqual({ base: 0, impuestos: 0 }); // vendido 100 − devuelto 100
+      expect(cierre.iva.totalImpuestos).toBe(0);
+    });
+
+    it('aislamiento de tenant: otro tenant no devuelve la venta aunque su configuración de IVA sea distinta', async () => {
+      const v = await vendeReal([taco(2)], 116);
+      await expect(sales.returnSale(v.id, { motivo: 'x' }, TENANT_B, GERENTE)).rejects.toThrow();
+      expect(ventas.get(v.id).status).toBe('PAGADA');
+      expect(devoluciones()).toHaveLength(0);
+    });
+  });
+
 });

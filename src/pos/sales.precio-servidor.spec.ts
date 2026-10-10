@@ -45,6 +45,8 @@ describe('SalesService.create — POS normal: precio, descuento, IVA y total los
   let politicaCobro: PoliticaCobro;
   let politicaDivision: PoliticaDivision;
   let nextId: number;
+  let ivaCfg: { ivaTasaDefault: string; preciosIncluyenIva: boolean }; // IVA del negocio que devuelve el mock de settings
+  let ivaCfgPorTenant: Record<string, { ivaTasaDefault: string; preciosIncluyenIva: boolean }>; // por tenant (gana sobre ivaCfg)
 
   const matches = (row: any, where: any) =>
     Object.entries(where || {}).every(([k, v]: [string, any]) => {
@@ -161,6 +163,8 @@ const ITEM_SIN_COCINA = { productoId: 'p-simple', nombre: 'Taco', cantidad: 2, p
     politicaCobro = 'SOLO_CAJA';
     politicaDivision = 'GERENTE_CAPITAN_CAJERO';
     nextId = 0;
+    ivaCfg = { ivaTasaDefault: '16', preciosIncluyenIva: false };
+    ivaCfgPorTenant = {};
     ventas = new Map();
     turnos = new Map([['turno-1', turnoAbierto('turno-1')]]);
     mesas = new Map([
@@ -227,6 +231,7 @@ const ITEM_SIN_COCINA = { productoId: 'p-simple', nombre: 'Taco', cantidad: 2, p
           provide: TenantSettingsService,
           useValue: {
             hasPosCapability: jest.fn((_t: string, cap: string) => Promise.resolve(!!caps[cap])),
+            getIvaConfig: jest.fn((t: string) => Promise.resolve({ ...(ivaCfgPorTenant[t] ?? ivaCfg) })),
             getPoliticaCobro: jest.fn(() => Promise.resolve(politicaCobro)),
             getPoliticaDivisionCuentas: jest.fn(() => Promise.resolve(politicaDivision)),
             getPoliticaDevoluciones: jest.fn(() => Promise.resolve('SOLO_GERENTE')),
@@ -454,4 +459,130 @@ const ITEM_SIN_COCINA = { productoId: 'p-simple', nombre: 'Taco', cantidad: 2, p
       sinNada();
     });
   });
+
+  // ── IVA configurable: por negocio, por producto, incluido o no ───────────────────────────────────────────
+  // Productos de prueba: p-simple $50 (sin tasa propia), p-iva8 $100 (8 %), p-iva0 $100 (0 %), p-exento $100 (exento).
+  describe('IVA configurable', () => {
+    beforeEach(() => {
+      PRODUCTS['p-simple'].price = 50; // un test anterior (precio que subió offline) lo deja en 60
+      Object.assign(PRODUCTS, {
+        'p-iva8': { id: 'p-iva8', type: 'SIMPLE', insumoId: 'ins-1', recipeId: null, tenantId: TENANT_A, name: 'Al 8%', price: 100, esServicio: false, tasaIva: '8' },
+        'p-iva0': { id: 'p-iva0', type: 'SIMPLE', insumoId: 'ins-1', recipeId: null, tenantId: TENANT_A, name: 'Al 0%', price: 100, esServicio: false, tasaIva: '0' },
+        'p-exento': { id: 'p-exento', type: 'SIMPLE', insumoId: 'ins-1', recipeId: null, tenantId: TENANT_A, name: 'Exento', price: 100, esServicio: false, tasaIva: 'EXENTO' },
+      });
+    });
+    afterEach(() => { for (const k of ['p-iva8', 'p-iva0', 'p-exento']) delete PRODUCTS[k]; });
+
+    const cobrarTodo = (total: number) => [{ forma: 'EFECTIVO', monto: total }];
+
+    describe('tasa por defecto del negocio (precios SIN IVA: el servidor lo suma)', () => {
+      it('compatibilidad: un negocio sin configuración queda en 16 % — 2 × $50 → subtotal 100, IVA 16, total 116', async () => {
+        const v = await vender(erp('CAJERO'), [linea('p-simple', 2)], cobrarTodo(116));
+        expect(venta(v.id)).toMatchObject({ subtotal: 100, descuento: 0, impuestos: 16, total: 116 });
+        expect(venta(v.id).items[0]).toMatchObject({ tasaIva: '16', ivaIncluido: false, subtotal: 100 });
+      });
+
+      it.each([
+        ['8', 8, 108],
+        ['0', 0, 100],
+        ['EXENTO', 0, 100],
+      ])('tasa %s: 2 × $50 → IVA %s, total %s', async (tasa, iva, total) => {
+        ivaCfg = { ivaTasaDefault: tasa, preciosIncluyenIva: false };
+        const v = await vender(erp('CAJERO'), [linea('p-simple', 2)], cobrarTodo(total));
+        expect(venta(v.id)).toMatchObject({ subtotal: 100, descuento: 0, impuestos: iva, total });
+        expect(venta(v.id).items[0]).toMatchObject({ tasaIva: tasa, ivaIncluido: false });
+      });
+
+      it('el pago que no cubre el total con la tasa del negocio se rechaza: con 8 % el total es 108, no 116', async () => {
+        ivaCfg = { ivaTasaDefault: '8', preciosIncluyenIva: false };
+        await expect(vender(erp('CAJERO'), [linea('p-simple', 2)], cobrarTodo(100))).rejects.toThrow(/no cubren el total/);
+        sinNada();
+      });
+    });
+
+    describe('tasa propia del producto (reemplaza la del negocio)', () => {
+      it('p-iva8 con el negocio al 16 %: 1 × $100 → IVA 8, total 108', async () => {
+        const v = await vender(erp('CAJERO'), [linea('p-iva8', 1)], cobrarTodo(108));
+        expect(venta(v.id)).toMatchObject({ subtotal: 100, impuestos: 8, total: 108 });
+        expect(venta(v.id).items[0].tasaIva).toBe('8');
+      });
+
+      it('p-iva0 y p-exento: sin IVA y cada uno conserva su tasa para el desglose', async () => {
+        const v = await vender(erp('CAJERO'), [linea('p-iva0', 1), linea('p-exento', 1)], cobrarTodo(200));
+        expect(venta(v.id)).toMatchObject({ subtotal: 200, impuestos: 0, total: 200 });
+        expect(venta(v.id).items.map((i: any) => i.tasaIva)).toEqual(['0', 'EXENTO']);
+      });
+
+      it('la tasa que mande el cliente en la línea se descarta: la del producto o la del negocio', async () => {
+        const v = await vender(erp('CAJERO'), [{ ...linea('p-simple', 2), tasaIva: '0', ivaIncluido: true }], cobrarTodo(116));
+        expect(venta(v.id).items[0]).toMatchObject({ tasaIva: '16', ivaIncluido: false });
+        expect(venta(v.id).impuestos).toBe(16);
+      });
+    });
+
+    describe('mezcla de productos con distinta tasa', () => {
+      it('16 % + 8 % + exento: subtotal 300, IVA 16 + 8 + 0 = 24, total 324', async () => {
+        const v = await vender(erp('CAJERO'), [linea('p-simple', 2), linea('p-iva8', 1), linea('p-exento', 1)], cobrarTodo(324));
+        expect(venta(v.id)).toMatchObject({ subtotal: 300, descuento: 0, impuestos: 24, total: 324 });
+      });
+
+      it('con descuento del 10 % en dos líneas: neto 90 + 90 + 100, IVA 14.40 + 7.20 + 0 = 21.60, total 301.60', async () => {
+        const v = await vender(erp('GERENTE'), [linea('p-simple', 2, 10), linea('p-iva8', 1, 10), linea('p-exento', 1)], cobrarTodo(301.6));
+        expect(venta(v.id)).toMatchObject({ subtotal: 300, descuento: 20, impuestos: 21.6, total: 301.6 });
+        expect(venta(v.id).items.map((i: any) => [i.tasaIva, i.subtotal])).toEqual([['16', 90], ['8', 90], ['EXENTO', 100]]);
+      });
+    });
+
+    describe('precios que INCLUYEN IVA: el servidor lo desglosa', () => {
+      beforeEach(() => { ivaCfg = { ivaTasaDefault: '16', preciosIncluyenIva: true }; });
+
+      it('2 × $50 con IVA incluido al 16 %: el cliente paga 100; base 86.21 + IVA 13.79', async () => {
+        const v = await vender(erp('CAJERO'), [linea('p-simple', 2)], cobrarTodo(100));
+        expect(venta(v.id)).toMatchObject({ subtotal: 86.21, descuento: 0, impuestos: 13.79, total: 100 });
+        expect(venta(v.id).items[0]).toMatchObject({ precioUnitario: 50, subtotal: 86.21, tasaIva: '16', ivaIncluido: true });
+      });
+
+      it('el total no cambia con el IVA: pagar 116 por lo que vale 100 es cambio, no un cobro de más', async () => {
+        const v = await vender(erp('CAJERO'), [linea('p-simple', 2)], cobrarTodo(116));
+        expect(venta(v.id).total).toBe(100);
+        expect(venta(v.id).formasPago[0]).toMatchObject({ monto: 100, montoRecibido: 116, cambio: 16 });
+      });
+
+      it('mezcla con IVA incluido: 100 al 16 % + 100 al 8 % + 100 exento → base 278.80, IVA 13.79 + 7.41 + 0, total 300', async () => {
+        const v = await vender(erp('CAJERO'), [linea('p-simple', 2), linea('p-iva8', 1), linea('p-exento', 1)], cobrarTodo(300));
+        expect(venta(v.id)).toMatchObject({ subtotal: 278.8, impuestos: 21.2, total: 300 });
+      });
+
+      it('con descuento del 10 %: 100 → 90 con IVA incluido; base 77.59 + IVA 12.41 = 90; descuento en base 8.62', async () => {
+        const v = await vender(erp('GERENTE'), [linea('p-simple', 2, 10)], cobrarTodo(90));
+        expect(venta(v.id)).toMatchObject({ subtotal: 86.21, descuento: 8.62, impuestos: 12.41, total: 90 });
+        // subtotal − descuento + impuestos = total
+        expect(86.21 - 8.62 + 12.41).toBeCloseTo(90, 2);
+      });
+
+      it('p-iva0 con IVA incluido no desglosa nada: 100 → base 100, IVA 0', async () => {
+        const v = await vender(erp('CAJERO'), [linea('p-iva0', 1)], cobrarTodo(100));
+        expect(venta(v.id)).toMatchObject({ subtotal: 100, impuestos: 0, total: 100 });
+      });
+    });
+
+    it('la tasa de una venta queda guardada: cambiar la configuración después no la modifica', async () => {
+      const v = await vender(erp('CAJERO'), [linea('p-simple', 2)], cobrarTodo(116));
+      ivaCfg = { ivaTasaDefault: '8', preciosIncluyenIva: true };
+      expect(venta(v.id)).toMatchObject({ impuestos: 16, total: 116 });
+      expect(venta(v.id).items[0]).toMatchObject({ tasaIva: '16', ivaIncluido: false });
+    });
+
+    it('aislamiento de tenant: la configuración de IVA de un negocio no afecta a otro', async () => {
+      ivaCfgPorTenant[TENANT_A] = { ivaTasaDefault: '8', preciosIncluyenIva: false };
+      ivaCfgPorTenant[TENANT_B] = { ivaTasaDefault: '0', preciosIncluyenIva: false };
+      turnos.set('turno-B', turnoAbierto('turno-B', { tenantId: TENANT_B }));
+      const a = await vender(erp('CAJERO'), [linea('p-simple', 2)], cobrarTodo(108));
+      expect(venta(a.id)).toMatchObject({ impuestos: 8, total: 108 });
+      const b = await vender(erp('CAJERO'), [linea('p-B', 1)], cobrarTodo(10), { tenantId: TENANT_B, turnoId: 'turno-B' });
+      expect(venta(b.id)).toMatchObject({ tenantId: TENANT_B, impuestos: 0, total: 10 });
+      expect(venta(b.id).items[0].tasaIva).toBe('0');
+    });
+  });
+
 });

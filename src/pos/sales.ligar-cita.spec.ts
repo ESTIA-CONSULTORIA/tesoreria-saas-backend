@@ -104,7 +104,7 @@ describe('SalesService — capacidad ligar_venta_a_cita', () => {
         { provide: getRepositoryToken(TenantSetting), useValue: { findOne: jest.fn().mockResolvedValue(null) } },
         { provide: DataSource, useValue: { transaction } },
         { provide: InsumoAlertsService, useValue: {} },
-        { provide: TenantSettingsService, useValue: { hasPosCapability } },
+        { provide: TenantSettingsService, useValue: { getIvaConfig: jest.fn(() => Promise.resolve({ ivaTasaDefault: '16', preciosIncluyenIva: false })), hasPosCapability } },
       ],
     }).compile();
     service = module.get(SalesService);
@@ -239,7 +239,7 @@ describe('SalesService.buscarCitasParaLigar() y AppointmentsService.searchForPos
         { provide: getRepositoryToken(TenantSetting), useValue: {} },
         { provide: DataSource, useValue: {} },
         { provide: InsumoAlertsService, useValue: {} },
-        { provide: TenantSettingsService, useValue: { hasPosCapability } },
+        { provide: TenantSettingsService, useValue: { getIvaConfig: jest.fn(() => Promise.resolve({ ivaTasaDefault: '16', preciosIncluyenIva: false })), hasPosCapability } },
       ],
     }).compile();
     service = module.get(SalesService);

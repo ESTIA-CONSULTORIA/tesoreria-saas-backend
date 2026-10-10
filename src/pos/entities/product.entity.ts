@@ -64,6 +64,11 @@ export class Product {
   @Column({ default: false })
   esServicio: boolean;
 
+  // Tasa de IVA propia del producto ('16' | '8' | '0' | 'EXENTO'). null = usa la del negocio (ivaTasaDefault).
+  // Columna NUEVA y NULLABLE: ver iva-producto-migration.sql en la raíz (se corre antes de desplegar este código).
+  @Column({ type: 'varchar', length: 10, nullable: true })
+  tasaIva: string | null;
+
   @Column({ type: 'timestamp', default: () => 'CURRENT_TIMESTAMP' })
   createdAt: Date;
 

@@ -53,6 +53,8 @@ describe('Ventas offline fallidas — evaluar, registrar al precio vigente, desc
   let politicaCobro: PoliticaCobro;
   let politicaDivision: PoliticaDivision;
   let nextId: number;
+  let ivaCfg: { ivaTasaDefault: string; preciosIncluyenIva: boolean }; // IVA del negocio que devuelve el mock de settings
+  let ivaCfgPorTenant: Record<string, { ivaTasaDefault: string; preciosIncluyenIva: boolean }>; // por tenant (gana sobre ivaCfg)
 
   const matches = (row: any, where: any) =>
     Object.entries(where || {}).every(([k, v]: [string, any]) => {
@@ -169,6 +171,8 @@ const ITEM_SIN_COCINA = { productoId: 'p-simple', nombre: 'Taco', cantidad: 2, p
     politicaCobro = 'SOLO_CAJA';
     politicaDivision = 'GERENTE_CAPITAN_CAJERO';
     nextId = 0;
+    ivaCfg = { ivaTasaDefault: '16', preciosIncluyenIva: false };
+    ivaCfgPorTenant = {};
     PRODUCTS['p-simple'].price = 50;
     ventas = new Map();
     turnos = new Map([['turno-1', turnoAbierto('turno-1')]]);
@@ -238,6 +242,7 @@ const ITEM_SIN_COCINA = { productoId: 'p-simple', nombre: 'Taco', cantidad: 2, p
           provide: TenantSettingsService,
           useValue: {
             hasPosCapability: jest.fn((_t: string, cap: string) => Promise.resolve(!!caps[cap])),
+            getIvaConfig: jest.fn((t: string) => Promise.resolve({ ...(ivaCfgPorTenant[t] ?? ivaCfg) })),
             getPoliticaCobro: jest.fn(() => Promise.resolve(politicaCobro)),
             getPoliticaDivisionCuentas: jest.fn(() => Promise.resolve(politicaDivision)),
             getPoliticaDevoluciones: jest.fn(() => Promise.resolve('SOLO_GERENTE')),

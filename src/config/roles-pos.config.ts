@@ -24,7 +24,4 @@ export const ROLES_CORTESIA = ['ADMIN', 'GERENTE'];
 export const TOPE_DESCUENTO_PCT: Record<string, number> = { CAJERO: 10, CAPITAN: 20 };
 export const topeDescuentoPct = (rol?: string): number => TOPE_DESCUENTO_PCT[rol ?? ''] ?? Number.POSITIVE_INFINITY;
 
-// IVA del POS (el mismo 16% del POS normal del frontend: precios sin IVA, IVA sobre el neto). Las cuentas abiertas lo
-// calculan en el SERVIDOR con esta tasa; el cliente no decide ni precio ni impuesto.
-export const IVA_TASA = 0.16;
-export const calcularIva = (neto: number): number => Math.round(neto * IVA_TASA * 100) / 100;
+// El IVA ya no es una constante: lo configura cada tenant (y opcionalmente cada producto). Ver config/iva.config.ts.

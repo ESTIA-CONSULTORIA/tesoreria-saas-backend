@@ -104,7 +104,7 @@ describe('SalesService.create() — capacidad venta_de_servicio', () => {
         { provide: getRepositoryToken(TenantSetting), useValue: tenantSettingRepo },
         { provide: DataSource, useValue: { transaction: jest.fn((cb: any) => cb(manager)) } },
         { provide: InsumoAlertsService, useValue: {} },
-        { provide: TenantSettingsService, useValue: { hasPosCapability } },
+        { provide: TenantSettingsService, useValue: { getIvaConfig: jest.fn(() => Promise.resolve({ ivaTasaDefault: '16', preciosIncluyenIva: false })), hasPosCapability } },
         { provide: AppointmentsService, useValue: {} },
         { provide: CostsService, useValue: { createJustifiable: jest.fn() } },
       ],

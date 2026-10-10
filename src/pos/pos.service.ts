@@ -6,6 +6,7 @@ import { Product } from './entities/product.entity';
 import { PosCategory } from './entities/category.entity';
 import { Branch } from '../branches/entities/branch.entity';
 import { Company } from '../companies/entities/company.entity';
+import { isValidTasaIva, TASAS_IVA } from '../config/iva.config';
 
 @Injectable()
 export class PosService {
@@ -101,6 +102,13 @@ export class PosService {
         }
         if (!estacionRaw) results.sinEstacion++;
 
+        // Columna opcional `iva`: 16 | 8 | 0 | EXENTO. Vacía = usa la tasa del negocio.
+        const ivaRaw = String(row.iva ?? row.tasaIva ?? '').trim().toUpperCase();
+        if (ivaRaw && !isValidTasaIva(ivaRaw)) {
+          results.errors.push({ row: rowNumber, message: `iva debe ser ${TASAS_IVA.join(', ')} o vacío (llegó "${row.iva ?? row.tasaIva}")` });
+          continue;
+        }
+
         // Create product
         const product = this.productRepo.create({
           name: row.nombre,
@@ -111,6 +119,7 @@ export class PosService {
           tenantId,
           branchId,
           ...(estacionRaw ? { estacionPreparacion: estacionRaw as 'COCINA' | 'BARRA' } : {}),
+          ...(ivaRaw ? { tasaIva: ivaRaw } : {}),
         });
 
         await this.productRepo.save(product);

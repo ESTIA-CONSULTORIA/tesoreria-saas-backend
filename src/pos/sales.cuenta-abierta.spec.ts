@@ -242,7 +242,7 @@ describe('SalesService — capacidad mesas_cuenta_abierta', () => {
         { provide: getRepositoryToken(TenantSetting), useValue: { findOne: jest.fn(() => Promise.resolve(stockPolicy ? { stockPolicy } : null)) } },
         { provide: DataSource, useValue: dataSource },
         { provide: InsumoAlertsService, useValue: { upsert: jest.fn() } },
-        { provide: TenantSettingsService, useValue: { hasPosCapability: jest.fn((_t: string, cap: string) => Promise.resolve(!!caps[cap])) } },
+        { provide: TenantSettingsService, useValue: { getIvaConfig: jest.fn(() => Promise.resolve({ ivaTasaDefault: '16', preciosIncluyenIva: false })), hasPosCapability: jest.fn((_t: string, cap: string) => Promise.resolve(!!caps[cap])) } },
       ],
     }).compile();
     service = module.get(SalesService);

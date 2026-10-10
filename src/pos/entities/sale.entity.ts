@@ -6,7 +6,12 @@ export interface SaleItem {
   cantidad: number;
   precioUnitario: number;
   descuento: number;
+  // Importe de la línea SIN IVA y después de su descuento por ítem (con precios que incluyen IVA, ya desglosado).
   subtotal: number;
+  // Tasa con la que se vendió la línea y si el precio del catálogo la incluía. Las pone SOLO el servidor al vender: una
+  // devolución y el corte usan estas, no la configuración vigente. Una línea sin ellas es de antes (16 %, IVA no incluido).
+  tasaIva?: string;
+  ivaIncluido?: boolean;
   // Marcas SOLO del servidor (create()/agregarItems() descartan cualquier valor que mande el
   // cliente). POS flexible, capacidad mesas_cuenta_abierta:
   //  - notaCocinaId: este ítem ya salió a cocina/barra (tiene NotaCocina emitida). Al cancelar la

@@ -4,6 +4,7 @@ import { TenantSetting } from './entities/tenant-setting.entity';
 import { Repository } from 'typeorm';
 import { DEFAULT_POS_CAPABILITIES, PosCapability } from '../config/pos-capabilities.config';
 import { PoliticaDevolucion } from '../config/politica-devoluciones.config';
+import { DEFAULT_IVA_CONFIG, IVA_KEYS, IvaConfig, isValidTasaIva, TASAS_IVA } from '../config/iva.config';
 import { isValidPoliticaValor, POLITICA_KEYS, POLITICAS_POS, PoliticaKey, PoliticaCobro, PoliticaDivision } from '../config/politicas-pos.config';
 
 @Injectable()
@@ -52,6 +53,19 @@ export class TenantSettingsService {
     return (await this.getPolitica(tenantId, 'politicaDivisionCuentas')) as PoliticaDivision;
   }
 
+  // IVA del negocio (tasa por defecto y si los precios ya lo incluyen). Sin fila, sin clave o con un valor no reconocido
+  // cae al default (16 %, IVA no incluido): todo tenant existente sigue exactamente como estaba.
+  async getIvaConfig(tenantId: string): Promise<IvaConfig> {
+    const setting = await this.findByTenant(tenantId);
+    const caps = setting?.posCapabilities ?? {};
+    const tasa = caps.ivaTasaDefault;
+    const incluye = caps.preciosIncluyenIva;
+    return {
+      ivaTasaDefault: isValidTasaIva(tasa) ? tasa : DEFAULT_IVA_CONFIG.ivaTasaDefault,
+      preciosIncluyenIva: typeof incluye === 'boolean' ? incluye : DEFAULT_IVA_CONFIG.preciosIncluyenIva,
+    };
+  }
+
   async upsert(
     tenantId: string,
     body: {
@@ -80,6 +94,8 @@ export class TenantSettingsService {
       politicaDevoluciones?: string;
       politicaCobro?: string;
       politicaDivisionCuentas?: string;
+      ivaTasaDefault?: string;
+      preciosIncluyenIva?: boolean;
     },
   ) {
     const existing = await this.findByTenant(tenantId);
@@ -102,6 +118,22 @@ export class TenantSettingsService {
       politicas[key] = valor;
     }
     const hayPoliticas = Object.keys(politicas).length > 0;
+
+    // IVA del negocio: mismo tratamiento (campo propio o dentro de posCapabilities, validado aquí, guardado en el JSON).
+    const iva: Record<string, string | boolean> = {};
+    for (const key of IVA_KEYS) {
+      const valor = bodyLibre[key] !== undefined ? bodyLibre[key] : capsLibres[key];
+      delete bodyLibre[key];
+      delete capsLibres[key];
+      if (valor === undefined) continue;
+      if (key === 'ivaTasaDefault') {
+        if (!isValidTasaIva(valor)) throw new BadRequestException(`ivaTasaDefault inválida: usa ${TASAS_IVA.join(', ')}.`);
+      } else if (typeof valor !== 'boolean') {
+        throw new BadRequestException('preciosIncluyenIva debe ser verdadero o falso.');
+      }
+      iva[key] = valor;
+    }
+    const hayIva = Object.keys(iva).length > 0;
     body = { ...bodyLibre, ...(body.posCapabilities !== undefined ? { posCapabilities: capsLibres } : {}) } as typeof body;
 
     // Merge, nunca reemplazo: posCapabilities solo guarda excepciones al default (ver
@@ -109,11 +141,12 @@ export class TenantSettingsService {
     // las otras 4 que ya estaban guardadas explícitamente en la fila. body.posCapabilities
     // es parcial a propósito (puede traer solo la capacidad que el panel está tocando).
     const mergedCapabilities =
-      body.posCapabilities !== undefined || hayPoliticas
+      body.posCapabilities !== undefined || hayPoliticas || hayIva
         ? {
             ...(existing?.posCapabilities || {}),
             ...(body.posCapabilities || {}),
             ...politicas,
+            ...iva,
           }
         : undefined;
 

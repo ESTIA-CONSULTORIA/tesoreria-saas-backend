@@ -72,7 +72,7 @@ describe('SalesService.create() — no vende ni descuenta productos de otro tena
         { provide: getRepositoryToken(TenantSetting), useValue: { findOne: jest.fn().mockResolvedValue(null) } },
         { provide: DataSource, useValue: { transaction } },
         { provide: InsumoAlertsService, useValue: {} },
-        { provide: TenantSettingsService, useValue: { hasPosCapability: jest.fn().mockResolvedValue(false) } },
+        { provide: TenantSettingsService, useValue: { getIvaConfig: jest.fn(() => Promise.resolve({ ivaTasaDefault: '16', preciosIncluyenIva: false })), hasPosCapability: jest.fn().mockResolvedValue(false) } },
         { provide: AppointmentsService, useValue: {} },
         { provide: CostsService, useValue: { createJustifiable: jest.fn() } },
       ],

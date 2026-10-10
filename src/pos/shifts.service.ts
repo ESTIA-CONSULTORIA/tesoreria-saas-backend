@@ -1,4 +1,5 @@
 import { BadRequestException, HttpException, Injectable } from '@nestjs/common';
+import { TASAS_IVA, totalesDeItems, TasaIva } from '../config/iva.config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, IsNull, Not, Repository } from 'typeorm';
 import { Shift } from './entities/shift.entity';
@@ -72,6 +73,34 @@ export class ShiftsService {
   // encontrado" que ya usa cada catch, sin cambiar el formato de error existente.
   private round2(n: number): number {
     return Math.round((n + Number.EPSILON) * 100) / 100;
+  }
+
+  // IVA trasladado del turno por tasa, con la tasa con que se VENDIÓ cada línea (la guardada en la venta, no la vigente):
+  // ventas PAGADA y DEVUELTA suman, las devoluciones (DEVOLUCION) restan. Lo que ya llevan guardado la venta (impuestos y
+  // total, con su descuento de cuenta) manda; el desglose por tasa se reparte con las líneas. Una venta sin ítems (dato muy
+  // viejo) se cuenta toda como 16 %.
+  private ivaDelTurno(ventas: Sale[], devoluciones: Sale[]) {
+    const porTasa = Object.fromEntries(TASAS_IVA.map((t) => [t, { base: 0, impuestos: 0 }])) as Record<TasaIva, { base: number; impuestos: number }>;
+    const aplicar = (sale: Sale, signo: 1 | -1) => {
+      const impVenta = Number(sale.impuestos) || 0;
+      const baseVenta = this.round2((Number(sale.total) || 0) - impVenta);
+      const t = totalesDeItems(sale.items || []);
+      if (t.total <= 0) {
+        porTasa['16'].base = this.round2(porTasa['16'].base + signo * baseVenta);
+        porTasa['16'].impuestos = this.round2(porTasa['16'].impuestos + signo * impVenta);
+        return;
+      }
+      const kImp = t.impuestos > 0 ? impVenta / t.impuestos : 0;
+      const kBase = t.base > 0 ? baseVenta / t.base : 0;
+      for (const tasa of TASAS_IVA) {
+        porTasa[tasa].base = this.round2(porTasa[tasa].base + signo * t.porTasa[tasa].base * kBase);
+        porTasa[tasa].impuestos = this.round2(porTasa[tasa].impuestos + signo * t.porTasa[tasa].impuestos * kImp);
+      }
+    };
+    for (const v of ventas) aplicar(v, 1);
+    for (const d of devoluciones) aplicar(d, -1);
+    const totalImpuestos = this.round2(TASAS_IVA.reduce((s, t) => s + porTasa[t].impuestos, 0));
+    return { totalImpuestos, porTasa };
   }
 
   // Un retiro o depósito es un monto positivo: antes un monto negativo (o un texto, que se concatenaba) movía el efectivo
@@ -295,7 +324,9 @@ export class ShiftsService {
       const cerrado = await this.shiftsRepo.findOne({ where: { id } });
       // El desglose no se guarda (Shift no tiene columna para él): se calcula de las ventas y se puede volver a pedir
       // en getSummary() también para un turno ya cerrado.
-      return cerrado ? { ...cerrado, efectivoEsperado, diferencia, efectivoPorPersona: efectivoFueraDeCaja(sales) } : cerrado;
+      return cerrado
+        ? { ...cerrado, efectivoEsperado, diferencia, iva: this.ivaDelTurno(sales, devoluciones), efectivoPorPersona: efectivoFueraDeCaja(sales) }
+        : cerrado;
     } catch (error) {
       console.error('ShiftsService.closeShift error:', error);
       if (error instanceof HttpException) throw error;
@@ -464,6 +495,11 @@ export class ShiftsService {
           totalDepositos,
           efectivoEsperado,
           diferencia,
+          // IVA trasladado por tasa (con la tasa de venta de cada línea; las devoluciones restan).
+          iva: this.ivaDelTurno(
+            sales.filter((s) => s.status === 'PAGADA' || s.status === 'DEVUELTA'),
+            sales.filter((s) => s.status === 'DEVOLUCION'),
+          ),
           // Efectivo cobrado fuera de caja (mesa), por persona: ya está incluido en efectivoEsperado.
           efectivoPorPersona: efectivoFueraDeCaja(sales),
         },

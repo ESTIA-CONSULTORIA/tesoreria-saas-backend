@@ -5,6 +5,7 @@ import { Product } from './entities/product.entity';
 import { Insumo } from '../costs/entities/insumo.entity';
 import { Recipe } from '../costs/entities/recipe.entity';
 import { resolveActiveInsumoChain } from '../costs/insumo-resolution';
+import { isValidTasaIva, TASAS_IVA } from '../config/iva.config';
 
 @Injectable()
 export class ProductsService {
@@ -88,6 +89,18 @@ export class ProductsService {
     return products;
   }
 
+  // tasaIva del producto: '16' | '8' | '0' | 'EXENTO'; null o '' = usa la tasa del negocio. Cualquier otro valor es 400. Si el
+  // body no trae el campo no se toca (así editar el nombre no depende de que la columna exista).
+  private tasaIvaSaneada(data: Partial<Product>): { tasaIva?: string | null } {
+    const v = (data as any)?.tasaIva;
+    if (v === undefined) return {};
+    if (v === null || v === '') return { tasaIva: null };
+    if (!isValidTasaIva(v)) {
+      throw new BadRequestException(`tasaIva inválida: usa ${TASAS_IVA.join(', ')} o déjala vacía para usar la del negocio.`);
+    }
+    return { tasaIva: v };
+  }
+
   // Auditoría BUSINESS (hallazgo transversal #6, continuación): findOne()/update()/delete()
   // no verificaban que el producto perteneciera al tenant de quien llama — Product sí tiene
   // tenantId propio, mismo patrón que banks.service.ts. Opcional para no romper a SOPORTE.
@@ -105,7 +118,7 @@ export class ProductsService {
     if (!tenantId) {
       throw new BadRequestException('No se puede crear un producto sin tenant.');
     }
-    const product = this.productsRepo.create({ ...data, tenantId });
+    const product = this.productsRepo.create({ ...data, tenantId, ...this.tasaIvaSaneada(data) });
     return this.productsRepo.save(product);
   }
 
@@ -118,7 +131,7 @@ export class ProductsService {
     const existing = await this.productsRepo.findOne({ where: tenantId ? { id, tenantId } : { id } });
     if (!existing) throw new NotFoundException('Producto no encontrado');
     const { tenantId: _ignoredTenantId, id: _ignoredId, ...safeData } = data as any;
-    await this.productsRepo.update(id, { ...safeData, updatedAt: new Date() });
+    await this.productsRepo.update(id, { ...safeData, ...this.tasaIvaSaneada(data), updatedAt: new Date() });
     return this.productsRepo.findOne({ where: { id } });
   }
 
