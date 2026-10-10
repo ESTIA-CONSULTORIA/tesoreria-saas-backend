@@ -9,6 +9,7 @@ import { Product } from '../pos/entities/product.entity';
 import { PosCategory } from '../pos/entities/category.entity';
 import { Sale } from '../pos/entities/sale.entity';
 import { TenantSettingsService } from '../tenant-settings/tenant-settings.service';
+import { NipThrottleService } from '../pos/nip-throttle.service';
 import { isValidTasaIva, tasaNumerica, TASAS_IVA, TasaIva } from '../config/iva.config';
 import {
   diasEntre, hashNip, hoyLocal, NIP_VALIDO, PeriodoTipo, situacionDeSocio, sumarDias, vigenteHoy,
@@ -53,6 +54,7 @@ export class MembresiasService {
     @InjectRepository(PosCategory) private categoriesRepo: Repository<PosCategory>,
     @InjectRepository(Sale) private salesRepo: Repository<Sale>,
     private tenantSettings: TenantSettingsService,
+    private nipThrottle: NipThrottleService,
   ) {}
 
   // ───────────────────────────── planes ─────────────────────────────
@@ -358,16 +360,55 @@ export class MembresiasService {
   }
 
   // ───────────────────────────── check-in ─────────────────────────────
-  async checkin(tenantId: string, d: { numero?: string; nip?: string }, actor: { email?: string; id?: string; branchId?: string | null }) {
+  // Límite de intentos FALLIDOS (el mismo limitador del login por NIP del POS, con llaves propias para que los fallos de aquí no
+  // bloqueen el login del POS): tenant + IP (10 / 15 min), tenant (40 / 15 min) y, cuando se sabe de qué socio se trata,
+  // socio + IP (5) y socio (10). Un fallo es "no existe ese socio / ese NIP" o "el NIP no es de ese socio"; una membresía vencida
+  // NO es un fallo (el socio es quien dice ser). Pasados los topes: 429.
+  //   · solo NIP            → el NIP identifica al socio (4 a 6 dígitos: es lo que hay que proteger de la fuerza bruta)
+  //   · solo número         → no es un secreto; un número que no existe cuenta como fallo (barrido de números)
+  //   · número + NIP        → el NIP debe ser de ESE socio; es la forma más estricta y la recomendada en recepción con NIP
+  async checkin(
+    tenantId: string,
+    d: { numero?: string; nip?: string },
+    actor: { email?: string; id?: string; branchId?: string | null },
+    ip = 'desconocida',
+  ) {
     const numero = String(d?.numero ?? '').trim();
     const nip = String(d?.nip ?? '').trim();
     if (!numero && !nip) throw new BadRequestException('Indica el número de socio o el NIP.');
     if (nip && !NIP_VALIDO.test(nip)) throw new BadRequestException('El NIP debe tener de 4 a 6 dígitos.');
+    const ns = `membresias:${tenantId}`; // espacio de llaves propio dentro del limitador compartido
+    this.nipThrottle.assertAllowed(ns, undefined, ip);
+
     const metodo: 'NUMERO' | 'NIP' = numero ? 'NUMERO' : 'NIP';
-    const socio = numero
-      ? await this.sociosRepo.findOne({ where: { tenantId, numeroSocio: numero } })
-      : await this.sociosRepo.findOne({ where: { tenantId, nipHash: hashNip(tenantId, nip) } });
-    if (!socio) return { permitido: false, motivo: 'Socio no encontrado.' };
+    let socio: Socio | null;
+    let nipVerificado = false;
+    if (numero) {
+      socio = await this.sociosRepo.findOne({ where: { tenantId, numeroSocio: numero } });
+      if (!socio) {
+        this.nipThrottle.registerFailure(ns, undefined, ip);
+        return { permitido: false, motivo: 'Socio no encontrado.' };
+      }
+      this.nipThrottle.assertAllowed(ns, socio.id, ip);
+      if (nip) {
+        const h = hashNip(tenantId, nip);
+        const conNip = await this.sociosRepo.findOne({ where: { tenantId, id: socio.id, nipHash: h } });
+        if (!conNip) {
+          this.nipThrottle.registerFailure(ns, socio.id, ip);
+          return { permitido: false, motivo: 'Socio o NIP incorrectos.' }; // mismo mensaje: no revela cuál falló
+        }
+        nipVerificado = true;
+      }
+    } else {
+      socio = await this.sociosRepo.findOne({ where: { tenantId, nipHash: hashNip(tenantId, nip) } });
+      if (!socio) {
+        this.nipThrottle.registerFailure(ns, undefined, ip);
+        return { permitido: false, motivo: 'Socio no encontrado.' };
+      }
+      nipVerificado = true;
+    }
+    // Un NIP verificado limpia los contadores de ese socio en esta IP (como el login del POS); el tope por negocio no se limpia.
+    if (nipVerificado) this.nipThrottle.registerSuccess(ns, socio.id, ip);
 
     const hoy = hoyLocal();
     const periodos = await this.membresiasRepo.find({ where: { tenantId, socioId: socio.id } });

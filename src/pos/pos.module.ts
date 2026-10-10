@@ -20,7 +20,7 @@ import { ShiftsController } from './shifts.controller';
 import { ShiftsService } from './shifts.service';
 import { CashiersController } from './cashiers.controller';
 import { CashiersService } from './cashiers.service';
-import { NipThrottleService } from './nip-throttle.service';
+import { NipThrottleModule } from './nip-throttle.module';
 import { CorteFieldsController } from './corte-fields.controller';
 import { CorteFieldsService } from './corte-fields.service';
 import { CorteField } from './entities/corte-field.entity';
@@ -47,6 +47,7 @@ import { Company } from '../companies/entities/company.entity';
 import { TenantSettingsModule } from '../tenant-settings/tenant-settings.module';
 import { AppointmentsModule } from '../appointments/appointments.module';
 import { MembresiasModule } from '../membresias/membresias.module';
+import { PlanMembresia } from '../membresias/entities/plan-membresia.entity';
 import { CostsModule } from '../costs/costs.module';
 
 @Module({
@@ -54,7 +55,7 @@ import { CostsModule } from '../costs/costs.module';
     // Branch/Company agregados para el hallazgo transversal #6 (auditoría BUSINESS):
     // categories.service.ts y areas.service.ts resuelven tenant vía branchId → Branch →
     // Company.tenantId, porque PosCategory/Area no tienen tenantId propio.
-    TypeOrmModule.forFeature([PosConfig, Product, PosCategory, Area, Table, Sale, Shift, Recipe, Insumo, User, CorteField, InsumoAlert, NotaCocina, Tenant, TenantSetting, Branch, Company]),
+    TypeOrmModule.forFeature([PosConfig, Product, PosCategory, Area, Table, Sale, Shift, Recipe, Insumo, User, CorteField, InsumoAlert, NotaCocina, Tenant, TenantSetting, Branch, Company, PlanMembresia]),
     // Mismo secret que AuthModule (JWT_SECRET) — cashiers.service.ts firma/verifica con
     // JwtService en vez del jsonwebtoken crudo que usaba antes de la migración a cookies.
     JwtModule.registerAsync({
@@ -74,6 +75,8 @@ import { CostsModule } from '../costs/costs.module';
     AppointmentsModule,
     // Gimnasio: cobro de membresías, beneficio de socio y cancelación por devolución (MembresiasCoreService).
     MembresiasModule,
+    // Limitador de intentos fallidos de NIP (el mismo que usa el check-in de membresías).
+    NipThrottleModule,
     // POS flexible, capacidad mesas_cuenta_abierta: SalesService registra mermas por la vía de
     // Costos (CostsService.createJustifiable) al cancelar cuentas con ítems ya enviados a cocina.
     CostsModule,
@@ -101,7 +104,6 @@ import { CostsModule } from '../costs/costs.module';
     OfflineVentasService,
     ShiftsService,
     CashiersService,
-    NipThrottleService,
     CorteFieldsService,
     InsumoAlertsService,
     NotasCocinaService,

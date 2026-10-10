@@ -100,7 +100,11 @@ export class MembresiasController {
   @Roles(...OPERA)
   @Post('checkin')
   checkin(@Body() body: { numero?: string; nip?: string }, @Request() req: any) {
-    return this.service.checkin(this.tenant(req), body ?? {}, { email: req?.user?.email, id: req?.user?.id ?? req?.user?.sub, branchId: req?.user?.branchId });
+    // Detrás del proxy de Railway req.ip es la del proxy: se prefiere el primer valor de x-forwarded-for (mismo criterio que el
+    // login por NIP del POS). Es falsificable; por eso el tope por negocio (todas las IPs) es el que frena la fuerza bruta.
+    const forwarded = String(req?.headers?.['x-forwarded-for'] || '').split(',')[0].trim();
+    const ip = forwarded || req?.ip || 'desconocida';
+    return this.service.checkin(this.tenant(req), body ?? {}, { email: req?.user?.email, id: req?.user?.id ?? req?.user?.sub, branchId: req?.user?.branchId }, ip);
   }
 
   @Roles(...OPERA)

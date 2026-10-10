@@ -11,6 +11,7 @@ import { PosCategory } from '../pos/entities/category.entity';
 import { Sale } from '../pos/entities/sale.entity';
 import { TenantSettingsService } from '../tenant-settings/tenant-settings.service';
 import { hashNip } from './membresias.util';
+import { NipThrottleService, NIP_LIMITS } from '../pos/nip-throttle.service';
 
 // MembresiasService sobre repositorios en memoria. Reloj fijo: "hoy" = 2026-10-05 (Tijuana).
 const A = 'tenant-A';
@@ -83,6 +84,7 @@ describe('MembresiasService', () => {
         { provide: getRepositoryToken(PosCategory), useValue: repoEnMemoria(categorias) },
         { provide: getRepositoryToken(Sale), useValue: repoEnMemoria(ventas) },
         { provide: TenantSettingsService, useValue: { getMembresiasConfig: jest.fn(() => Promise.resolve({ ...cfg })) } },
+        NipThrottleService,
       ],
     }).compile();
     svc = module.get(MembresiasService);
@@ -281,6 +283,16 @@ describe('MembresiasService', () => {
       expect(checkins).toHaveLength(5);
     });
 
+    it('número + NIP: el NIP debe ser de ESE socio; de otro socio o equivocado da el mismo mensaje', async () => {
+      periodo(ana.id, '2026-10-01', '2026-10-31');
+      await svc.crearSocio(A, { nombre: 'Beto', nip: '9876' });
+      expect(await svc.checkin(A, { numero: '1', nip: '4321' }, actor)).toMatchObject({ permitido: true });
+      expect(await svc.checkin(A, { numero: '1', nip: '9876' }, actor)).toEqual({ permitido: false, motivo: 'Socio o NIP incorrectos.' });
+      expect(await svc.checkin(A, { numero: '1', nip: '0000' }, actor)).toEqual({ permitido: false, motivo: 'Socio o NIP incorrectos.' });
+      // un intento con NIP equivocado no deja fila de check-in (no hay un socio verificado a quien atribuirlo)
+      expect(checkins).toHaveLength(1);
+    });
+
     it('sin número ni NIP, o NIP mal formado: 400', async () => {
       await expect(svc.checkin(A, {}, actor)).rejects.toThrow(BadRequestException);
       await expect(svc.checkin(A, { nip: '12' }, actor)).rejects.toThrow(BadRequestException);
@@ -379,4 +391,101 @@ describe('MembresiasService', () => {
       await expect(svc.ingresosPorConcepto(A, '2026-10-05', '2026-10-01')).rejects.toThrow(BadRequestException);
     });
   });
+
+  // ── límite de intentos fallidos del check-in (el limitador del login por NIP del POS, con llaves propias) ─────────────
+  describe('check-in — límite de intentos fallidos', () => {
+    const actor = { email: 'rec@gym', branchId: 'suc-1' };
+    const IP = '10.0.0.1';
+    let ana: any;
+    let throttle: NipThrottleService;
+
+    beforeEach(async () => {
+      ana = await svc.crearSocio(A, { nombre: 'Ana', nip: '4321' });
+      throttle = (svc as any).nipThrottle;
+    });
+
+    const fallarNips = async (n: number, ip = IP, tenant = A) => {
+      for (let i = 0; i < n; i++) await svc.checkin(tenant, { nip: String(1000 + i) }, actor, ip);
+    };
+    const estatus = (e: any) => e?.getStatus?.();
+
+    it(`${NIP_LIMITS.tenantIp} NIP inexistentes desde la misma IP y el siguiente intento da 429; ni el NIP correcto entra desde esa IP`, async () => {
+      periodo(ana.id, '2026-10-01', '2026-10-31');
+      await fallarNips(NIP_LIMITS.tenantIp);
+      const err: any = await svc.checkin(A, { nip: '1234' }, actor, IP).catch((e) => e);
+      expect(estatus(err)).toBe(429);
+      expect(err.message).toMatch(/Demasiados intentos fallidos/);
+      const conElBueno: any = await svc.checkin(A, { nip: '4321' }, actor, IP).catch((e) => e);
+      expect(estatus(conElBueno)).toBe(429);
+      expect(checkins).toHaveLength(0); // y no quedó ningún check-in
+    });
+
+    it('otra IP del mismo negocio sigue pudiendo entrar (varias recepciones detrás de IPs distintas no se bloquean)', async () => {
+      periodo(ana.id, '2026-10-01', '2026-10-31');
+      await fallarNips(NIP_LIMITS.tenantIp);
+      expect(await svc.checkin(A, { nip: '4321' }, actor, '10.0.0.2')).toMatchObject({ permitido: true });
+    });
+
+    it(`tope por negocio: ${NIP_LIMITS.tenant} fallos repartidos en IPs distintas bloquean a todo el negocio, no a otro negocio`, async () => {
+      periodo(ana.id, '2026-10-01', '2026-10-31');
+      for (let i = 0; i < NIP_LIMITS.tenant; i++) await svc.checkin(A, { nip: String(1000 + i) }, actor, `10.1.0.${i % 5}-${Math.floor(i / 5)}`);
+      const err: any = await svc.checkin(A, { nip: '4321' }, actor, '10.9.9.9').catch((e) => e);
+      expect(estatus(err)).toBe(429);
+      // otro negocio, misma IP: intacto
+      const beto = await svc.crearSocio(B, { nombre: 'Beto', nip: '4321' });
+      membresias.push({ id: 'mb', tenantId: B, socioId: beto.id, estado: 'ACTIVA', fechaInicio: '2026-10-01', fechaFin: '2026-10-31' });
+      expect(await svc.checkin(B, { nip: '4321' }, actor, '10.9.9.9')).toMatchObject({ permitido: true });
+    });
+
+    it(`número + NIP: ${NIP_LIMITS.userIp} NIP equivocados para el MISMO socio desde la misma IP lo bloquean; con el NIP correcto de golpe limpia`, async () => {
+      periodo(ana.id, '2026-10-01', '2026-10-31');
+      for (let i = 0; i < NIP_LIMITS.userIp; i++) {
+        expect(await svc.checkin(A, { numero: '1', nip: '000' + i }, actor, IP)).toEqual({ permitido: false, motivo: 'Socio o NIP incorrectos.' });
+      }
+      const err: any = await svc.checkin(A, { numero: '1', nip: '4321' }, actor, IP).catch((e) => e);
+      expect(estatus(err)).toBe(429);
+      // desde otra IP todavía puede (el tope del socio es por IP: 5; el del socio en total: 10)
+      expect(await svc.checkin(A, { numero: '1', nip: '4321' }, actor, '10.0.0.7')).toMatchObject({ permitido: true });
+    });
+
+    it('un NIP correcto limpia los contadores de ese socio en esa IP: se puede volver a equivocar sin bloqueo', async () => {
+      periodo(ana.id, '2026-10-01', '2026-10-31');
+      for (let i = 0; i < NIP_LIMITS.userIp - 1; i++) await svc.checkin(A, { numero: '1', nip: '000' + i }, actor, IP);
+      expect(await svc.checkin(A, { numero: '1', nip: '4321' }, actor, IP)).toMatchObject({ permitido: true });
+      for (let i = 0; i < NIP_LIMITS.userIp - 1; i++) {
+        expect(await svc.checkin(A, { numero: '1', nip: '111' + i }, actor, IP)).toMatchObject({ permitido: false });
+      }
+    });
+
+    it('un número de socio que no existe cuenta como fallo (barrido de números)', async () => {
+      for (let i = 0; i < NIP_LIMITS.tenantIp; i++) await svc.checkin(A, { numero: `9${i}` }, actor, IP);
+      const err: any = await svc.checkin(A, { numero: '1' }, actor, IP).catch((e) => e);
+      expect(estatus(err)).toBe(429);
+    });
+
+    it('una membresía vencida NO es un fallo: 30 check-ins denegados por vencida no bloquean a nadie', async () => {
+      periodo(ana.id, '2026-08-01', '2026-08-31');
+      for (let i = 0; i < 30; i++) {
+        expect(await svc.checkin(A, { numero: '1' }, actor, IP)).toMatchObject({ permitido: false });
+      }
+      expect(await svc.checkin(A, { nip: '4321' }, actor, IP)).toMatchObject({ permitido: false, motivo: expect.stringMatching(/venció/) });
+    });
+
+    it('los fallos de aquí NO bloquean el login por NIP del POS (llaves separadas en el mismo limitador)', async () => {
+      await fallarNips(NIP_LIMITS.tenantIp);
+      expect(() => throttle.assertAllowed(A, undefined, IP)).not.toThrow();
+      expect(() => throttle.assertAllowed(A, 'u-cajero', IP)).not.toThrow();
+    });
+
+    it('pasada la ventana de 15 minutos el bloqueo termina', async () => {
+      periodo(ana.id, '2026-10-01', '2026-10-31');
+      let ahora = 1_000_000;
+      throttle.now = () => ahora;
+      await fallarNips(NIP_LIMITS.tenantIp);
+      expect(estatus(await svc.checkin(A, { nip: '4321' }, actor, IP).catch((e) => e))).toBe(429);
+      ahora += 16 * 60 * 1000;
+      expect(await svc.checkin(A, { nip: '4321' }, actor, IP)).toMatchObject({ permitido: true });
+    });
+  });
+
 });

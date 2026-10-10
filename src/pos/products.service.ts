@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Product } from './entities/product.entity';
@@ -6,6 +6,7 @@ import { Insumo } from '../costs/entities/insumo.entity';
 import { Recipe } from '../costs/entities/recipe.entity';
 import { resolveActiveInsumoChain } from '../costs/insumo-resolution';
 import { isValidTasaIva, TASAS_IVA } from '../config/iva.config';
+import { PlanMembresia } from '../membresias/entities/plan-membresia.entity';
 
 @Injectable()
 export class ProductsService {
@@ -18,7 +19,23 @@ export class ProductsService {
     private insumosRepo: Repository<Insumo>,
     @InjectRepository(Recipe)
     private recipesRepo: Repository<Recipe>,
+    // Gimnasio: para no mostrar en el catálogo los productos que son planes de membresía. Opcional: sin el módulo, no oculta nada.
+    @Optional() @InjectRepository(PlanMembresia)
+    private planesRepo?: Repository<PlanMembresia>,
   ) {}
+
+  // Ids de los productos que representan un plan de membresía (se cobran desde Membresías, con socio). Si la consulta falla
+  // (la tabla aún no existe en una base sin migrar) el catálogo NO se rompe: simplemente no oculta nada.
+  private async idsProductosDePlanes(tenantId?: string): Promise<Set<string>> {
+    if (!tenantId || !this.planesRepo) return new Set();
+    try {
+      const planes = await this.planesRepo.find({ where: { tenantId }, select: ['productId'] as any });
+      return new Set(planes.map((p) => p.productId).filter((x): x is string => !!x));
+    } catch (error) {
+      this.logger.warn(`No se pudo consultar los planes de membresía para ocultar sus productos: ${(error as Error).message}`);
+      return new Set();
+    }
+  }
 
   // Ronda de seguimiento (arquitectura): la caminata de reemplazadoPorId se unificó en
   // insumo-resolution.ts (compartida con sales.service.ts/costs.service.ts) — este método
@@ -47,10 +64,12 @@ export class ProductsService {
     if (branchId) where.branchId = branchId;
     if (tenantId) where.tenantId = tenantId;
 
-    const products = await this.productsRepo.find({
+    const todos = await this.productsRepo.find({
       where,
       order: { name: 'ASC' },
     });
+    const deMembresia = await this.idsProductosDePlanes(tenantId);
+    const products = deMembresia.size > 0 ? todos.filter((p) => !deMembresia.has(p.id)) : todos;
 
     // Add stock information to each product
     for (const product of products) {

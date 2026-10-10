@@ -8,8 +8,8 @@ export class ModulesController {
   constructor(private service: ModulesService) {}
 
   @Get()
-  getAllModules() {
-    return this.service.getAllModules();
+  getAllModules(@Request() req: any) {
+    return this.service.getAllModules(req?.user?.roleCode === 'SOPORTE' ? undefined : req?.user?.tenantId);
   }
 
   // Auditoría de seguridad (Hallazgo 1a, GoodsHabits): no validaba que el tenantId de la URL

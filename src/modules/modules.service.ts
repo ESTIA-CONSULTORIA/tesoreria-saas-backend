@@ -58,8 +58,13 @@ export class ModulesService {
     await this.tenantModuleRepo.update({ tenantId, moduleCode }, { status: 'inactive' });
   }
 
-  getAllModules() {
-    return this.moduleRepo.find({ where: { isActive: true }, order: { category: 'ASC' } });
+  // Catálogo de módulos. Con `tenantId` se filtra por el giro del negocio: un restaurante no ve "Membresías" (ni un gimnasio
+  // "Pacientes") en el Centro de Soluciones, porque no se los podrían activar. Sin `tenantId` (SOPORTE) devuelve todo.
+  async getAllModules(tenantId?: string) {
+    const todos = await this.moduleRepo.find({ where: { isActive: true }, order: { category: 'ASC' } });
+    if (!tenantId) return todos;
+    const giro = await this.resolveGiro(tenantId);
+    return todos.filter((m) => moduleAllowedForGiro(m.code, giro));
   }
 
   private async resolveGiro(tenantId: string): Promise<string> {
