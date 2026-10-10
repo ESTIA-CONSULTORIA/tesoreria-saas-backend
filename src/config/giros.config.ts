@@ -13,6 +13,7 @@ export const GIROS = [
   'medico_general',
   'restaurante',
   'retail',
+  'gimnasio',
 ] as const;
 
 export type Giro = typeof GIROS[number];
@@ -31,4 +32,5 @@ export const GIRO_LABELS: Record<Giro, string> = {
   medico_general: 'Médico — General',
   restaurante: 'Restaurante',
   retail: 'Retail',
+  gimnasio: 'Gimnasio / club deportivo',
 };

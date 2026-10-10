@@ -676,7 +676,7 @@ const ITEM_SIN_COCINA = { productoId: 'p-simple', nombre: 'Taco', cantidad: 2, p
 
     it('el mesero (ERP o POS Lite) y cualquier otro rol reciben 403 y la cuenta no cambia', async () => {
       const c = await abrirCuenta(lite('MESERO'));
-      for (const actor of [lite('MESERO'), erp('MESERO'), erp('CONTADOR'), erp('SOPORTE'), {}]) {
+      for (const actor of [lite('MESERO'), erp('MESERO'), erp('CONTADOR'), erp('SOPORTE'), erp('RECEPCION'), {}]) {
         const err: any = await sales.applyDiscount(c.id, 50, 66, TENANT_A, actor as any).catch((e) => e);
         expect(err).toBeInstanceOf(ForbiddenException);
       }
@@ -723,7 +723,7 @@ const ITEM_SIN_COCINA = { productoId: 'p-simple', nombre: 'Taco', cantidad: 2, p
 
       it.each([
         ['CAJERO (ERP)', erp('CAJERO')], ['CAJERO (NIP)', lite('CAJERO')], ['CAPITAN', erp('CAPITAN')],
-        ['MESERO', erp('MESERO')], ['CONTADOR', erp('CONTADOR')], ['sin rol', {}],
+        ['MESERO', erp('MESERO')], ['CONTADOR', erp('CONTADOR')], ['RECEPCION (gimnasio)', erp('RECEPCION')], ['sin rol', {}],
       ])('%s recibe 403 y no queda venta ni stock descontado', async (_n, actor) => {
         politicaCobro = 'MESERO_EN_MESA'; // la política de cobro no es lo que se prueba
         const err: any = await ventaDirecta(actor, cortesia()).catch((e) => e);

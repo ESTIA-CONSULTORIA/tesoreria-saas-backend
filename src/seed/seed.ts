@@ -2919,6 +2919,7 @@ export async function seedDatabase(dataSource: DataSource) {
     { code: 'pos_bar',            name: 'POS Bar',               category: 'pos',         isAddon: true,  defaultPrice: 500 },
     { code: 'configuracion_pos',  name: 'Configuración POS',     category: 'pos',         isAddon: true,  defaultPrice: 299 },
     { code: 'pacientes',          name: 'Pacientes',             category: 'salud',       isAddon: true,  defaultPrice: 250 },
+    { code: 'membresias',         name: 'Membresías',            category: 'gimnasio',    isAddon: true,  defaultPrice: 350 },
     { code: 'inventario',         name: 'Inventario',            category: 'operaciones', isAddon: true,  defaultPrice: 300 },
     { code: 'ocr',                name: 'OCR Documentos',        category: 'documentos',  isAddon: true,  defaultPrice: 200 },
     { code: 'integraciones',      name: 'Integraciones',         category: 'tecnologia',  isAddon: true,  defaultPrice: 500 },
@@ -2972,8 +2973,8 @@ export async function seedDatabase(dataSource: DataSource) {
       LITE_POS:   ['dashboard', 'pos_sin_inventario', 'usuarios', 'empresas', 'sucursales', 'apariencia_logo_only'],
       BASIC:      ['dashboard', 'empresas', 'sucursales', 'usuarios', 'configuracion', 'bancos', 'movimientos', 'transferencias', 'pacientes'],
       PRO:        ['dashboard', 'empresas', 'sucursales', 'usuarios', 'configuracion', 'bancos', 'movimientos', 'transferencias', 'reportes', 'tesoreria', 'conciliacion', 'proveedores', 'compras'],
-      BUSINESS:   ['dashboard', 'empresas', 'sucursales', 'usuarios', 'configuracion', 'bancos', 'movimientos', 'transferencias', 'reportes', 'tesoreria', 'conciliacion', 'pos', 'configuracion_pos', 'integraciones', 'proveedores', 'compras', 'costos'],
-      ENTERPRISE: ['dashboard', 'empresas', 'sucursales', 'usuarios', 'configuracion', 'bancos', 'movimientos', 'transferencias', 'reportes', 'tesoreria', 'conciliacion', 'pos', 'configuracion_pos', 'integraciones', 'rh', 'sat_cfdi', 'white_label', 'proveedores', 'compras', 'costos', 'ocr', 'audit'],
+      BUSINESS:   ['dashboard', 'empresas', 'sucursales', 'usuarios', 'configuracion', 'bancos', 'movimientos', 'transferencias', 'reportes', 'tesoreria', 'conciliacion', 'pos', 'configuracion_pos', 'integraciones', 'proveedores', 'compras', 'costos', 'membresias'],
+      ENTERPRISE: ['dashboard', 'empresas', 'sucursales', 'usuarios', 'configuracion', 'bancos', 'movimientos', 'transferencias', 'reportes', 'tesoreria', 'conciliacion', 'pos', 'configuracion_pos', 'integraciones', 'rh', 'sat_cfdi', 'white_label', 'proveedores', 'compras', 'costos', 'ocr', 'audit', 'membresias'],
     };
 
     for (const [planCode, modules] of Object.entries(PLAN_MODULES)) {

@@ -27,6 +27,9 @@ import { Giro } from './giros.config';
 // ya no se anuncia además como si fuera parte del paquete estándar de BUSINESS.
 export const MODULE_GIRO_REQUIREMENTS: Partial<Record<string, Giro[]>> = {
   pacientes: ['medico_dental', 'medico_general'],
+  // Socios, planes de membresía, membresías y check-in: solo el giro gimnasio. Reservas de canchas NO es un módulo de este
+  // sistema (el cliente reserva en Playtomic); aquí solo se cobran y se controlan las membresías.
+  membresias: ['gimnasio'],
 };
 
 // true si el módulo no tiene restricción de giro declarada, o si el giro dado la cumple.
