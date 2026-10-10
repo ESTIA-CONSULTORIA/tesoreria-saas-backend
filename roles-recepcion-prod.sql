@@ -9,7 +9,7 @@ BEGIN;
 INSERT INTO role (code, name, description, "isActive")
 SELECT v.code, v.name, v.description, true
 FROM (VALUES
-  ('RECEPCION', 'Recepción', 'Gimnasio: cobra y renueva membresías, da de alta socios y registra su entrada; sin descuentos ni cortesías')
+  ('RECEPCION', 'Recepción', 'Gimnasio: cobra y renueva membresías, da de alta socios y registra su entrada; descuento de beneficio hasta 10%, sin cortesías')
 ) AS v(code, name, description)
 WHERE NOT EXISTS (SELECT 1 FROM role r WHERE r.code = v.code);
 
