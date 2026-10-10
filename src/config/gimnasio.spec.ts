@@ -57,10 +57,11 @@ describe('gimnasio — rol RECEPCION', () => {
     expect(puedeCobrar(recepcionNip, 'SOLO_CAJA')).toBe(false);
   });
 
-  it('no da descuentos (tope = ninguno: fuera de ROLES_DESCUENTO) ni cortesías', () => {
-    expect(ROLES_DESCUENTO).not.toContain('RECEPCION');
+  it('da descuentos (beneficio de socio) con el tope del cajero, 10 %, y no da cortesías', () => {
+    expect(ROLES_DESCUENTO).toContain('RECEPCION');
+    expect(topeDescuentoPct('RECEPCION')).toBe(10);
+    expect(topeDescuentoPct('RECEPCION')).toBe(topeDescuentoPct('CAJERO'));
     expect(ROLES_CORTESIA).not.toContain('RECEPCION');
-    expect(topeDescuentoPct('RECEPCION')).toBe(Number.POSITIVE_INFINITY); // el tope solo se consulta DESPUÉS de estar en ROLES_DESCUENTO
   });
 
   it('no divide cuentas con la política por defecto (solo gerente, capitán y cajero); con TODOS sí', () => {

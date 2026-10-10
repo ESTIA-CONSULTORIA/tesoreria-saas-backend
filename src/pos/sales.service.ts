@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, ForbiddenException, HttpException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, HttpException, Injectable, NotFoundException, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, EntityManager, IsNull, Not, Repository } from 'typeorm';
 import { Sale, SaleItem } from './entities/sale.entity';
@@ -15,6 +15,7 @@ import { NotaCocina } from './entities/nota-cocina.entity';
 import { Shift } from './entities/shift.entity';
 import { PoliticaDevolucion, ROLES_GERENTE } from '../config/politica-devoluciones.config';
 import { ROLES_CORTESIA, ROLES_DESCUENTO, topeDescuentoPct } from '../config/roles-pos.config';
+import { MembresiasCoreService } from '../membresias/membresias-core.service';
 import { isValidTasaIva, montoDeItem, pesoDeItem, pesoImpuestoDeItem, tasaNumerica, totalesDeItems, TasaIva } from '../config/iva.config';
 
 import { ActorMesas, contextoCobro, PoliticaCobro, PoliticaDivision, puedeCobrar, puedeDividir } from '../config/politicas-pos.config';
@@ -60,6 +61,9 @@ export class SalesService {
     // POS flexible, capacidad mesas_cuenta_abierta: mermas de cuentas canceladas por la vía de
     // Costos (Justifiable MERMAS_FALTANTES), no una tabla de mermas propia del POS.
     private costsService: CostsService,
+    // Gimnasio, capacidad membresias: cobro y renovación de membresías, beneficio de socio y cancelación por devolución.
+    // Opcional: sin el módulo de membresías el POS funciona exactamente igual.
+    @Optional() private membresiasCore?: MembresiasCoreService,
   ) {}
 
   // POS flexible, capacidad ligar_venta_a_cita: devuelve el citaId a persistir en la venta, o
@@ -310,6 +314,7 @@ export class SalesService {
     tableId?: string;
     clientTimestamp?: string;
     citaId?: string; // POS flexible, capacidad ligar_venta_a_cita (se ignora si la capacidad está inactiva)
+    socioId?: string; // Gimnasio, capacidad membresias: socio al que se cobra la membresía o se le aplica su beneficio
     folio?: string; // generado en el cliente (Fase A1, modo offline). Si no viene,
                      // se genera server-side como siempre — retrocompatible.
   }, actor?: Actor) {
@@ -338,6 +343,22 @@ export class SalesService {
     // Precio de catálogo, descuento, IVA y total: los calcula el servidor (ver calcularImportes). Aislamiento por tenant: un
     // producto inexistente o de otro tenant es 400, ANTES de calcular o tocar nada. Esto vale también para una venta que
     // la cola offline reenvía al sincronizar: se recalcula, y si el pago cobrado ya no cubre el total real se rechaza.
+    // Gimnasio, capacidad membresias: el plan es un producto del POS. Aquí se resuelve a qué socio se le cobra, se rechaza una
+    // membresía suelta (sin socio) y se mete el descuento de beneficio como descuento por ítem, para que pase por los mismos
+    // topes por rol de siempre. Sin la capacidad (o sin el módulo) esto no hace nada y socioId se ignora.
+    let membresia: { socioId: string; plan: any; nota: string } | null = null;
+    if (this.membresiasCore && (await this.tenantSettingsService.hasPosCapability(data.tenantId, 'membresias'))) {
+      const prep = await this.membresiasCore.prepararVenta({
+        socioId: data.socioId,
+        items: data.items,
+        tenantId: data.tenantId,
+        permitirBeneficio: !abreCuentaEnMesa,
+        nacePagada,
+      });
+      data = { ...data, items: prep.items };
+      if (prep.nota) data = { ...data, notas: [data.notas, prep.nota].filter(Boolean).join(' ') };
+      if (prep.plan && prep.socio) membresia = { socioId: prep.socio.id, plan: prep.plan, nota: prep.nota };
+    }
     const calculado = await this.calcularImportes(data.items, data.tenantId, { actor, permitirDescuento: !abreCuentaEnMesa });
     if (Math.abs(this.round2(Number(data.total)) - calculado.total) > Math.max(0.02, 0.01 * calculado.items.length)) {
       console.warn(`SalesService.create: el total del cliente (${data.total}) no coincide con el del servidor (${calculado.total}), folio ${folio}; se usa el del servidor.`);
@@ -457,6 +478,18 @@ export class SalesService {
         // Mesa ocupada en la MISMA transacción: si la venta se revierte, la mesa no cambia.
         if (abreCuentaEnMesa) {
           await manager.update(Table, data.tableId as string, { status: 'OCCUPIED', updatedAt: new Date() });
+        }
+
+        // Gimnasio: la membresía cobrada nace (o se renueva) en la MISMA transacción de la venta: si la venta se revierte,
+        // la membresía no queda. El importe guardado es el total que calculó el servidor.
+        if (membresia && saved.status === 'PAGADA') {
+          await this.membresiasCore!.activarPorVenta(manager, {
+            tenantId: data.tenantId,
+            socioId: membresia.socioId,
+            plan: membresia.plan,
+            venta: { id: saved.id, folio, total: data.total },
+            creadoPor: actor?.email ?? actor?.id,
+          });
         }
 
         // POS flexible, capacidad ligar_venta_a_cita: una venta que nace PAGADA completa la
@@ -1689,6 +1722,10 @@ export class SalesService {
       });
       const guardada = await manager.save(devolucion);
       await manager.update(Sale, id, { status: 'DEVUELTA' });
+      // Gimnasio: devolver la venta de una membresía cancela ese periodo (en la misma transacción de la devolución).
+      if (this.membresiasCore) {
+        await this.membresiasCore.cancelarPorVenta(manager, id, tenantId, `Devolución de la venta ${sale.folio}: ${motivo}`);
+      }
       return guardada;
     });
   }

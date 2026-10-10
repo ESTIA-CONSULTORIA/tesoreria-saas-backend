@@ -66,6 +66,17 @@ export class TenantSettingsService {
     };
   }
 
+  // Membresías: con cuántos días de anticipación avisar un vencimiento y cuántos días de gracia se dan antes de contar a un
+  // socio vencido como moroso. Se guardan como texto numérico en el JSON de posCapabilities (sin migración).
+  async getMembresiasConfig(tenantId: string): Promise<{ diasAviso: number; diasGracia: number }> {
+    const caps = (await this.findByTenant(tenantId))?.posCapabilities ?? {};
+    const num = (v: unknown, def: number) => {
+      const n = typeof v === 'string' || typeof v === 'number' ? Number(v) : NaN;
+      return Number.isInteger(n) && n >= 0 && n <= 90 ? n : def;
+    };
+    return { diasAviso: num(caps.membresiasDiasAviso, 7), diasGracia: num(caps.membresiasDiasGracia, 0) };
+  }
+
   async upsert(
     tenantId: string,
     body: {
@@ -96,6 +107,8 @@ export class TenantSettingsService {
       politicaDivisionCuentas?: string;
       ivaTasaDefault?: string;
       preciosIncluyenIva?: boolean;
+      membresiasDiasAviso?: number | string;
+      membresiasDiasGracia?: number | string;
     },
   ) {
     const existing = await this.findByTenant(tenantId);
@@ -132,6 +145,18 @@ export class TenantSettingsService {
         throw new BadRequestException('preciosIncluyenIva debe ser verdadero o falso.');
       }
       iva[key] = valor;
+    }
+    // Membresías (días de aviso y de gracia): enteros de 0 a 90, guardados como texto en el mismo JSON.
+    for (const key of ['membresiasDiasAviso', 'membresiasDiasGracia'] as const) {
+      const valor = bodyLibre[key] !== undefined ? bodyLibre[key] : capsLibres[key];
+      delete bodyLibre[key];
+      delete capsLibres[key];
+      if (valor === undefined) continue;
+      const n = Number(valor);
+      if (valor === null || valor === '' || !Number.isInteger(n) || n < 0 || n > 90) {
+        throw new BadRequestException(`${key} debe ser un entero entre 0 y 90.`);
+      }
+      iva[key] = String(n);
     }
     const hayIva = Object.keys(iva).length > 0;
     body = { ...bodyLibre, ...(body.posCapabilities !== undefined ? { posCapabilities: capsLibres } : {}) } as typeof body;

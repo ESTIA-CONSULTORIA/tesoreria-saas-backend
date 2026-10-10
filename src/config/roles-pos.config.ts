@@ -14,7 +14,8 @@ export const ROLES_NIP = ['CAJERO', 'MESERO', 'CAPITAN', 'RECEPCION'];
 export const ROLES_CAJA = ['ADMIN', 'GERENTE', 'CAJERO', 'RECEPCION'];
 
 // Quién puede aplicar descuento a una cuenta abierta (PUT /pos/sales/:id/discount). El mesero no.
-export const ROLES_DESCUENTO = ['ADMIN', 'GERENTE', 'CAPITAN', 'CAJERO'];
+// RECEPCION (gimnasio) aplica el descuento de beneficio de un socio (y el que el gerente le deje dar) con el tope del cajero.
+export const ROLES_DESCUENTO = ['ADMIN', 'GERENTE', 'CAPITAN', 'CAJERO', 'RECEPCION'];
 
 // Quién puede registrar un pago CORTESIA (la venta se da sin cobro). El resto de roles recibe 403. Un descuento tiene
 // tope por rol; una cortesía es 100 %, así que solo la autoriza quien no tiene tope.
@@ -22,7 +23,7 @@ export const ROLES_CORTESIA = ['ADMIN', 'GERENTE'];
 
 // Tope de descuento por rol, en % del importe. Se valida en el SERVIDOR (create() por ítem y PUT /discount sobre el total
 // de la cuenta). ADMIN y GERENTE sin tope. Un rol fuera de ROLES_DESCUENTO no llega aquí (403 antes).
-export const TOPE_DESCUENTO_PCT: Record<string, number> = { CAJERO: 10, CAPITAN: 20 };
+export const TOPE_DESCUENTO_PCT: Record<string, number> = { CAJERO: 10, CAPITAN: 20, RECEPCION: 10 };
 export const topeDescuentoPct = (rol?: string): number => TOPE_DESCUENTO_PCT[rol ?? ''] ?? Number.POSITIVE_INFINITY;
 
 // El IVA ya no es una constante: lo configura cada tenant (y opcionalmente cada producto). Ver config/iva.config.ts.

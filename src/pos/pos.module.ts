@@ -46,6 +46,7 @@ import { Branch } from '../branches/entities/branch.entity';
 import { Company } from '../companies/entities/company.entity';
 import { TenantSettingsModule } from '../tenant-settings/tenant-settings.module';
 import { AppointmentsModule } from '../appointments/appointments.module';
+import { MembresiasModule } from '../membresias/membresias.module';
 import { CostsModule } from '../costs/costs.module';
 
 @Module({
@@ -71,6 +72,8 @@ import { CostsModule } from '../costs/costs.module';
     AuditModule,
     // POS flexible, capacidad ligar_venta_a_cita: SalesService usa AppointmentsService.
     AppointmentsModule,
+    // Gimnasio: cobro de membresías, beneficio de socio y cancelación por devolución (MembresiasCoreService).
+    MembresiasModule,
     // POS flexible, capacidad mesas_cuenta_abierta: SalesService registra mermas por la vía de
     // Costos (CostsService.createJustifiable) al cancelar cuentas con ítems ya enviados a cocina.
     CostsModule,

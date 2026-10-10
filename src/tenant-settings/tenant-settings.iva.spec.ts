@@ -123,3 +123,50 @@ describe('calcularTotalesIva — redondeo y compatibilidad', () => {
     expect(t.porTasa.EXENTO).toEqual({ base: 50, impuestos: 0 });
   });
 });
+
+// Membresías: días de aviso y de gracia (viven en el mismo JSON, validados).
+describe('configuración de membresías del negocio', () => {
+  let service: TenantSettingsService;
+  const filas: Record<string, any> = {};
+
+  beforeEach(async () => {
+    for (const k of Object.keys(filas)) delete filas[k];
+    const repo = {
+      findOne: jest.fn(({ where }: any) => Promise.resolve(filas[where.tenantId] ? { ...filas[where.tenantId] } : null)),
+      create: jest.fn((d) => d),
+      save: jest.fn((d) => { filas[d.tenantId] = { id: `s-${d.tenantId}`, ...d }; return Promise.resolve(filas[d.tenantId]); }),
+      update: jest.fn((id: string, patch: any) => {
+        const key = Object.keys(filas).find((k) => filas[k].id === id)!;
+        filas[key] = { ...filas[key], ...patch };
+        return Promise.resolve(undefined);
+      }),
+    };
+    const m: TestingModule = await Test.createTestingModule({
+      providers: [TenantSettingsService, { provide: getRepositoryToken(TenantSetting), useValue: repo }],
+    }).compile();
+    service = m.get(TenantSettingsService);
+  });
+
+  it('default: 7 días de aviso y 0 de gracia', async () => {
+    await expect(service.getMembresiasConfig('t')).resolves.toEqual({ diasAviso: 7, diasGracia: 0 });
+  });
+
+  it('guarda y lee; no pisa el IVA ni lo demás', async () => {
+    await service.upsert('t', { ivaTasaDefault: '8' });
+    await service.upsert('t', { membresiasDiasAviso: 15, membresiasDiasGracia: '3' });
+    await expect(service.getMembresiasConfig('t')).resolves.toEqual({ diasAviso: 15, diasGracia: 3 });
+    await expect(service.getIvaConfig('t')).resolves.toMatchObject({ ivaTasaDefault: '8' });
+  });
+
+  it('valores inválidos: 400 y no se escribe', async () => {
+    for (const v of [-1, 91, 1.5, 'x', null]) {
+      await expect(service.upsert('t', { membresiasDiasAviso: v as any })).rejects.toThrow(BadRequestException);
+    }
+    expect(filas['t']).toBeUndefined();
+  });
+
+  it('aislamiento: la configuración de un negocio no es la de otro', async () => {
+    await service.upsert('A', { membresiasDiasAviso: 30 });
+    await expect(service.getMembresiasConfig('B')).resolves.toEqual({ diasAviso: 7, diasGracia: 0 });
+  });
+});
