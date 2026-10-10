@@ -13,7 +13,7 @@ import { TenantModule } from '../modules/entities/tenant-module.entity';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 
-const ATTENDANCE_GATED_ROLES = ['CAJERO', 'MESERO', 'GERENTE', 'CONTADOR', 'EMPLEADO'];
+const ATTENDANCE_GATED_ROLES = ['CAJERO', 'MESERO', 'GERENTE', 'CONTADOR', 'EMPLEADO', 'RECEPCION'];
 
 @Injectable()
 export class AuthService {
