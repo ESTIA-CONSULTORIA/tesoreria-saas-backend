@@ -3,14 +3,15 @@
 
 // Roles que operan sobre datos de UNA sucursal: exigen empresa y sucursal asignadas (regla de aplicación
 // en UsersService; la CHECK de BD de la migración 1787818605257 solo cubre CAJERO y GERENTE).
-export const ROLES_CON_SUCURSAL = ['CAJERO', 'GERENTE', 'MESERO', 'CAPITAN'];
+export const ROLES_CON_SUCURSAL = ['CAJERO', 'GERENTE', 'MESERO', 'CAPITAN', 'RECEPCION'];
 
 // Roles que entran al POS Lite con NIP de 4 dígitos (POST /pos/cashiers/nip).
-export const ROLES_NIP = ['CAJERO', 'MESERO', 'CAPITAN'];
+export const ROLES_NIP = ['CAJERO', 'MESERO', 'CAPITAN', 'RECEPCION'];
 
 // "Caja": sesión ERP con uno de estos roles. Todo lo demás es "mesa" (sesión POS Lite, o sesión ERP con
 // MESERO o CAPITAN): así un mesero con sesión ERP no se salta la política.
-export const ROLES_CAJA = ['ADMIN', 'GERENTE', 'CAJERO'];
+// RECEPCION (gimnasio) opera la caja del mostrador: cobra y renueva membresías y vende en el POS. No da descuentos ni cortesías.
+export const ROLES_CAJA = ['ADMIN', 'GERENTE', 'CAJERO', 'RECEPCION'];
 
 // Quién puede aplicar descuento a una cuenta abierta (PUT /pos/sales/:id/discount). El mesero no.
 export const ROLES_DESCUENTO = ['ADMIN', 'GERENTE', 'CAPITAN', 'CAJERO'];

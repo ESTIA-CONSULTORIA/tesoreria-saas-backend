@@ -28,18 +28,18 @@ describe('roles del POS — CAPITAN y MESERO', () => {
   });
 
   it('las constantes: sucursal obligatoria y NIP', () => {
-    expect(ROLES_CON_SUCURSAL.sort()).toEqual(['CAJERO', 'CAPITAN', 'GERENTE', 'MESERO']);
-    expect(ROLES_NIP.sort()).toEqual(['CAJERO', 'CAPITAN', 'MESERO']);
-    expect(ROLES_CAJA.sort()).toEqual(['ADMIN', 'CAJERO', 'GERENTE']);
+    expect(ROLES_CON_SUCURSAL.sort()).toEqual(['CAJERO', 'CAPITAN', 'GERENTE', 'MESERO', 'RECEPCION']);
+    expect(ROLES_NIP.sort()).toEqual(['CAJERO', 'CAPITAN', 'MESERO', 'RECEPCION']);
+    expect(ROLES_CAJA.sort()).toEqual(['ADMIN', 'CAJERO', 'GERENTE', 'RECEPCION']);
   });
 
-  it.each(['CAJERO', 'GERENTE', 'MESERO', 'CAPITAN'])('%s sin empresa/sucursal: 400 y no guarda', async (rol) => {
+  it.each(['CAJERO', 'GERENTE', 'MESERO', 'CAPITAN', 'RECEPCION'])('%s sin empresa/sucursal: 400 y no guarda', async (rol) => {
     await expect(users.create('a@b.c', '1234', 'X', undefined, rol, 'tenant-A', undefined, undefined)).rejects.toThrow(BadRequestException);
     await expect(users.create('a@b.c', '1234', 'X', undefined, rol, 'tenant-A', 'co-1', undefined)).rejects.toThrow(`Los usuarios ${rol} requieren empresa y sucursal asignadas.`);
     expect(usersRepo.save).not.toHaveBeenCalled();
   });
 
-  it.each(['CAJERO', 'GERENTE', 'MESERO', 'CAPITAN'])('%s con empresa y sucursal: se crea', async (rol) => {
+  it.each(['CAJERO', 'GERENTE', 'MESERO', 'CAPITAN', 'RECEPCION'])('%s con empresa y sucursal: se crea', async (rol) => {
     await expect(users.create('a@b.c', '1234', 'X', undefined, rol, 'tenant-A', 'co-1', 'suc-1')).resolves.toBeDefined();
     expect(usersRepo.save).toHaveBeenCalledWith(expect.objectContaining({ roleCode: rol, branchId: 'suc-1' }));
   });
@@ -60,6 +60,6 @@ describe('roles del POS — CAPITAN y MESERO', () => {
     jest.spyOn(svc, 'create').mockImplementation(async (code: string) => { creados.push(code); return {} as any; });
     jest.spyOn(svc, 'findAll').mockResolvedValue([]);
     await svc.initializeDefaultRoles();
-    expect(creados).toEqual(expect.arrayContaining(['CAPITAN', 'MESERO', 'CAJERO', 'ADMIN']));
+    expect(creados).toEqual(expect.arrayContaining(['CAPITAN', 'MESERO', 'CAJERO', 'ADMIN', 'RECEPCION']));
   });
 });

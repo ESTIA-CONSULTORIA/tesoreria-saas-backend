@@ -23,6 +23,7 @@ export const POS_CAPABILITIES = [
   'venta_de_servicio',
   'ligar_venta_a_cita',
   'notas_cocina_barra',
+  'membresias',
 ] as const;
 
 export type PosCapability = typeof POS_CAPABILITIES[number];
@@ -38,6 +39,9 @@ export const DEFAULT_POS_CAPABILITIES: Record<PosCapability, boolean> = {
   venta_de_servicio: false,
   ligar_venta_a_cita: false,
   notas_cocina_barra: false,
+  // Gimnasio: cobrar y renovar membresías en caja (el POS vende el plan y activa la membresía del socio) y check-in en
+  // recepción. Requiere el módulo `membresias` (solo giro gimnasio). Apagada por default: la prende el ADMIN del negocio.
+  membresias: false,
 };
 
 export function isValidPosCapability(value: string): value is PosCapability {

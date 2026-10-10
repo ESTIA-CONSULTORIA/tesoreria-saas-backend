@@ -27,4 +27,5 @@ export const ALL_MODULES = [
   'costos',
   'ocr',
   'audit',
+  'membresias',
 ];
