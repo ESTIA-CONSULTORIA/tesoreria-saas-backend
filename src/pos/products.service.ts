@@ -1,4 +1,6 @@
 import { BadRequestException, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
+import { IsNull } from 'typeorm';
+import { assertSucursalDelTenant } from '../common/sucursal-efectiva';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Product } from './entities/product.entity';
@@ -59,10 +61,17 @@ export class ProductsService {
     return null;
   }
 
+  // Con sucursal activa: los productos de esa sucursal Y los que no tienen sucursal (NULL = compartido por todo el negocio).
+  // Antes la igualdad estricta ocultaba los NULL en cuanto el cliente mandaba X-Branch-Id. Siempre acotado al tenant.
   async findAll(branchId?: string, tenantId?: string) {
-    const where: any = {};
-    if (branchId) where.branchId = branchId;
+    let where: any = {};
     if (tenantId) where.tenantId = tenantId;
+    if (branchId) {
+      where = [
+        { ...where, branchId },
+        { ...where, branchId: IsNull() },
+      ];
+    }
 
     const todos = await this.productsRepo.find({
       where,
@@ -137,8 +146,11 @@ export class ProductsService {
     if (!tenantId) {
       throw new BadRequestException('No se puede crear un producto sin tenant.');
     }
-    const product = this.productsRepo.create({ ...data, tenantId, ...this.tasaIvaSaneada(data) });
-    return this.productsRepo.save(product);
+    const iva = this.tasaIvaSaneada(data); // 400 síncrono, como antes
+    // La sucursal nunca se toma del cliente sin validar: debe existir en el tenant (el controller ya la resolvió desde el token).
+    return assertSucursalDelTenant(this.productsRepo.manager, data?.branchId, tenantId).then(() =>
+      this.productsRepo.save(this.productsRepo.create({ ...data, tenantId, ...iva })),
+    );
   }
 
   // tenantId e id se descartan del body: antes `{ ...data }` iba directo a repo.update(), así
@@ -150,6 +162,7 @@ export class ProductsService {
     const existing = await this.productsRepo.findOne({ where: tenantId ? { id, tenantId } : { id } });
     if (!existing) throw new NotFoundException('Producto no encontrado');
     const { tenantId: _ignoredTenantId, id: _ignoredId, ...safeData } = data as any;
+    if (safeData.branchId) await assertSucursalDelTenant(this.productsRepo.manager, safeData.branchId, tenantId);
     await this.productsRepo.update(id, { ...safeData, ...this.tasaIvaSaneada(data), updatedAt: new Date() });
     return this.productsRepo.findOne({ where: { id } });
   }

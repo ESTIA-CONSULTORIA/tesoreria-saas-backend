@@ -1,4 +1,5 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { assertSucursalDelTenant, assertSucursalLegible } from '../common/sucursal-efectiva';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { PosConfig } from './entities/pos-config.entity';
@@ -23,22 +24,38 @@ export class PosService {
     private companyRepo: Repository<Company>,
   ) {}
 
-  async findByBranch(branchId: string) {
+  // Configuración del POS por sucursal. Con tenantId (el del token) la sucursal debe ser de ese tenant: antes se leía y
+  // escribía la configuración de cualquier sucursal con solo conocer su id.
+  async findByBranch(branchId: string, tenantId?: string) {
+    if (tenantId) await assertSucursalLegible(this.posConfigRepo.manager, branchId, tenantId);
     return this.posConfigRepo.findOne({ where: { branchId } });
   }
 
-  async create(data: Partial<PosConfig>) {
+  async create(data: Partial<PosConfig>, tenantId?: string) {
+    if (tenantId) {
+      if (!data?.branchId) throw new BadRequestException('Indica la sucursal de la configuración.');
+      await assertSucursalDelTenant(this.posConfigRepo.manager, data.branchId, tenantId);
+    }
     const config = this.posConfigRepo.create(data);
     return this.posConfigRepo.save(config);
   }
 
-  async update(id: string, data: Partial<PosConfig>) {
+  async update(id: string, data: Partial<PosConfig>, tenantId?: string, userBranchId?: string | null) {
+    if (tenantId) {
+      const actual = await this.posConfigRepo.findOne({ where: { id } });
+      if (!actual) throw new NotFoundException('Configuración no encontrada');
+      await assertSucursalLegible(this.posConfigRepo.manager, actual.branchId, tenantId);
+      if (userBranchId && actual.branchId !== userBranchId) throw new ForbiddenException('No tienes acceso a esa sucursal.');
+      // La configuración no se reasigna de sucursal ni de id.
+      const { branchId: _b, id: _i, ...resto } = data as any;
+      data = resto;
+    }
     await this.posConfigRepo.update(id, { ...data, updatedAt: new Date() });
     return this.posConfigRepo.findOne({ where: { id } });
   }
 
-  async upsertByBranch(branchId: string, data: Partial<PosConfig>) {
-    const existing = await this.findByBranch(branchId);
+  async upsertByBranch(branchId: string, data: Partial<PosConfig>, tenantId?: string) {
+    const existing = await this.findByBranch(branchId, tenantId);
     if (existing) {
       return this.update(existing.id, data);
     }

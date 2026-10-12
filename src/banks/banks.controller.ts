@@ -1,6 +1,7 @@
 import { Body, Controller, Delete, Get, Headers, Param, Patch, Post, Request } from '@nestjs/common';
 import { BanksService } from './banks.service';
 import { Modulo } from '../auth/modulo.decorator';
+import { sucursalEfectiva } from '../common/sucursal-efectiva';
 
 // Auditoría de seguridad (GoodsHabits, P1): 'tesoreria', igual que transfers.controller.ts
 // (ya en producción con ese código) — el catálogo lista 'bancos' como entrada propia, pero
@@ -49,10 +50,11 @@ export class BanksController {
     const userBranchId = req?.user?.branchId;
     const userCompanyId = req?.user?.companyId;
 
-    // Header (Switch Context) has priority over JWT claims
-    const branchId = headerBranchId || userBranchId;
+    // La sucursal del usuario manda; el header (Switch Context) solo elige para quien no tiene sucursal (ADMIN/dueño), y
+    // el servicio verifica que sea de su tenant.
+    const { branchId, restringida } = sucursalEfectiva(req?.user, headerBranchId);
     const companyId = headerCompanyId || userCompanyId;
-    if (branchId) return this.banksService.findByBranch(branchId);
+    if (branchId) return this.banksService.findByBranch(branchId, restringida ? undefined : req?.user?.tenantId);
     if (companyId) return this.banksService.findByCompany(companyId);
 
     const tenantId = req?.user?.tenantId;

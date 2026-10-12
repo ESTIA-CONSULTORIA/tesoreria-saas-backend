@@ -3,6 +3,7 @@ import { DashboardService } from './dashboard.service';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Company } from '../companies/entities/company.entity';
 import { Repository } from 'typeorm';
+import { assertSucursalLegible, sucursalEfectiva } from '../common/sucursal-efectiva';
 
 @Controller('dashboard')
 export class DashboardController {
@@ -27,8 +28,10 @@ export class DashboardController {
       || headerTenantId
       || (await this.companiesRepo.findOne({ where: {} }))?.tenantId;
     
-    // Header takes priority over JWT so Switch Context updates take effect immediately
-    let branchId = headerBranchId || userBranchId || undefined;
+    // La sucursal del usuario manda; el header (Switch Context) solo elige para quien no tiene sucursal, y debe ser del tenant.
+    const efectiva = sucursalEfectiva(req?.user, headerBranchId);
+    if (efectiva.branchId && !efectiva.restringida) await assertSucursalLegible(this.companiesRepo.manager, efectiva.branchId, tenantId);
+    let branchId = efectiva.branchId || userBranchId || undefined;
     let companyId = headerCompanyId || userCompanyId || undefined;
     // Branch is more specific than company — don't double-filter
     if (branchId) companyId = undefined;

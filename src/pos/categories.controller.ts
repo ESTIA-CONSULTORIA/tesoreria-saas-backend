@@ -1,6 +1,7 @@
 import { Controller, Get, Post, Put, Delete, Body, Param, Req, Headers } from '@nestjs/common';
 import { CategoriesService } from './categories.service';
 import { Modulo } from '../auth/modulo.decorator';
+import { sucursalEfectiva, sucursalParaEscribir } from '../common/sucursal-efectiva';
 
 @Controller('pos/categories')
 @Modulo('configuracion_pos')
@@ -9,8 +10,8 @@ export class CategoriesController {
 
   @Get()
   findAll(@Req() req: any, @Headers('x-branch-id') headerBranchId?: string) {
-    const branchId = headerBranchId || req.user?.branchId;
-    return this.categoriesService.findAll(branchId);
+    const { branchId } = sucursalEfectiva(req.user, headerBranchId);
+    return this.categoriesService.findAll(branchId, req.user?.tenantId);
   }
 
   @Get(':id')

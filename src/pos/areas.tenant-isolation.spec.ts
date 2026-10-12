@@ -134,7 +134,10 @@ describe('AreasService / TablesService — aislamiento por tenant', () => {
       const m = await Test.createTestingModule({ controllers: [AreasController], providers: [{ provide: AreasService, useValue: service }] }).compile();
       await m.get(AreasController).findAll({ user: { tenantId: TENANT_A } }, undefined);
       expect(service.findAll).toHaveBeenCalledWith(undefined, TENANT_A);
+      // Sucursal efectiva: un usuario con sucursal solo ve la suya (el header no es un permiso); sin sucursal, el header elige.
       await m.get(AreasController).findAll({ user: { tenantId: TENANT_A, branchId: 'suc-A1' } }, 'suc-A2');
+      expect(service.findAll).toHaveBeenLastCalledWith('suc-A1', TENANT_A);
+      await m.get(AreasController).findAll({ user: { tenantId: TENANT_A } }, 'suc-A2');
       expect(service.findAll).toHaveBeenLastCalledWith('suc-A2', TENANT_A);
     });
 

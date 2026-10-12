@@ -2,6 +2,7 @@ import { Controller, Get, Post, Put, Delete, Body, Param, Query, Request, UseGua
 import { SalesService } from './sales.service';
 import { OfflineVentasService } from './offline-ventas.service';
 import { RolesGuard } from '../auth/roles.guard';
+import { sucursalEfectiva, sucursalParaEscribir } from '../common/sucursal-efectiva';
 import { Roles } from '../auth/roles.decorator';
 
 @Controller('pos/sales')
@@ -11,8 +12,11 @@ export class SalesController {
   @Post()
   createSale(@Body() data: any, @Request() req) {
     const tenantId = req.user?.tenantId || req.tenantId;
+    // Sucursal de la venta: la del usuario (pedir otra es 403); sin sucursal en el token vale la enviada, validada en create().
+    const sucursalId = sucursalParaEscribir(req.user, data?.sucursalId);
     return this.salesService.create({
       ...data,
+      ...(sucursalId ? { sucursalId } : {}),
       tenantId,
     }, req.user ?? {});
   }
@@ -20,8 +24,11 @@ export class SalesController {
   @Get()
   getSales(@Query() filters: any, @Request() req) {
     const tenantId = req.user?.tenantId || req.tenantId;
+    // Historial: un usuario con sucursal solo ve las ventas de la suya, aunque mande otro sucursalId.
+    const efectiva = sucursalEfectiva(req.user, filters?.sucursalId);
     return this.salesService.findAll({
       ...filters,
+      ...(efectiva.branchId ? { sucursalId: efectiva.branchId } : {}),
       tenantId,
     });
   }
@@ -39,7 +46,8 @@ export class SalesController {
   @Get('cuentas-abiertas')
   getCuentasAbiertas(@Query() filters: { tableId?: string; sucursalId?: string }, @Request() req) {
     const tenantId = req.user?.tenantId || req.tenantId;
-    return this.salesService.buscarCuentasAbiertas(tenantId, filters);
+    const efectiva = sucursalEfectiva(req.user, filters?.sucursalId);
+    return this.salesService.buscarCuentasAbiertas(tenantId, { ...filters, ...(efectiva.branchId ? { sucursalId: efectiva.branchId } : {}) });
   }
 
   // Política de devoluciones vigente y si quien llama puede devolver (para que el POS muestre u oculte

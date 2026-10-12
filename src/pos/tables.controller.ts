@@ -1,6 +1,7 @@
 import { Controller, Get, Post, Put, Delete, Body, Param, Query, Req, Headers } from '@nestjs/common';
 import { TablesService } from './tables.service';
 import { Modulo } from '../auth/modulo.decorator';
+import { sucursalEfectiva, sucursalParaEscribir } from '../common/sucursal-efectiva';
 
 @Controller('pos/tables')
 @Modulo('configuracion_pos')
@@ -16,7 +17,7 @@ export class TablesController {
     @Query('areaId') areaId?: string,
     @Headers('x-branch-id') headerBranchId?: string,
   ) {
-    return this.tablesService.findAll(branchId || headerBranchId, areaId, req?.user?.tenantId);
+    return this.tablesService.findAll(sucursalEfectiva(req?.user, branchId || headerBranchId).branchId, areaId, req?.user?.tenantId);
   }
 
   @Get(':id')

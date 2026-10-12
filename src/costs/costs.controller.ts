@@ -1,6 +1,7 @@
 import { Controller, Get, Post, Put, Delete, Body, Param, Query, Request } from '@nestjs/common';
 import { CostsService } from './costs.service';
 import { Modulo } from '../auth/modulo.decorator';
+import { sucursalEfectiva } from '../common/sucursal-efectiva';
 
 @Controller('costs')
 @Modulo('costos')
@@ -70,7 +71,7 @@ export class CostsController {
     @Request() req?: any,
   ) {
     const tenantId = req?.user?.tenantId || queryTenantId;
-    return this.costsService.findAllAlmacenes(tenantId, sucursalId);
+    return this.costsService.findAllAlmacenes(tenantId, sucursalEfectiva(req?.user, sucursalId).branchId);
   }
 
   @Get('almacenes/:id')

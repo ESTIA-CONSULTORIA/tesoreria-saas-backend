@@ -5,6 +5,7 @@ import { In, IsNull, Not, Repository } from 'typeorm';
 import { Shift } from './entities/shift.entity';
 import { Sale } from './entities/sale.entity';
 import { resolveEventTimestamp } from '../common/resolve-event-timestamp.util';
+import { assertSucursalDelTenant } from '../common/sucursal-efectiva';
 
 // Efectivo cobrado FUERA DE CAJA (origen MESA: POS Lite, o ERP con MESERO/CAPITAN), por persona. Sale de
 // formasPago[].cobradoPor* de las cuentas de mesa (JSON, sin migración). Es efectivo que físicamente tiene quien lo

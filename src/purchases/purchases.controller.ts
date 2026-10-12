@@ -3,6 +3,7 @@ import { PurchasesService } from './purchases.service';
 import { Modulo } from '../auth/modulo.decorator';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
+import { sucursalEfectiva } from '../common/sucursal-efectiva';
 
 @Controller('purchases')
 @Modulo('compras')
@@ -21,10 +22,11 @@ export class PurchasesController {
     const userBranchId = req?.user?.branchId;
     const userCompanyId = req?.user?.companyId;
 
-    const branchId = headerBranchId || userBranchId;
+    const branchId = sucursalEfectiva(req?.user, headerBranchId).branchId;
     const companyId = headerCompanyId || userCompanyId;
 
-    return this.purchasesService.findAllOrders(tenantId, status, branchId, companyId);
+    // El tenant sale del token; el query solo vale para SOPORTE (sin tenant en su token). Antes cualquiera podía pedir otro.
+    return this.purchasesService.findAllOrders(req?.user?.tenantId || tenantId, status, branchId, companyId);
   }
 
   @Get('orders/:id')

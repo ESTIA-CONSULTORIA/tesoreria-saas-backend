@@ -4,6 +4,7 @@ import type { PlanInput, SocioInput } from './membresias.service';
 import { Modulo } from '../auth/modulo.decorator';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
+import { sucursalEfectiva } from '../common/sucursal-efectiva';
 
 // Gimnasio: socios, planes, membresías, check-in, alertas y reportes. El tenant SIEMPRE sale del token (nunca del body ni de la
 // URL): un id de otro negocio responde 404. El módulo `membresias` solo existe en tenants de giro gimnasio.
@@ -130,6 +131,6 @@ export class MembresiasController {
   @Roles(...ADMIN_GERENTE)
   @Get('reportes/ingresos')
   ingresos(@Request() req: any, @Query('desde') desde: string, @Query('hasta') hasta: string, @Query('sucursalId') sucursalId?: string) {
-    return this.service.ingresosPorConcepto(this.tenant(req), desde, hasta, sucursalId);
+    return this.service.ingresosPorConcepto(this.tenant(req), desde, hasta, sucursalEfectiva(req?.user, sucursalId).branchId);
   }
 }

@@ -1,5 +1,6 @@
 import { BadRequestException, ConflictException, ForbiddenException, HttpException, Injectable, NotFoundException, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import { assertSucursalDelTenant } from '../common/sucursal-efectiva';
 import { DataSource, EntityManager, IsNull, Not, Repository } from 'typeorm';
 import { Sale, SaleItem } from './entities/sale.entity';
 import { Product } from './entities/product.entity';
@@ -325,6 +326,8 @@ export class SalesService {
     // Fuera del try (más abajo): un clientTimestamp inválido debe llegar al cliente como
     // 400 (BadRequestException), no enmascararse como 500 por el catch genérico de la venta.
     const now = resolveEventTimestamp(data.clientTimestamp);
+    // La sucursal de la venta pertenece al tenant del token: un sucursalId de otro negocio (o inventado) es 400 antes de tocar nada.
+    await assertSucursalDelTenant(this.dataSource, data.sucursalId, data.tenantId);
 
     // Un folio que ya está registrado (reintento tras perder la respuesta) se detecta ANTES de recalcular nada: si el precio
     // cambió entre el primer envío y el reintento, el pago ya no cubriría y el error sería "no cubren" en vez de "ya existe".

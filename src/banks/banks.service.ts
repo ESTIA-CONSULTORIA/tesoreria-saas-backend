@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import { assertSucursalLegible } from '../common/sucursal-efectiva';
 import { Bank } from './entities/bank.entity';
 import { Repository } from 'typeorm';
 import { InjectDataSource } from '@nestjs/typeorm';
@@ -56,7 +57,9 @@ export class BanksService {
     });
   }
 
-  findByBranch(branchId: string) {
+  async findByBranch(branchId: string, tenantId?: string) {
+    // Con una sucursal elegida por el cliente (header), debe ser del tenant: antes se devolvían los bancos de cualquier sucursal.
+    if (tenantId) await assertSucursalLegible(this.banksRepository.manager, branchId, tenantId);
     return this.banksRepository.find({
       where: { branchId },
       order: { createdAt: 'DESC' },

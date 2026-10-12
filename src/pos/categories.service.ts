@@ -32,8 +32,17 @@ export class CategoriesService {
     return category;
   }
 
-  async findAll(branchId?: string) {
+  async findAll(branchId?: string, tenantId?: string) {
     const query = this.categoriesRepo.createQueryBuilder('category');
+
+    // Aislamiento: la categoría no tiene tenantId; pertenece al tenant por branch → company. Sin este filtro, un ADMIN sin
+    // sucursal (o un header con una sucursal ajena) recibía las categorías de todos los negocios.
+    if (tenantId) {
+      query.andWhere(
+        'category.branchId IN (SELECT b.id::text FROM "branch" b JOIN "company" c ON c.id::text = b."companyId"::text WHERE c."tenantId"::text = :tenantId)',
+        { tenantId },
+      );
+    }
     
     if (branchId) {
       query.andWhere('category.branchId = :branchId', { branchId });

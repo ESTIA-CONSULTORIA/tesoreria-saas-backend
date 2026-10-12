@@ -65,7 +65,7 @@ export class MovementsController {
 
     // Otherwise, use headers (ADMIN/SOPORTE/DUEÑO case)
     if (headerBranchId) {
-      return this.movementsService.findByBranch(headerBranchId);
+      return this.movementsService.findByBranch(headerBranchId, req?.user?.tenantId);
     }
     
     if (headerCompanyId) {
