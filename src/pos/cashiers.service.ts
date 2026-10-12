@@ -18,6 +18,14 @@ export class CashiersService {
     private jwtService: JwtService,
   ) {}
 
+  // Directorio de nombres del PROPIO tenant (solo id, nombre y correo) para que las pantallas muestren quién es cada
+  // cajero/mesero en vez del id interno. Siempre acotado al tenant del token; sin tenant devuelve vacío (nunca todo).
+  async directorio(tenantId?: string): Promise<Array<{ id: string; nombre: string | null; email: string }>> {
+    if (!tenantId) return [];
+    const users = await this.usersRepo.find({ where: { tenantId }, select: ['id', 'name', 'email'] });
+    return users.map((u) => ({ id: u.id, nombre: u.name?.trim() ? u.name.trim() : null, email: u.email }));
+  }
+
   // userId opcional: si el cliente indica quién es, el NIP se verifica SOLO contra ese usuario (y el límite
   // de intentos va por tenant + usuario + IP). Sin él, se busca el NIP entre los usuarios de NIP del tenant.
   async loginWithNip(nip: string, tenantId?: string, userId?: string) {

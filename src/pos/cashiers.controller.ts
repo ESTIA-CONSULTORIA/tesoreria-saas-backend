@@ -87,6 +87,13 @@ export class CashiersController {
     return { message: 'Sesión cerrada correctamente' };
   }
 
+  // Nombres de los usuarios del propio tenant (id, nombre, correo): para mostrar al cajero/mesero por nombre. No es
+  // @Public: exige sesión y el tenant sale del token, nunca del cliente.
+  @Get('directorio')
+  directorio(@Request() req) {
+    return this.cashiersService.directorio(req.user?.tenantId);
+  }
+
   // Bootstrap de sesión para CorteCajaLite.tsx — mismo motivo que GET /auth/executive-me:
   // lee la cookie de POS Lite directo, no pasa por el chain genérico del middleware, para
   // no depender de cuál otra cookie de sesión pueda haber en el mismo navegador.
