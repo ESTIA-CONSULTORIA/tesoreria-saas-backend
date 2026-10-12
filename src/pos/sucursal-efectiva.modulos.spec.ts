@@ -205,3 +205,73 @@ describe('configuración del POS y bancos: la sucursal debe ser del tenant', () 
     await expect(banks.findByBranch('suc-A1', TA)).resolves.toEqual([{ id: 'bk' }]);
   });
 });
+
+// Regresión: el flujo normal de un cajero con sucursal NO recibe el 403 nuevo, con y sin X-Branch-Id y con las formas en que
+// el frontend arma `sucursalId` (la suya, la de la sesión NIP o ninguna).
+describe('regresión: flujo normal de un cajero con sucursal', () => {
+  const RECEPCION_A1 = { tenantId: TA, branchId: 'suc-A1', roleCode: 'RECEPCION' };
+  const shifts: any = { openShift: jest.fn(async (d: any) => ({ id: 'turno-1', ...d })), closeShift: jest.fn(async () => ({ ok: true })), findOpenShift: jest.fn(async () => ({ id: 'turno-1' })), findAll: jest.fn(async () => []) };
+  const sales: any = { create: jest.fn(async (d: any) => ({ id: 'v-1', ...d })), findAll: jest.fn(async () => []), buscarCuentasAbiertas: jest.fn(async () => []) };
+  const turnos = new ShiftsController(shifts);
+  const ventas = new SalesController(sales, {} as any);
+  beforeEach(() => jest.clearAllMocks());
+
+  // header ausente, igual a la propia, o rancio de otra sucursal (el interceptor del frontend lo manda siempre)
+  describe.each([
+    ['CAJERO', CAJERO_A1],
+    ['RECEPCION', RECEPCION_A1],
+  ])('%s', (_rol, user) => {
+    describe.each([
+      ['sin X-Branch-Id', undefined],
+      ['con X-Branch-Id propio', 'suc-A1'],
+      ['con X-Branch-Id rancio de otra sucursal', 'suc-A2'],
+    ])('%s', (_etiqueta, header) => {
+      it('abre turno, vende, ve el historial y cierra el turno sin errores', async () => {
+        const req = { user };
+        const turno: any = await turnos.openShift({ cajero: 'u-1', sucursalId: 'suc-A1', fondoInicial: 500 }, req);
+        expect(turno.sucursalId).toBe('suc-A1');
+
+        expect(() => turnos.getOpenShift('u-1', 'suc-A1', req, header)).not.toThrow();
+        expect(shifts.findOpenShift).toHaveBeenLastCalledWith('u-1', 'suc-A1', TA);
+
+        const venta: any = await ventas.createSale({ items: [], total: 100, cajero: 'u-1', turnoId: turno.id, sucursalId: 'suc-A1' }, req);
+        expect(venta.sucursalId).toBe('suc-A1');
+
+        // historial: el POS manda solo turnoId; el header no cambia la sucursal
+        await ventas.getSales({ turnoId: turno.id }, req);
+        expect(sales.findAll).toHaveBeenLastCalledWith(expect.objectContaining({ turnoId: turno.id, sucursalId: 'suc-A1', tenantId: TA }));
+        await turnos.getShifts({}, req, header);
+        expect(shifts.findAll).toHaveBeenLastCalledWith(expect.objectContaining({ sucursalId: 'suc-A1' }));
+
+        await turnos.closeShift(turno.id, { efectivoContado: 500 }, req);
+        expect(shifts.closeShift).toHaveBeenCalledWith('turno-1', expect.anything(), TA);
+      });
+    });
+  });
+
+  it('sesión NIP (POS Lite) cuyo cliente manda la sucursal que le devolvió el login: es la del token, sin 403', async () => {
+    const nip = { tenantId: TA, branchId: 'suc-A1', roleCode: 'CAJERO', posLiteAccess: true };
+    await expect(turnos.openShift({ cajero: 'u-nip', sucursalId: 'suc-A1', tenantId: TA, fondoInicial: 0 }, { user: nip })).resolves.toBeDefined();
+    await expect(ventas.createSale({ items: [], cajero: 'u-nip', sucursalId: 'suc-A1' }, { user: nip })).resolves.toBeDefined();
+  });
+
+  it('cliente que no manda sucursal (null/undefined/vacío): el servidor usa la del token, no falla', async () => {
+    for (const vacio of [undefined, null, '']) {
+      const v: any = await ventas.createSale({ items: [], cajero: 'u-1', sucursalId: vacio }, { user: CAJERO_A1 });
+      expect(v.sucursalId).toBe('suc-A1');
+      const t: any = await turnos.openShift({ cajero: 'u-1', sucursalId: vacio, fondoInicial: 1 }, { user: CAJERO_A1 });
+      expect(t.sucursalId).toBe('suc-A1');
+    }
+  });
+
+  it('el ERP con un usuario con sucursal que opera por un cajero de NIP: cajero distinto, misma sucursal de la sesión', async () => {
+    const v: any = await ventas.createSale({ items: [], cajero: 'u-otro-cajero', sucursalId: 'suc-A2' }, { user: GERENTE_A2 });
+    expect(v.sucursalId).toBe('suc-A2');
+    expect(v.cajero).toBe('u-otro-cajero');
+  });
+
+  it('lo único que sí da 403: mandar de forma explícita la sucursal de otro', () => {
+    expect(() => ventas.createSale({ items: [], sucursalId: 'suc-A2' }, { user: CAJERO_A1 })).toThrow(ForbiddenException);
+    expect(() => turnos.openShift({ sucursalId: 'suc-A2' }, { user: RECEPCION_A1 })).toThrow(ForbiddenException);
+  });
+});
