@@ -61,6 +61,17 @@ export class ProductsService {
     return null;
   }
 
+  // Un insumoId que no es UUID (dato heredado, p. ej. 'insumo-2' en el demo) hacía que Postgres lanzara "invalid input syntax for
+  // type uuid" y tumbaba TODO el listado con 500. Ese producto queda con stock 0 en vez de romper el catálogo.
+  private static readonly UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  private async buscarInsumoParaStock(id?: string | null): Promise<Insumo | null> {
+    if (!id || !ProductsService.UUID_RE.test(id)) {
+      if (id) this.logger.warn(`Producto/receta con insumoId no UUID "${id}": se ignora para el stock`);
+      return null;
+    }
+    return this.insumosRepo.findOne({ where: { id } });
+  }
+
   // Con sucursal activa: los productos de esa sucursal Y los que no tienen sucursal (NULL = compartido por todo el negocio).
   // Antes la igualdad estricta ocultaba los NULL en cuanto el cliente mandaba X-Branch-Id. Siempre acotado al tenant.
   async findAll(branchId?: string, tenantId?: string) {
@@ -83,7 +94,7 @@ export class ProductsService {
     // Add stock information to each product
     for (const product of products) {
       if (product.type === 'SIMPLE' && product.insumoId) {
-        const crudo = await this.insumosRepo.findOne({ where: { id: product.insumoId } });
+        const crudo = await this.buscarInsumoParaStock(product.insumoId);
         const insumo = crudo ? await this.resolveActiveInsumoSafe(crudo) : null;
         (product as any).stock = insumo ? Number(insumo.stockActual) : 0;
         (product as any).stockMinimo = insumo ? Number(insumo.stockMinimo) : 0;
@@ -93,7 +104,7 @@ export class ProductsService {
         if (recipe && recipe.items) {
           let minStock = Infinity;
           for (const item of recipe.items) {
-            const crudo = await this.insumosRepo.findOne({ where: { id: item.insumoId } });
+            const crudo = await this.buscarInsumoParaStock(item.insumoId);
             const insumo = crudo ? await this.resolveActiveInsumoSafe(crudo) : null;
             if (insumo) {
               const availableStock = Number(insumo.stockActual) / item.cantidad;

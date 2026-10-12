@@ -75,3 +75,56 @@ describe('ProductsService.findAll — productos de planes de membresía', () => 
     expect(planesFind).not.toHaveBeenCalled();
   });
 });
+
+// Regresión en producción (7322dd3): al mostrar los productos sin sucursal (NULL = compartido), un producto del demo con
+// insumoId 'insumo-2' (no UUID) hizo que Postgres lanzara "invalid input syntax for type uuid" y GET /pos/products diera 500.
+describe('ProductsService.findAll — insumoId heredado que no es UUID', () => {
+  const UUID = '11111111-2222-3333-4444-555555555555';
+  let service: ProductsService;
+  let insumoFindOne: jest.Mock;
+  let productsFind: jest.Mock;
+
+  async function armar(productos: any[]) {
+    productsFind = jest.fn().mockResolvedValue(productos);
+    insumoFindOne = jest.fn(({ where }: any) => {
+      if (!/^[0-9a-f-]{36}$/i.test(where.id)) return Promise.reject(new Error(`invalid input syntax for type uuid: "${where.id}"`));
+      return Promise.resolve({ id: where.id, stockActual: 7, stockMinimo: 2, isActive: true });
+    });
+    const m = await Test.createTestingModule({
+      providers: [
+        ProductsService,
+        { provide: getRepositoryToken(Product), useValue: { find: productsFind } },
+        { provide: getRepositoryToken(Insumo), useValue: { findOne: insumoFindOne, manager: { findOne: jest.fn() } } },
+        { provide: getRepositoryToken(Recipe), useValue: { findOne: jest.fn().mockResolvedValue({ items: [{ insumoId: 'insumo-9', cantidad: 1 }] }) } },
+      ],
+    }).compile();
+    service = m.get(ProductsService);
+    jest.spyOn((service as any).logger, 'warn').mockImplementation(() => undefined);
+  }
+
+  const catalogo = () => [
+    { id: 'p1', tenantId: A, name: 'Legacy', type: 'SIMPLE', insumoId: 'insumo-2', branchId: null },
+    { id: 'p2', tenantId: A, name: 'Real', type: 'SIMPLE', insumoId: UUID, branchId: null },
+    { id: 'p3', tenantId: A, name: 'Receta', type: 'PREPARADO', recipeId: 'r1', branchId: null },
+    { id: 'p4', tenantId: A, name: 'Servicio', type: 'SERVICE', branchId: null },
+  ];
+
+  it('ADMIN sin sucursal: no da 500; el producto legado queda con stock 0 y los demás conservan el suyo', async () => {
+    await armar(catalogo());
+    const r: any[] = await service.findAll(undefined, A);
+    expect(r.map((p) => p.name)).toEqual(['Legacy', 'Real', 'Receta', 'Servicio']);
+    expect(r.find((p) => p.name === 'Legacy').stock).toBe(0);
+    expect(r.find((p) => p.name === 'Real').stock).toBe(7);
+    expect(r.find((p) => p.name === 'Receta').stock).toBe(0);
+    expect(insumoFindOne).not.toHaveBeenCalledWith({ where: { id: 'insumo-2' } });
+  });
+
+  it('con X-Branch-Id: incluye los NULL compartidos, acotado al tenant, y tampoco da 500', async () => {
+    await armar(catalogo());
+    const r = await service.findAll('branch-1', A);
+    expect(r).toHaveLength(4);
+    expect(productsFind).toHaveBeenCalledWith(
+      expect.objectContaining({ where: [{ tenantId: A, branchId: 'branch-1' }, expect.objectContaining({ tenantId: A })] }),
+    );
+  });
+});
