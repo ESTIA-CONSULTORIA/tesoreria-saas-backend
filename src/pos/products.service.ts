@@ -159,9 +159,48 @@ export class ProductsService {
     }
     const iva = this.tasaIvaSaneada(data); // 400 síncrono, como antes
     // La sucursal nunca se toma del cliente sin validar: debe existir en el tenant (el controller ya la resolvió desde el token).
-    return assertSucursalDelTenant(this.productsRepo.manager, data?.branchId, tenantId).then(() =>
-      this.productsRepo.save(this.productsRepo.create({ ...data, tenantId, ...iva })),
-    );
+    return assertSucursalDelTenant(this.productsRepo.manager, data?.branchId, tenantId)
+      .then(() => this.validarVinculosStock(data, tenantId))
+      .then((vinculos) => this.productsRepo.save(this.productsRepo.create({ ...data, ...(vinculos as any), tenantId, ...iva })));
+  }
+
+  // insumoId / recipeId: si vienen con valor deben ser UUID válidos Y existir en el tenant del producto; si no, 400 claro
+  // (antes se guardaba cualquier texto, p. ej. 'insumo-2', y el listado reventaba con 500). Vacío o null = sin vínculo.
+  // Devuelve solo los campos presentes en el body, ya normalizados ('' pasa a null).
+  private async validarVinculosStock(data: Partial<Product>, tenantId: string): Promise<{ insumoId?: string | null; recipeId?: string | null }> {
+    const salida: { insumoId?: string | null; recipeId?: string | null } = {};
+    const campos: Array<['insumoId' | 'recipeId', string, Repository<any>]> = [
+      ['insumoId', 'insumo', this.insumosRepo],
+      ['recipeId', 'receta', this.recipesRepo],
+    ];
+    for (const [campo, etiqueta, repo] of campos) {
+      if (!data || !Object.prototype.hasOwnProperty.call(data, campo)) continue;
+      const valor = (data as any)[campo];
+      if (valor === null || valor === undefined || valor === '') {
+        salida[campo] = null;
+        continue;
+      }
+      if (typeof valor !== 'string' || !ProductsService.UUID_RE.test(valor)) {
+        throw new BadRequestException(`El ${etiqueta} seleccionado no es válido (${campo} debe ser un identificador UUID). Elige uno de la lista.`);
+      }
+      const existe = await repo.findOne({ where: { id: valor, tenantId }, select: ['id'] });
+      if (!existe) {
+        throw new BadRequestException(`El ${etiqueta} seleccionado no existe en este negocio. Elige uno de la lista.`);
+      }
+      salida[campo] = valor;
+    }
+    return salida;
+  }
+
+  // Opciones reales del tenant para los selectores de la pantalla de Productos (solo id/nombre, sin costos; no depende del
+  // módulo 'costos').
+  async opcionesStock(tenantId?: string) {
+    if (!tenantId) return { insumos: [], recetas: [] };
+    const [insumos, recetas] = await Promise.all([
+      this.insumosRepo.find({ where: { tenantId, isActive: true }, select: ['id', 'nombre'], order: { nombre: 'ASC' } }),
+      this.recipesRepo.find({ where: { tenantId, isActive: true }, select: ['id', 'nombre'], order: { nombre: 'ASC' } }),
+    ]);
+    return { insumos, recetas };
   }
 
   // tenantId e id se descartan del body: antes `{ ...data }` iba directo a repo.update(), así
@@ -174,7 +213,9 @@ export class ProductsService {
     if (!existing) throw new NotFoundException('Producto no encontrado');
     const { tenantId: _ignoredTenantId, id: _ignoredId, ...safeData } = data as any;
     if (safeData.branchId) await assertSucursalDelTenant(this.productsRepo.manager, safeData.branchId, tenantId);
-    await this.productsRepo.update(id, { ...safeData, ...this.tasaIvaSaneada(data), updatedAt: new Date() });
+    // El tenant contra el que se valida es el del producto (SOPORTE no trae tenantId en el JWT).
+    const vinculos = await this.validarVinculosStock(safeData, tenantId || existing.tenantId);
+    await this.productsRepo.update(id, { ...safeData, ...vinculos, ...this.tasaIvaSaneada(data), updatedAt: new Date() });
     return this.productsRepo.findOne({ where: { id } });
   }
 

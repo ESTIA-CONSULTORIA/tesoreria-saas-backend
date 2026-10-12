@@ -16,6 +16,12 @@ export class ProductsController {
     return this.productsService.findAll(branchId, tenantId);
   }
 
+  // Insumos y recetas reales del tenant para los selectores de la pantalla de Productos. Va antes de :id.
+  @Get('opciones-stock')
+  opcionesStock(@Req() req: any) {
+    return this.productsService.opcionesStock(req.user?.tenantId);
+  }
+
   @Get(':id')
   findOne(@Param('id') id: string, @Req() req?: any) {
     const tenantId = req?.user?.tenantId;
