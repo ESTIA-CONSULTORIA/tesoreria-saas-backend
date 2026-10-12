@@ -21,8 +21,10 @@ export class CategoriesController {
   }
 
   @Post()
-  create(@Body() data: any) {
-    return this.categoriesService.create(data);
+  create(@Body() data: any, @Req() req?: any, @Headers('x-branch-id') headerBranchId?: string) {
+    // Sucursal efectiva: la del token; sin sucursal (ADMIN) la del cuerpo o la activa, validada contra el tenant; si no hay, NULL.
+    const branchId = sucursalParaEscribir(req?.user, data?.branchId) ?? sucursalEfectiva(req?.user, headerBranchId).branchId;
+    return this.categoriesService.create({ ...data, branchId: branchId ?? null }, req?.user?.tenantId);
   }
 
   @Put(':id')
