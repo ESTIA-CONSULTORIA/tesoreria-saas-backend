@@ -1,3 +1,4 @@
+import { tenantDeSesion } from '../auth/tenant-access.util';
 import { Body, Controller, Delete, Get, Headers, Param, Post, Put, Query, Request } from '@nestjs/common';
 import { PayrollService } from './payroll.service';
 import { Modulo } from '../auth/modulo.decorator';
@@ -20,7 +21,7 @@ export class PayrollController {
     // Auditoría de seguridad (GoodsHabits): x-tenant-id/x-company-id son headers
     // controlables por el cliente — el JWT (verificado) va primero en todo el archivo,
     // el header queda solo como fallback para cuando el JWT no trae el dato (SOPORTE).
-    const tenantId = req?.user?.tenantId || headerTenantId;
+    const tenantId = (tenantDeSesion(req) ?? headerTenantId) as string;
     const companyId = req?.user?.companyId || headerCompanyId;
     const branchId = req?.user?.branchId || body.branchId;
     return this.payrollService.createPayrollRun(body, tenantId, companyId, branchId);
@@ -32,7 +33,7 @@ export class PayrollController {
     @Headers('x-company-id') headerCompanyId?: string,
     @Request() req?: any,
   ) {
-    const tenantId = req?.user?.tenantId || headerTenantId;
+    const tenantId = (tenantDeSesion(req) ?? headerTenantId) as string;
     const companyId = req?.user?.companyId || headerCompanyId;
     return this.payrollService.listPayrollRuns(tenantId, companyId);
   }
@@ -59,7 +60,7 @@ export class PayrollController {
     @Headers('x-tenant-id') headerTenantId?: string,
     @Request() req?: any,
   ) {
-    const tenantId = req?.user?.tenantId || headerTenantId;
+    const tenantId = (tenantDeSesion(req) ?? headerTenantId) as string;
     return this.payrollService.confirmPayment(id, body.bankId, tenantId);
   }
 
@@ -74,7 +75,7 @@ export class PayrollController {
     @Headers('x-tenant-id') headerTenantId?: string,
     @Request() req?: any,
   ) {
-    const tenantId = req?.user?.tenantId || headerTenantId;
+    const tenantId = (tenantDeSesion(req) ?? headerTenantId) as string;
     return this.payrollService.confirmPaymentPerEmployee(id, body.bankId, tenantId);
   }
 
@@ -96,7 +97,7 @@ export class PayrollController {
     @Headers('x-tenant-id') headerTenantId?: string,
     @Request() req?: any,
   ) {
-    const tenantId = req?.user?.tenantId || headerTenantId;
+    const tenantId = (tenantDeSesion(req) ?? headerTenantId) as string;
     return this.payrollService.generateReceipts(id, tenantId);
   }
 
@@ -114,7 +115,7 @@ export class PayrollController {
     @Headers('x-tenant-id') headerTenantId?: string,
     @Request() req?: any,
   ) {
-    const tenantId = req?.user?.tenantId || headerTenantId;
+    const tenantId = (tenantDeSesion(req) ?? headerTenantId) as string;
     return this.payrollService.getConceptTemplates(employeeId, tenantId);
   }
 
@@ -124,7 +125,7 @@ export class PayrollController {
     @Headers('x-tenant-id') headerTenantId?: string,
     @Request() req?: any,
   ) {
-    const tenantId = req?.user?.tenantId || headerTenantId;
+    const tenantId = (tenantDeSesion(req) ?? headerTenantId) as string;
     return this.payrollService.saveConceptTemplate(body, tenantId);
   }
 
@@ -139,7 +140,7 @@ export class PayrollController {
     @Headers('x-tenant-id') tenantId?: string,
     @Headers('x-company-id') companyId?: string,
   ) {
-    const tid = req?.user?.tenantId || tenantId;
+    const tid = (tenantDeSesion(req) ?? tenantId) as string;
     const cid = req?.user?.companyId || companyId;
     return this.payrollService.getCatalog(tid, cid);
   }
@@ -151,7 +152,7 @@ export class PayrollController {
     @Headers('x-company-id') companyId?: string,
     @Request() req?: any,
   ) {
-    const tid = req?.user?.tenantId || tenantId;
+    const tid = (tenantDeSesion(req) ?? tenantId) as string;
     const cid = req?.user?.companyId || companyId;
     return this.payrollService.saveCatalogConcept({ ...body, tenantId: tid, companyId: cid });
   }
@@ -184,7 +185,7 @@ export class PayrollController {
     @Headers('x-tenant-id') headerTenantId?: string,
     @Request() req?: any,
   ) {
-    const tenantId = req?.user?.tenantId || headerTenantId;
+    const tenantId = (tenantDeSesion(req) ?? headerTenantId) as string;
     return this.payrollService.createIncapacity(body, tenantId);
   }
 
@@ -194,7 +195,7 @@ export class PayrollController {
     @Headers('x-tenant-id') headerTenantId?: string,
     @Request() req?: any,
   ) {
-    const tenantId = req?.user?.tenantId || headerTenantId;
+    const tenantId = (tenantDeSesion(req) ?? headerTenantId) as string;
     return this.payrollService.getIncapacities(employeeId, tenantId);
   }
 }

@@ -1,3 +1,4 @@
+import { tenantDeSesion } from '../auth/tenant-access.util';
 import { Body, Controller, Delete, Get, Headers, Param, Patch, Post, Put, Query, Request } from '@nestjs/common';
 import { HrService } from './hr.service';
 import { Modulo } from '../auth/modulo.decorator';
@@ -20,7 +21,7 @@ export class HrController {
     @Headers('x-company-id') headerCompanyId?: string,
     @Request() req?: any,
   ) {
-    const tenantId = req?.user?.tenantId ?? headerTenantId;
+    const tenantId = tenantDeSesion(req) ?? headerTenantId;
     const companyId = req?.user?.companyId ?? headerCompanyId;
     return this.service.findAllEmployees(tenantId, companyId);
   }
@@ -32,20 +33,20 @@ export class HrController {
     @Headers('x-company-id') headerCompanyId?: string,
     @Request() req?: any,
   ) {
-    const tenantId = req?.user?.tenantId ?? headerTenantId;
+    const tenantId = tenantDeSesion(req) ?? headerTenantId;
     const companyId = req?.user?.companyId ?? headerCompanyId;
     return this.service.createEmployee({ ...body, tenantId, companyId });
   }
 
   @Put('employees/:id')
   update(@Param('id') id: string, @Body() body: any, @Request() req?: any) {
-    const tenantId = req?.user?.tenantId;
+    const tenantId = tenantDeSesion(req) as string; // undefined = SOPORTE (sin acotar)
     return this.service.updateEmployee(id, body, tenantId);
   }
 
   @Delete('employees/:id')
   remove(@Param('id') id: string, @Request() req?: any) {
-    const tenantId = req?.user?.tenantId;
+    const tenantId = tenantDeSesion(req) as string; // undefined = SOPORTE (sin acotar)
     return this.service.removeEmployee(id, tenantId);
   }
 
@@ -58,14 +59,14 @@ export class HrController {
 
   @Get('employees/birthdays')
   getBirthdays(@Request() req?: any, @Headers('x-tenant-id') headerTenantId?: string) {
-    const tenantId = req?.user?.tenantId ?? headerTenantId ?? '';
+    const tenantId = tenantDeSesion(req) ?? headerTenantId ?? '';
     return this.service.getBirthdaysThisMonth(tenantId);
   }
 
   // Documents
   @Get('employees/:employeeId/documents')
   getDocuments(@Param('employeeId') employeeId: string, @Request() req?: any) {
-    const tenantId = req?.user?.tenantId;
+    const tenantId = tenantDeSesion(req) as string; // undefined = SOPORTE (sin acotar)
     return this.service.findDocsByEmployee(employeeId, tenantId);
   }
 
@@ -99,13 +100,13 @@ export class HrController {
   // Shifts (HR turnos, not POS)
   @Get('shifts')
   findShifts(@Request() req?: any) {
-    const tenantId = req?.user?.tenantId;
+    const tenantId = tenantDeSesion(req) as string; // undefined = SOPORTE (sin acotar)
     return this.service.findAllShifts(tenantId);
   }
 
   @Post('shifts')
   createShift(@Body() body: any, @Request() req?: any) {
-    const tenantId = req?.user?.tenantId;
+    const tenantId = tenantDeSesion(req) as string; // undefined = SOPORTE (sin acotar)
     return this.service.createShift({ ...body, tenantId });
   }
 
@@ -122,14 +123,14 @@ export class HrController {
   // Pending requests (admin view)
   @Get('requests/pending')
   getPending(@Request() req?: any) {
-    const tenantId = req?.user?.tenantId;
+    const tenantId = tenantDeSesion(req) as string; // undefined = SOPORTE (sin acotar)
     return this.service.findPendingRequests(tenantId);
   }
 
   // Vacation requests
   @Post('requests/vacation')
   createVacation(@Body() body: any, @Request() req?: any) {
-    const tenantId = req?.user?.tenantId;
+    const tenantId = tenantDeSesion(req) as string; // undefined = SOPORTE (sin acotar)
     return this.service.createVacationRequest({ ...body, tenantId });
   }
 
@@ -148,7 +149,7 @@ export class HrController {
   // Permission requests
   @Post('requests/permission')
   createPermission(@Body() body: any, @Request() req?: any) {
-    const tenantId = req?.user?.tenantId;
+    const tenantId = tenantDeSesion(req) as string; // undefined = SOPORTE (sin acotar)
     return this.service.createPermissionRequest({ ...body, tenantId });
   }
 
@@ -167,7 +168,7 @@ export class HrController {
   // Attendance
   @Post('attendance')
   createManualAttendance(@Body() body: any, @Request() req?: any) {
-    const tenantId = req?.user?.tenantId;
+    const tenantId = tenantDeSesion(req) as string; // undefined = SOPORTE (sin acotar)
     return this.service.createManualAttendance({ ...body, tenantId });
   }
 
@@ -192,7 +193,7 @@ export class HrController {
 
   @Post('attendance/check-in')
   checkIn(@Body() body: any, @Request() req?: any) {
-    const tenantId = req?.user?.tenantId;
+    const tenantId = tenantDeSesion(req) as string; // undefined = SOPORTE (sin acotar)
     const branchId = req?.user?.branchId || body.branchId;
     const employeeId = body.employeeId || req?.user?.employeeId;
     return this.service.checkIn(employeeId, tenantId, branchId, body.method, body.lat, body.lng);
@@ -206,7 +207,7 @@ export class HrController {
 
   @Post('attendance/upsert')
   upsertAttendance(@Body() body: any, @Request() req?: any) {
-    const tenantId = req?.user?.tenantId || req?.headers?.['x-tenant-id'];
+    const tenantId = tenantDeSesion(req) ?? req?.headers?.['x-tenant-id'];
     const branchId = req?.user?.branchId || req?.headers?.['x-branch-id'];
     return this.service.upsertAttendance({ ...body, tenantId, branchId });
   }
@@ -221,7 +222,7 @@ export class HrController {
     @Param('employeeId') employeeId: string,
     @Request() req: any,
   ) {
-    const tenantId = req?.user?.tenantId || req?.headers?.['x-tenant-id'];
+    const tenantId = tenantDeSesion(req) ?? req?.headers?.['x-tenant-id'];
     return this.service.getAttendanceAudit(employeeId, tenantId);
   }
 
@@ -236,19 +237,19 @@ export class HrController {
   // Biometrics
   @Post('biometrics/face/register')
   registerFace(@Body() body: any, @Request() req?: any) {
-    const tenantId = req?.user?.tenantId;
+    const tenantId = tenantDeSesion(req) as string; // undefined = SOPORTE (sin acotar)
     return this.service.registerFace(body.employeeId, tenantId, body.faceDescriptor);
   }
 
   @Post('biometrics/face/verify')
   verifyFace(@Body() body: any, @Request() req?: any) {
-    const tenantId = req?.user?.tenantId || body.tenantId;
+    const tenantId = tenantDeSesion(req) ?? body.tenantId;
     return this.service.verifyFace(body.faceDescriptor, tenantId);
   }
 
   @Get('biometrics')
   getBiometrics(@Request() req?: any) {
-    const tenantId = req?.user?.tenantId;
+    const tenantId = tenantDeSesion(req) as string; // undefined = SOPORTE (sin acotar)
     return this.service.findBiometricsByTenant(tenantId);
   }
 
@@ -290,7 +291,7 @@ export class HrController {
   @Post('portal/vacation-request')
   portalVacationRequest(@Body() body: any, @Request() req?: any) {
     const userId = req?.user?.id;
-    const tenantId = req?.user?.tenantId;
+    const tenantId = tenantDeSesion(req) as string; // undefined = SOPORTE (sin acotar)
     return this.service.findEmployeeByUserId(userId).then((emp) => {
       if (!emp) throw new Error('Empleado no encontrado');
       return this.service.createVacationRequest({ ...body, employeeId: emp.id, tenantId });
@@ -300,7 +301,7 @@ export class HrController {
   @Post('portal/permission-request')
   portalPermissionRequest(@Body() body: any, @Request() req?: any) {
     const userId = req?.user?.id;
-    const tenantId = req?.user?.tenantId;
+    const tenantId = tenantDeSesion(req) as string; // undefined = SOPORTE (sin acotar)
     return this.service.findEmployeeByUserId(userId).then((emp) => {
       if (!emp) throw new Error('Empleado no encontrado');
       return this.service.createPermissionRequest({ ...body, employeeId: emp.id, tenantId });

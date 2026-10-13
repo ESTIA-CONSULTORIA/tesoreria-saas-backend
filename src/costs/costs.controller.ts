@@ -16,7 +16,7 @@ export class CostsController {
     @Query('categoriaId') categoriaId?: string,
     @Request() req?: any,
   ) {
-    const tenantId = req?.user?.tenantId || queryTenantId;
+    const tenantId = tenantDeSesion(req) ?? queryTenantId;
     return this.costsService.findAllInsumos(tenantId, categoriaId);
   }
 
@@ -40,7 +40,7 @@ export class CostsController {
 
   @Post('insumos')
   createInsumo(@Body() data: any, @Request() req?: any) {
-    const tenantId = req?.user?.tenantId;
+    const tenantId = tenantDeSesion(req) as string; // undefined = SOPORTE (sin acotar)
     return this.costsService.createInsumo({ ...data, tenantId });
   }
 
@@ -71,7 +71,7 @@ export class CostsController {
     @Query('sucursalId') sucursalId?: string,
     @Request() req?: any,
   ) {
-    const tenantId = req?.user?.tenantId || queryTenantId;
+    const tenantId = tenantDeSesion(req) ?? queryTenantId;
     return this.costsService.findAllAlmacenes(tenantId, sucursalEfectiva(req?.user, sucursalId).branchId);
   }
 
@@ -82,7 +82,7 @@ export class CostsController {
 
   @Post('almacenes')
   createAlmacen(@Body() data: any, @Request() req?: any) {
-    const tenantId = req?.user?.tenantId;
+    const tenantId = tenantDeSesion(req) as string; // undefined = SOPORTE (sin acotar)
     return this.costsService.createAlmacen({ ...data, tenantId });
   }
 
@@ -99,7 +99,7 @@ export class CostsController {
   // Familias de Insumos
   @Get('familias')
   findAllFamilias(@Query('tenantId') queryTenantId?: string, @Request() req?: any) {
-    const tenantId = req?.user?.tenantId || queryTenantId;
+    const tenantId = tenantDeSesion(req) ?? queryTenantId;
     return this.costsService.findAllFamilias(tenantId);
   }
 
@@ -110,7 +110,7 @@ export class CostsController {
 
   @Post('familias')
   createFamilia(@Body() data: any, @Request() req?: any) {
-    const tenantId = req?.user?.tenantId;
+    const tenantId = tenantDeSesion(req) as string; // undefined = SOPORTE (sin acotar)
     return this.costsService.createFamilia({ ...data, tenantId });
   }
 
@@ -131,7 +131,7 @@ export class CostsController {
     @Query('tipo') tipo?: string,
     @Request() req?: any,
   ) {
-    const tenantId = req?.user?.tenantId || queryTenantId;
+    const tenantId = tenantDeSesion(req) ?? queryTenantId;
     return this.costsService.findAllRecipes(tenantId, tipo);
   }
 
@@ -142,7 +142,7 @@ export class CostsController {
 
   @Post('recipes')
   createRecipe(@Body() data: any, @Request() req?: any) {
-    const tenantId = req?.user?.tenantId;
+    const tenantId = tenantDeSesion(req) as string; // undefined = SOPORTE (sin acotar)
     return this.costsService.createRecipe({ ...data, tenantId });
   }
 
@@ -169,7 +169,7 @@ export class CostsController {
 
   @Post('recipes/:id/items')
   createRecipeItem(@Param('id') id: string, @Body() data: any, @Request() req?: any) {
-    const tenantId = req?.user?.tenantId;
+    const tenantId = tenantDeSesion(req) as string; // undefined = SOPORTE (sin acotar)
     return this.costsService.createRecipeItem(id, { ...data, tenantId });
   }
 
@@ -193,8 +193,9 @@ export class CostsController {
   async findInventoryByPeriod(
     @Query('tenantId') tenantId?: string,
     @Query('periodo') periodo?: string,
+    @Request() req?: any,
   ) {
-    return this.costsService.findInventoryByPeriod(tenantId, periodo);
+    return this.costsService.findInventoryByPeriod(tenantDeSesion(req) ?? tenantId, periodo);
   }
 
   @Get('inventory/:insumoId/:periodo')
@@ -206,8 +207,9 @@ export class CostsController {
   }
 
   @Post('inventory')
-  async createInventory(@Body() data: any) {
-    return this.costsService.createInventory(data);
+  async createInventory(@Body() data: any, @Request() req?: any) {
+    // El tenant sale del token; el del body solo vale para SOPORTE.
+    return this.costsService.createInventory({ ...data, tenantId: tenantDeSesion(req) ?? data?.tenantId });
   }
 
   @Put('inventory/:id')
@@ -228,7 +230,7 @@ export class CostsController {
     @Query('tenantId') queryTenantId?: string,
     @Request() req?: any,
   ) {
-    const tenantId = req?.user?.tenantId || queryTenantId;
+    const tenantId = tenantDeSesion(req) ?? queryTenantId;
     return this.costsService.findInventoryMovements(tenantId, { insumoId, desde, hasta });
   }
 
@@ -237,8 +239,9 @@ export class CostsController {
   async calculateCostOfSales(
     @Query('tenantId') tenantId?: string,
     @Query('periodo') periodo?: string,
+    @Request() req?: any,
   ) {
-    return this.costsService.calculateCostOfSales(tenantId, periodo);
+    return this.costsService.calculateCostOfSales(tenantDeSesion(req) ?? tenantId, periodo);
   }
 
   // Conteo Físico
@@ -246,8 +249,9 @@ export class CostsController {
   async findPhysicalCounts(
     @Query('tenantId') tenantId?: string,
     @Query('insumoId') insumoId?: string,
+    @Request() req?: any,
   ) {
-    return this.costsService.findPhysicalCounts(tenantId, insumoId);
+    return this.costsService.findPhysicalCounts(tenantDeSesion(req) ?? tenantId, insumoId);
   }
 
   @Get('physical-counts/period')
@@ -255,17 +259,18 @@ export class CostsController {
     @Query('fechaInicio') fechaInicio: string,
     @Query('fechaFin') fechaFin: string,
     @Query('tenantId') tenantId?: string,
+    @Request() req?: any,
   ) {
     return this.costsService.findPhysicalCountsByPeriod(
       new Date(fechaInicio),
       new Date(fechaFin),
-      tenantId,
+      tenantDeSesion(req) ?? tenantId,
     );
   }
 
   @Post('physical-counts')
   async createPhysicalCount(@Body() data: any, @Request() req?: any) {
-    const tenantId = req?.user?.tenantId;
+    const tenantId = tenantDeSesion(req) as string; // undefined = SOPORTE (sin acotar)
     return this.costsService.createPhysicalCount({ ...data, tenantId });
   }
 

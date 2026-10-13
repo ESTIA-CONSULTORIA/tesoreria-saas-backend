@@ -32,6 +32,11 @@ export class DashboardController {
     if (efectiva.branchId && !efectiva.restringida) await assertSucursalLegible(this.companiesRepo.manager, efectiva.branchId, tenantId);
     let branchId = efectiva.branchId || userBranchId || undefined;
     let companyId = headerCompanyId || userCompanyId || undefined;
+    // El x-company-id (header) debe ser una empresa del tenant del token; si no, 404 (sin distinguir inexistente de ajena).
+    if (companyId && tenantId) {
+      const propia = await this.companiesRepo.findOne({ where: { id: companyId, tenantId } });
+      if (!propia) throw new NotFoundException('Empresa no encontrada');
+    }
     // Branch is more specific than company — don't double-filter
     if (branchId) companyId = undefined;
     

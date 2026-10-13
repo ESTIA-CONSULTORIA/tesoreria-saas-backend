@@ -25,6 +25,18 @@ export function efectivoFueraDeCaja(sales: Sale[]) {
   return { personas, total: Math.round(personas.reduce((s, x) => s + x.monto, 0) * 100) / 100 };
 }
 
+export const INDICE_TURNO_UNICO = 'UQ_shift_un_abierto_por_cajero';
+
+// 23505 = unique_violation de Postgres. Se reconoce por el nombre del índice (o, si el driver no lo informa, por la
+// tabla): cualquier otra violación de unicidad se deja pasar como error normal.
+export function esViolacionTurnoUnico(error: any): boolean {
+  const e = error?.driverError ?? error;
+  if (e?.code !== '23505') return false;
+  const constraint = String(e?.constraint ?? '');
+  const detalle = `${e?.detail ?? ''} ${e?.message ?? ''}`;
+  return constraint === INDICE_TURNO_UNICO || detalle.includes(INDICE_TURNO_UNICO) || e?.table === 'shift';
+}
+
 @Injectable()
 export class ShiftsService {
   constructor(
@@ -61,8 +73,14 @@ export class ShiftsService {
       shift.totalDevoluciones = 0;
       shift.status = 'ABIERTO';
       shift.notas = data.notas || '';
-      return this.shiftsRepo.save(shift);
+      // await: sin él un rechazo del INSERT escapaba del catch y no se podía traducir.
+      return await this.shiftsRepo.save(shift);
     } catch (error) {
+      // Índice único parcial UQ_shift_un_abierto_por_cajero: un cajero no puede tener dos turnos ABIERTOS (23505).
+      if (esViolacionTurnoUnico(error)) {
+        throw new BadRequestException('Ya tienes un turno abierto. Ciérralo antes de abrir otro');
+      }
+      if (error instanceof HttpException) throw error;
       console.error('ShiftsService.openShift error:', error);
       throw new Error(`Error al abrir turno: ${error.message}`);
     }
