@@ -1,3 +1,4 @@
+import { tenantDeSesion } from '../auth/tenant-access.util';
 import { Controller, Get, Post, Put, Param, Body, Request } from '@nestjs/common';
 import { InsumoAlertsService } from './insumo-alerts.service';
 
@@ -30,7 +31,7 @@ export class InsumoAlertsController {
   }
 
   @Put(':id')
-  update(@Param('id') id: string, @Body() body: { estado: string; notas?: string }) {
-    return this.service.updateEstado(id, body.estado, body.notas);
+  update(@Param('id') id: string, @Body() body: { estado: string; notas?: string }, @Request() req?: any) {
+    return this.service.updateEstado(id, body.estado, body.notas, tenantDeSesion(req));
   }
 }

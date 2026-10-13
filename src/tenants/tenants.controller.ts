@@ -1,4 +1,5 @@
-import { Body, Controller, Get, Post, Put, Patch, Param, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Post, Put, Patch, Param, Request, UseGuards } from '@nestjs/common';
+import { assertTenantAccess, esSoporte } from '../auth/tenant-access.util';
 import { TenantsService } from './tenants.service';
 import { Public } from '../auth/public.decorator';
 import { RolesGuard } from '../auth/roles.guard';
@@ -42,9 +43,14 @@ export class TenantsController {
     return this.tenantsService.create(body);
   }
 
+  // Solo SOPORTE ve todos los tenants; cualquier otro rol recibe únicamente el de su token.
   @Get()
-  findAll() {
-    return this.tenantsService.findAll();
+  async findAll(@Request() req?: any) {
+    if (esSoporte(req?.user)) return this.tenantsService.findAll();
+    const tenantId = req?.user?.tenantId;
+    if (!tenantId) return [];
+    const propio = await this.tenantsService.findOne(tenantId);
+    return propio ? [propio] : [];
   }
 
   // Auditoría de seguridad (Hallazgo 1c, GoodsHabits): este endpoint es público (lo usan
@@ -65,7 +71,8 @@ export class TenantsController {
   }
 
   @Get(':id')
-  findOne(@Param('id') id: string) {
+  findOne(@Param('id') id: string, @Request() req?: any) {
+    assertTenantAccess(req?.user, id, 'No tienes permiso para consultar otro tenant');
     return this.tenantsService.findOne(id);
   }
 
@@ -84,13 +91,21 @@ export class TenantsController {
     return this.tenantsService.update(id, body);
   }
 
+  // El plan define lo que se cobra y qué módulos se ven: solo SOPORTE. (El panel SOPORTE usa
+  // /administration/tenants/:id/plan; este endpoint no tiene consumidor de ADMIN.)
+  @UseGuards(RolesGuard)
+  @Roles('SOPORTE')
   @Put(':id/plan')
   updatePlan(@Param('id') id: string, @Body('plan') plan: string) {
     return this.tenantsService.updatePlan(id, plan);
   }
 
+  // OnboardingWizard (ADMIN) marca su propio tenant; SOPORTE puede marcar cualquiera.
+  @UseGuards(RolesGuard)
+  @Roles('SOPORTE', 'ADMIN')
   @Patch(':id/onboard')
-  markOnboarded(@Param('id') id: string) {
+  markOnboarded(@Param('id') id: string, @Request() req?: any) {
+    assertTenantAccess(req?.user, id, 'No puedes modificar otro tenant');
     return this.tenantsService.markOnboarded(id);
   }
 }

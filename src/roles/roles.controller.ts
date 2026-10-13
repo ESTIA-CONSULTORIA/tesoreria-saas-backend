@@ -37,12 +37,18 @@ export class RolesController {
     return this.rolesService.findByCode(code);
   }
 
+  // Antes @Public(): escritura anónima. Lo usa RolesPage (sesión ADMIN); idempotente.
+  @UseGuards(RolesGuard)
+  @Roles('ADMIN', 'SOPORTE')
   @Post('initialize-default')
-  @Public()
   initializeDefaultRoles() {
     return this.rolesService.initializeDefaultRoles();
   }
 
+  // Los roles son GLOBALES (compartidos por todos los tenants): editar la matriz afecta a todos,
+  // así que solo SOPORTE. Ningún guard del backend lee esta tabla; solo la pintan RolesPage/UsersPage.
+  @UseGuards(RolesGuard)
+  @Roles('SOPORTE')
   @Put(':roleId/permissions/:module')
   updatePermission(
     @Param('roleId') roleId: string,

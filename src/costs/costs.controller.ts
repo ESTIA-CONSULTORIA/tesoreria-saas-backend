@@ -1,3 +1,4 @@
+import { tenantDeSesion } from '../auth/tenant-access.util';
 import { Controller, Get, Post, Put, Delete, Body, Param, Query, Request } from '@nestjs/common';
 import { CostsService } from './costs.service';
 import { Modulo } from '../auth/modulo.decorator';
@@ -273,20 +274,24 @@ export class CostsController {
   async findJustificablesByPeriod(
     @Query('periodo') periodo: string,
     @Query('tenantId') tenantId?: string,
+    @Request() req?: any,
   ) {
-    return this.costsService.findJustificablesByPeriod(periodo, tenantId);
+    return this.costsService.findJustificablesByPeriod(periodo, tenantDeSesion(req) ?? tenantId);
   }
 
   @Get('justificables/totals')
   async calculateTotalJustificables(
     @Query('periodo') periodo: string,
     @Query('tenantId') tenantId?: string,
+    @Request() req?: any,
   ) {
-    return this.costsService.calculateTotalJustificables(periodo, tenantId);
+    return this.costsService.calculateTotalJustificables(periodo, tenantDeSesion(req) ?? tenantId);
   }
 
   @Post('justificables')
-  async createJustifiable(@Body() data: any) {
-    return this.costsService.createJustifiable(data);
+  async createJustifiable(@Body() data: any, @Request() req?: any) {
+    // El tenant sale del token; el del body solo vale para SOPORTE.
+    const tenantId = tenantDeSesion(req) ?? data?.tenantId;
+    return this.costsService.createJustifiable({ ...data, tenantId });
   }
 }

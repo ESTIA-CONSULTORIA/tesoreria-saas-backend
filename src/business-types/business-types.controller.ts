@@ -1,4 +1,6 @@
-import { Body, Controller, Get, Param, Post } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
+import { RolesGuard } from '../auth/roles.guard';
+import { Roles } from '../auth/roles.decorator';
 import { BusinessTypesService } from './business-types.service';
 import { BusinessType } from './entities/business-type.entity';
 
@@ -6,6 +8,8 @@ import { BusinessType } from './entities/business-type.entity';
 export class BusinessTypesController {
   constructor(private businessTypesService: BusinessTypesService) {}
 
+  @UseGuards(RolesGuard)
+  @Roles('SOPORTE')
   @Post()
   create(@Body() body: Partial<BusinessType>) {
     return this.businessTypesService.create(body);

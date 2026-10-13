@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { OcrDocument } from './entities/ocr-document.entity';
@@ -116,7 +116,15 @@ export class OcrService {
     return 'OTRO';
   }
 
-  async findOne(id: string): Promise<OcrDocument | null> {
+  // tenantId = el del token (undefined = SOPORTE): el documento debe ser de ese tenant; una id ajena es 404.
+  private async assertDoc(id: string, tenantId?: string) {
+    if (!tenantId) return;
+    const d = await this.repo.findOne({ where: { id, tenantId } as any });
+    if (!d) throw new NotFoundException('Documento no encontrado');
+  }
+
+  async findOne(id: string, tenantId?: string): Promise<OcrDocument | null> {
+    await this.assertDoc(id, tenantId);
     return this.repo.findOne({ where: { id } });
   }
 
@@ -131,7 +139,9 @@ export class OcrService {
     id: string,
     validatedData: Record<string, any>,
     validatedBy?: string,
+    tenantId?: string,
   ): Promise<OcrDocument> {
+    await this.assertDoc(id, tenantId);
     await this.repo.update(id, {
       status: 'VALIDATED',
       validatedData,
@@ -141,7 +151,8 @@ export class OcrService {
     return this.repo.findOne({ where: { id } }) as Promise<OcrDocument>;
   }
 
-  async reject(id: string, validatedBy?: string): Promise<OcrDocument> {
+  async reject(id: string, validatedBy?: string, tenantId?: string): Promise<OcrDocument> {
+    await this.assertDoc(id, tenantId);
     await this.repo.update(id, {
       status: 'REJECTED',
       validatedAt: new Date(),
@@ -150,7 +161,8 @@ export class OcrService {
     return this.repo.findOne({ where: { id } }) as Promise<OcrDocument>;
   }
 
-  async remove(id: string): Promise<void> {
+  async remove(id: string, tenantId?: string): Promise<void> {
+    await this.assertDoc(id, tenantId);
     await this.repo.delete(id);
   }
 

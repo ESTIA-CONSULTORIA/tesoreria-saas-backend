@@ -1,6 +1,7 @@
 import { Controller, Get, Post, Put, Delete, Body, Param, Query, Req, Headers } from '@nestjs/common';
 import { SuppliersService } from './suppliers.service';
 import { Modulo } from '../auth/modulo.decorator';
+import { tenantDeSesion } from '../auth/tenant-access.util';
 
 @Controller('suppliers')
 @Modulo('proveedores')
@@ -26,8 +27,8 @@ export class SuppliersController {
   }
 
   @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.suppliersService.findOne(id);
+  findOne(@Param('id') id: string, @Req() req?: any) {
+    return this.suppliersService.findOne(id, tenantDeSesion(req));
   }
 
   // Recomendación #4 (seguimiento auditoría BUSINESS): antes era un stub que siempre
@@ -46,17 +47,17 @@ export class SuppliersController {
   }
 
   @Put(':id')
-  update(@Param('id') id: string, @Body() data: any) {
-    return this.suppliersService.update(id, data);
+  update(@Param('id') id: string, @Body() data: any, @Req() req?: any) {
+    return this.suppliersService.update(id, data, tenantDeSesion(req));
   }
 
   @Put(':id/deactivate')
-  async deactivate(@Param('id') id: string) {
-    return this.suppliersService.softDelete(id);
+  async deactivate(@Param('id') id: string, @Req() req?: any) {
+    return this.suppliersService.softDelete(id, tenantDeSesion(req));
   }
 
   @Delete(':id')
-  delete(@Param('id') id: string) {
-    return this.suppliersService.delete(id);
+  delete(@Param('id') id: string, @Req() req?: any) {
+    return this.suppliersService.delete(id, tenantDeSesion(req));
   }
 }

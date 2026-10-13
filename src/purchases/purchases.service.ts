@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
 import { PurchaseOrder } from './entities/purchase-order.entity';
@@ -48,7 +48,23 @@ export class PurchasesService {
     });
   }
 
-  findOneOrder(id: string) {
+  // Con tenantId (siempre el del token; undefined = SOPORTE) la orden/factura debe ser de ese tenant:
+  // una id ajena responde 404 igual que una inexistente.
+  private async assertOrder(id: string, tenantId?: string) {
+    if (!tenantId) return;
+    const o = await this.purchaseOrdersRepo.findOne({ where: { id, tenantId } as any });
+    if (!o) throw new NotFoundException('Orden de compra no encontrada');
+  }
+
+  private async assertPurchase(id: string, tenantId?: string) {
+    if (!tenantId) return;
+    const p = await this.purchasesRepo.findOne({ where: { id, tenantId } as any });
+    if (!p) throw new NotFoundException('Factura no encontrada');
+  }
+
+  // Órdenes de compra
+  async findOneOrder(id: string, tenantId?: string) {
+    await this.assertOrder(id, tenantId);
     return this.purchaseOrdersRepo.findOne({ where: { id } });
   }
 
@@ -57,22 +73,27 @@ export class PurchasesService {
     return this.purchaseOrdersRepo.save(order);
   }
 
-  async updateOrder(id: string, data: Partial<PurchaseOrder>) {
+  async updateOrder(id: string, data: Partial<PurchaseOrder>, tenantId?: string) {
+    await this.assertOrder(id, tenantId);
+    delete (data as any).tenantId;
     await this.purchaseOrdersRepo.update(id, data);
     return this.purchaseOrdersRepo.findOne({ where: { id } });
   }
 
-  async markOrderAsSent(id: string) {
+  async markOrderAsSent(id: string, tenantId?: string) {
+    await this.assertOrder(id, tenantId);
     await this.purchaseOrdersRepo.update(id, { status: 'ENVIADA' });
     return this.purchaseOrdersRepo.findOne({ where: { id } });
   }
 
-  async cancelOrder(id: string) {
+  async cancelOrder(id: string, tenantId?: string) {
+    await this.assertOrder(id, tenantId);
     await this.purchaseOrdersRepo.update(id, { status: 'CANCELADA' });
     return this.purchaseOrdersRepo.findOne({ where: { id } });
   }
 
-  async requestCancellation(id: string, motivo: string, userId: string) {
+  async requestCancellation(id: string, motivo: string, userId: string, tenantId?: string) {
+    await this.assertOrder(id, tenantId);
     const order = await this.purchaseOrdersRepo.findOne({ where: { id } });
     if (!order) return null;
 
@@ -93,7 +114,8 @@ export class PurchasesService {
     return this.purchaseOrdersRepo.findOne({ where: { id } });
   }
 
-  async approveCancellation(id: string, userId: string) {
+  async approveCancellation(id: string, userId: string, tenantId?: string) {
+    await this.assertOrder(id, tenantId);
     const order = await this.purchaseOrdersRepo.findOne({ where: { id } });
     if (!order) return null;
 
@@ -113,7 +135,8 @@ export class PurchasesService {
     return this.purchaseOrdersRepo.findOne({ where: { id } });
   }
 
-  async receiveOrder(id: string, receivedItems: any[]) {
+  async receiveOrder(id: string, receivedItems: any[], tenantId?: string) {
+    await this.assertOrder(id, tenantId);
     const order = await this.purchaseOrdersRepo.findOne({ where: { id } });
     if (!order) return null;
 
@@ -139,7 +162,8 @@ export class PurchasesService {
     return this.purchaseOrdersRepo.findOne({ where: { id } });
   }
 
-  async deleteOrder(id: string) {
+  async deleteOrder(id: string, tenantId?: string) {
+    await this.assertOrder(id, tenantId);
     await this.purchaseOrdersRepo.delete(id);
   }
 
@@ -156,7 +180,8 @@ export class PurchasesService {
     });
   }
 
-  findOnePurchase(id: string) {
+  async findOnePurchase(id: string, tenantId?: string) {
+    await this.assertPurchase(id, tenantId);
     return this.purchasesRepo.findOne({ where: { id } });
   }
 
@@ -204,7 +229,9 @@ export class PurchasesService {
     });
   }
 
-  async updatePurchase(id: string, data: Partial<Purchase>) {
+  async updatePurchase(id: string, data: Partial<Purchase>, tenantId?: string) {
+    await this.assertPurchase(id, tenantId);
+    delete (data as any).tenantId;
     await this.purchasesRepo.update(id, data);
     return this.purchasesRepo.findOne({ where: { id } });
   }
@@ -216,7 +243,8 @@ export class PurchasesService {
     referencia?: string;
     notas?: string;
     userId: string;
-  }) {
+  }, tenantId?: string) {
+    await this.assertPurchase(id, tenantId);
     const purchase = await this.purchasesRepo.findOne({ where: { id } });
     if (!purchase) {
       throw new Error('Factura no encontrada');
@@ -255,7 +283,8 @@ export class PurchasesService {
     return this.purchasesRepo.findOne({ where: { id } });
   }
 
-  async deletePurchase(id: string) {
+  async deletePurchase(id: string, tenantId?: string) {
+    await this.assertPurchase(id, tenantId);
     await this.purchasesRepo.delete(id);
   }
 

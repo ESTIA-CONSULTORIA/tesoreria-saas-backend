@@ -1,3 +1,4 @@
+import { tenantDeSesion } from '../auth/tenant-access.util';
 import { Controller, Get, Post, Put, Param, Body, Query, Request } from '@nestjs/common';
 import { PatientsService } from './patients.service';
 import { Modulo } from '../auth/modulo.decorator';
@@ -47,7 +48,7 @@ export class PatientsController {
   }
 
   @Put('consultas/:id')
-  updateConsulta(@Param('id') id: string, @Body() body: any) {
-    return this.service.updateConsulta(id, body);
+  updateConsulta(@Param('id') id: string, @Body() body: any, @Request() req?: any) {
+    return this.service.updateConsulta(id, body, tenantDeSesion(req));
   }
 }

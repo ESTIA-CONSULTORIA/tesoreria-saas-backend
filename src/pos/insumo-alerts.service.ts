@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { InsumoAlert } from './entities/insumo-alert.entity';
@@ -66,9 +66,9 @@ export class InsumoAlertsService {
     return this.repo.save(alert);
   }
 
-  async updateEstado(id: string, estado: string, notas?: string) {
-    const alert = await this.repo.findOne({ where: { id } });
-    if (!alert) throw new Error('No encontrado');
+  async updateEstado(id: string, estado: string, notas?: string, tenantId?: string) {
+    const alert = await this.repo.findOne({ where: tenantId ? ({ id, tenantId } as any) : { id } });
+    if (!alert) throw new NotFoundException('No encontrado');
     alert.estado = estado;
     if (notas !== undefined) alert.notas = notas;
     return this.repo.save(alert);

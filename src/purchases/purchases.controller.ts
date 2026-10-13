@@ -1,3 +1,4 @@
+import { tenantDeSesion } from '../auth/tenant-access.util';
 import { Controller, Get, Post, Put, Delete, Body, Param, Query, Headers, Request, UseGuards } from '@nestjs/common';
 import { PurchasesService } from './purchases.service';
 import { Modulo } from '../auth/modulo.decorator';
@@ -30,8 +31,8 @@ export class PurchasesController {
   }
 
   @Get('orders/:id')
-  findOneOrder(@Param('id') id: string) {
-    return this.purchasesService.findOneOrder(id);
+  findOneOrder(@Param('id') id: string, @Request() req?: any) {
+    return this.purchasesService.findOneOrder(id, tenantDeSesion(req));
   }
 
   @Post('orders')
@@ -42,23 +43,23 @@ export class PurchasesController {
   }
 
   @Put('orders/:id')
-  updateOrder(@Param('id') id: string, @Body() data: any) {
-    return this.purchasesService.updateOrder(id, data);
+  updateOrder(@Param('id') id: string, @Body() data: any, @Request() req?: any) {
+    return this.purchasesService.updateOrder(id, data, tenantDeSesion(req));
   }
 
   @Put('orders/:id/send')
-  async markOrderAsSent(@Param('id') id: string) {
-    return this.purchasesService.markOrderAsSent(id);
+  async markOrderAsSent(@Param('id') id: string, @Request() req?: any) {
+    return this.purchasesService.markOrderAsSent(id, tenantDeSesion(req));
   }
 
   @Put('orders/:id/cancel')
-  async cancelOrder(@Param('id') id: string) {
-    return this.purchasesService.cancelOrder(id);
+  async cancelOrder(@Param('id') id: string, @Request() req?: any) {
+    return this.purchasesService.cancelOrder(id, tenantDeSesion(req));
   }
 
   @Post('orders/:id/request-cancellation')
-  async requestCancellation(@Param('id') id: string, @Body() data: { motivo: string, userId: string }) {
-    return this.purchasesService.requestCancellation(id, data.motivo, data.userId);
+  async requestCancellation(@Param('id') id: string, @Body() data: { motivo: string, userId: string }, @Request() req?: any) {
+    return this.purchasesService.requestCancellation(id, data.motivo, data.userId, tenantDeSesion(req));
   }
 
   // Auditoría de seguridad (GoodsHabits, verificación PurchasesPage/useAuthStore, Hallazgo
@@ -70,18 +71,18 @@ export class PurchasesController {
   @UseGuards(RolesGuard)
   @Roles('ADMIN', 'SOPORTE')
   @Post('orders/:id/approve-cancellation')
-  async approveCancellation(@Param('id') id: string, @Body() data: { userId: string }) {
-    return this.purchasesService.approveCancellation(id, data.userId);
+  async approveCancellation(@Param('id') id: string, @Body() data: { userId: string }, @Request() req?: any) {
+    return this.purchasesService.approveCancellation(id, data.userId, tenantDeSesion(req));
   }
 
   @Put('orders/:id/receive')
-  async receiveOrder(@Param('id') id: string, @Body() data: { receivedItems: any[] }) {
-    return this.purchasesService.receiveOrder(id, data.receivedItems);
+  async receiveOrder(@Param('id') id: string, @Body() data: { receivedItems: any[] }, @Request() req?: any) {
+    return this.purchasesService.receiveOrder(id, data.receivedItems, tenantDeSesion(req));
   }
 
   @Delete('orders/:id')
-  deleteOrder(@Param('id') id: string) {
-    return this.purchasesService.deleteOrder(id);
+  deleteOrder(@Param('id') id: string, @Request() req?: any) {
+    return this.purchasesService.deleteOrder(id, tenantDeSesion(req));
   }
 
   // Purchases (Facturas)
@@ -94,12 +95,13 @@ export class PurchasesController {
   ) {
     const companyId = headerCompanyId || req?.user?.companyId;
 
-    return this.purchasesService.findAllPurchases(tenantId, status, companyId);
+    // El tenant sale del token; el query solo vale para SOPORTE. Antes, sin ?tenantId= devolvía las facturas de TODOS.
+    return this.purchasesService.findAllPurchases(tenantDeSesion(req) ?? tenantId, status, companyId);
   }
 
   @Get('invoices/:id')
-  findOnePurchase(@Param('id') id: string) {
-    return this.purchasesService.findOnePurchase(id);
+  findOnePurchase(@Param('id') id: string, @Request() req?: any) {
+    return this.purchasesService.findOnePurchase(id, tenantDeSesion(req));
   }
 
   @Post('invoices')
@@ -109,8 +111,8 @@ export class PurchasesController {
   }
 
   @Put('invoices/:id')
-  updatePurchase(@Param('id') id: string, @Body() data: any) {
-    return this.purchasesService.updatePurchase(id, data);
+  updatePurchase(@Param('id') id: string, @Body() data: any, @Request() req?: any) {
+    return this.purchasesService.updatePurchase(id, data, tenantDeSesion(req));
   }
 
   @Post('invoices/:id/register-payment')
@@ -124,13 +126,14 @@ export class PurchasesController {
       notas?: string;
       userId: string;
     },
+    @Request() req?: any,
   ) {
-    return this.purchasesService.registerPayment(id, data);
+    return this.purchasesService.registerPayment(id, data, tenantDeSesion(req));
   }
 
   @Delete('invoices/:id')
-  deletePurchase(@Param('id') id: string) {
-    return this.purchasesService.deletePurchase(id);
+  deletePurchase(@Param('id') id: string, @Request() req?: any) {
+    return this.purchasesService.deletePurchase(id, tenantDeSesion(req));
   }
 
   // Cuentas por Pagar
@@ -142,6 +145,6 @@ export class PurchasesController {
   ) {
     const companyId = headerCompanyId || req?.user?.companyId;
 
-    return this.purchasesService.getAccountsPayable(tenantId, companyId);
+    return this.purchasesService.getAccountsPayable(tenantDeSesion(req) ?? tenantId, companyId);
   }
 }

@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Between } from 'typeorm';
 import { Patient } from './entities/patient.entity';
@@ -49,7 +49,14 @@ export class PatientsService {
     return this.consultaRepo.save(this.consultaRepo.create(data));
   }
 
-  async updateConsulta(id: string, data: Partial<Consulta>) {
+  // tenantId = el del token (undefined = SOPORTE): la consulta debe ser de ese tenant; una id ajena es 404.
+  async updateConsulta(id: string, data: Partial<Consulta>, tenantId?: string) {
+    if (tenantId) {
+      const c = await this.consultaRepo.findOne({ where: { id, tenantId } as any });
+      if (!c) throw new NotFoundException('Consulta no encontrada');
+    }
+    delete (data as any).tenantId;
+    delete (data as any).id;
     await this.consultaRepo.update(id, data);
     return this.consultaRepo.findOne({ where: { id } });
   }

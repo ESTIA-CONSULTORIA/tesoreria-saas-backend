@@ -1,3 +1,4 @@
+import { tenantDeSesion } from '../auth/tenant-access.util';
 import {
   BadRequestException,
   Controller,
@@ -46,8 +47,8 @@ export class OcrController {
   }
 
   @Get('documents/:id')
-  findOne(@Param('id') id: string) {
-    return this.ocrService.findOne(id);
+  findOne(@Param('id') id: string, @Request() req?: any) {
+    return this.ocrService.findOne(id, tenantDeSesion(req));
   }
 
   @Get('documents')
@@ -69,13 +70,13 @@ export class OcrController {
   ) {
     const validatedBy = req?.user?.email ?? 'unknown';
     if (body.action === 'REJECT') {
-      return this.ocrService.reject(id, validatedBy);
+      return this.ocrService.reject(id, validatedBy, tenantDeSesion(req));
     }
-    return this.ocrService.validate(id, body.validatedData, validatedBy);
+    return this.ocrService.validate(id, body.validatedData, validatedBy, tenantDeSesion(req));
   }
 
   @Delete('documents/:id')
-  remove(@Param('id') id: string) {
-    return this.ocrService.remove(id);
+  remove(@Param('id') id: string, @Request() req?: any) {
+    return this.ocrService.remove(id, tenantDeSesion(req));
   }
 }

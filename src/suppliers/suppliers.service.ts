@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Like } from 'typeorm';
 import { Supplier } from './entities/supplier.entity';
@@ -29,7 +29,15 @@ export class SuppliersService {
     });
   }
 
-  findOne(id: string) {
+  // Con tenantId (el del token; undefined = SOPORTE) solo se toca un proveedor de ese tenant; una id ajena es 404.
+  private async assertProveedor(id: string, tenantId?: string) {
+    if (!tenantId) return;
+    const p = await this.suppliersRepo.findOne({ where: { id, tenantId } as any });
+    if (!p) throw new NotFoundException('Proveedor no encontrado');
+  }
+
+  async findOne(id: string, tenantId?: string) {
+    await this.assertProveedor(id, tenantId);
     return this.suppliersRepo.findOne({ where: { id } });
   }
 
@@ -52,16 +60,21 @@ export class SuppliersService {
     return this.suppliersRepo.save(supplier);
   }
 
-  async update(id: string, data: Partial<Supplier>) {
+  async update(id: string, data: Partial<Supplier>, tenantId?: string) {
+    await this.assertProveedor(id, tenantId);
+    delete (data as any).tenantId;
+    delete (data as any).id;
     await this.suppliersRepo.update(id, { ...data, updatedAt: new Date() });
     return this.suppliersRepo.findOne({ where: { id } });
   }
 
-  async softDelete(id: string) {
+  async softDelete(id: string, tenantId?: string) {
+    await this.assertProveedor(id, tenantId);
     await this.suppliersRepo.update(id, { isActive: false, updatedAt: new Date() });
   }
 
-  async delete(id: string) {
+  async delete(id: string, tenantId?: string) {
+    await this.assertProveedor(id, tenantId);
     await this.suppliersRepo.delete(id);
   }
 }
