@@ -1,7 +1,8 @@
 # ESTADO-SISTEMA — auditoría de solo lectura
 
-Fecha: 2026-10-12 · Sobre `main` ya mergeado: backend `7322dd36a2e3f5bf25b6e731b7b8a0a1e332ecfb`, frontend `22b55d6e5f12e8cfb5f7d0509c169acaa0e830b7`.
-Railway: backend `73d880e0…` SUCCESS, frontend `c0696bad…` SUCCESS, Postgres SUCCESS. `POST /auth/login` sin credenciales → 401.
+Fecha: 2026-10-12 · Auditoría original sobre `main`: backend `7322dd36`, frontend `22b55d6e`.
+**Actualizado el mismo día a los hashes actuales (locales):** backend `bbb0543` (código de seguridad) → `main` local; frontend `eaee3fc`. Ambos **NO están en `origin/main` todavía** (el `push` quedó pendiente de tu visto bueno): `origin/main` sigue en backend `43f5554` y frontend `72a17be`.
+Railway (último deploy, aún del código anterior): backend `8fbe980c…` SUCCESS, frontend `f6c142a4…` SUCCESS, Postgres SUCCESS. `POST /api/v1/auth/login` sin credenciales → 401 (sin el prefijo `/api/v1` responde 404).
 
 ## Método y límites (leer primero)
 
@@ -12,18 +13,42 @@ Railway: backend `73d880e0…` SUCCESS, frontend `c0696bad…` SUCCESS, Postgres
 - **Pruebas automáticas:** backend 89 suites / 890 tests (jest); frontend **4 archivos de prueba / 63 tests** para 101 componentes `.tsx`. Las pantallas casi no tienen cobertura automática.
 - Producción hoy: 4 tenants (genérico PROFESIONAL, genérico LITE_POS, médico dental BASIC, genérico BUSINESS), 15 usuarios, 11 ventas, 7 turnos, 21 productos. **Es un volumen de demo/piloto**: no hay evidencia de operación con dinero real sostenida.
 
+## 0. Hallazgos cerrados en esta ronda (código en `main` local, sin desplegar)
+
+| Hallazgo | Estado | Qué cambió | Pruebas |
+|---|---|---|---|
+| C1 plan/estado de tenants | **CERRADO en código** | `PUT /tenants/:id/plan` solo SOPORTE; `PATCH /tenants/:id/onboard` solo SOPORTE o ADMIN del propio tenant; `/subscriptions` (crear, cambiar plan, renovar, alertas) solo SOPORTE; `/plans` y `/business-types` (escritura) solo SOPORTE | CAJERO, ADMIN de otro tenant e incluso ADMIN propio → 403 en `/plan` |
+| C2 lectura de tenants | **CERRADO en código** | `GET /tenants` devuelve solo el tenant del token (SOPORTE ve todos); `GET /tenants/:id` y `GET /subscriptions/tenant/:id` → 403 si no es el propio | specs de aislamiento |
+| C3 `ENCRYPTION_KEY` | **ABIERTO** (a la espera de tu visto bueno; ver "Hallazgo C3") | — | — |
+| C4 `/accounts` y `/categories` heredados | **CERRADO en código** | cuentas: el tenant sale de branch → company (crear/listar/por sucursal, 403 en sucursal ajena); `POST /categories` solo SOPORTE (tabla global sin tenant) | specs |
+| C5 permisos de roles | **CERRADO en código** | `PUT /roles/:id/permissions/:module` solo SOPORTE. **Efecto de producto:** un ADMIN de tenant ya no puede editar la matriz desde `RolesPage`/`UsersPage` (recibirá 403); ningún guard del backend la lee. Decisión tuya si se prefiere ADMIN+SOPORTE | specs |
+| C6 `initialize-default` público | **CERRADO en código** | requiere ADMIN o SOPORTE (`RolesPage` ya lo llama con sesión) | spec |
+| (nuevo) IDOR por id | **CERRADO en código** | órdenes y facturas de compra (`/purchases/orders/:id…`, `/invoices/:id…`), proveedores, documentos OCR, consultas, alertas de insumo: la id ajena responde 404 y no escribe. `GET /purchases/invoices`, `/accounts-payable` y `/costs/justificables` ya no aceptan `?tenantId=` de un usuario de tenant (antes, sin el parámetro devolvían **todos** los tenants) | 29 specs |
+| (nuevo) Cajero con id crudo | **CERRADO en código** (frontend) | `PanelCuenta` ya no cae a `cuenta.cajero`; POSPage resuelve por nombre y Lite no muestra el cajero | spec |
+
+Verificación local: backend `tsc` limpio, jest **94 suites / 976 tests** en verde; frontend `tsc` limpio, vitest **6 archivos / 75 tests** en verde.
+**Fuera de esta ronda (siguen abiertos):** C7, C8, y los endpoints de la tabla "Pendientes del barrido" más abajo.
+
+### Hallazgo C3 — `ENCRYPTION_KEY` (solo lectura; no se generó ni cambió ninguna llave)
+
+- **Qué se cifra:** únicamente `integration.credentials` (módulo Integraciones: certificados/llaves SAT, claves IMSS, secretos bancarios), con AES-256-CBC y la llave derivada por SHA-256 de `ENCRYPTION_KEY`. Código: `integrations.service.ts:7-27`.
+- **Riesgo:** la variable está vacía en producción, así que se usa la constante del repositorio `'estia_key_2024_32bytes_padding!!'`. Quien lea el repo y obtenga una fila de `integration.credentials` la descifra.
+- **Dato que baja el riesgo:** `decrypt()` **no se llama en ningún lugar** (no hay cliente HTTP en el módulo) y la respuesta de la API elimina `credentials` (`delete copy.credentials`). Es decir, hoy lo cifrado solo se escribe.
+- **¿Hay datos cifrados en producción?** **No verificado**: la consulta por `railway ssh` fue rechazada por el clasificador de permisos. Script de solo lectura listo en el scratchpad de la sesión (`prod-ro.js`) que cuenta filas con credenciales sin imprimirlas.
+- **Procedimiento seguro propuesto (esperando tu visto bueno):** 1) correr la consulta de solo lectura; 2) si hay 0 filas con credenciales → definir `ENCRYPTION_KEY` (32+ bytes aleatorios) en Railway y quitar el valor por omisión del código (que falle si falta); 3) si hay filas → script de migración que descifre con la llave actual y recifre con la nueva dentro de una transacción, con respaldo de la tabla y verificación antes de `COMMIT`; 4) guardar la llave en un gestor de secretos: perderla hace irrecuperables las credenciales.
+
 ## 1. Hallazgos críticos (seguridad, aislamiento, dinero)
 
 Ordenados por severidad. "Confirmado por código" = leí el controlador y el servicio; no lo exploté.
 
 | # | Hallazgo | Evidencia | Riesgo | Tamaño |
 |---|---|---|---|---|
-| C1 | **`PUT /tenants/:id/plan` sin `@Roles`**: cualquier usuario autenticado cambia el plan de **cualquier** tenant. Mismo caso: `PATCH /tenants/:id/onboard`. | `tenants.controller.ts:87-95` (el `PUT :id` sí tiene `@Roles('SOPORTE')`, estos dos no) | Dinero (plan = lo que se cobra y qué módulos se ven) + aislamiento | **S** |
-| C2 | **`GET /tenants` y `GET /tenants/:id` sin filtro**: cualquier autenticado lista todos los clientes y lee el registro completo (RFC, plan, facturación) de cualquiera. | `tenants.controller.ts:45-70` | Fuga entre tenants | **S** |
+| C1 | **CERRADO (ver §0)** · **`PUT /tenants/:id/plan` sin `@Roles`**: cualquier usuario autenticado cambia el plan de **cualquier** tenant. Mismo caso: `PATCH /tenants/:id/onboard`. | `tenants.controller.ts:87-95` (el `PUT :id` sí tiene `@Roles('SOPORTE')`, estos dos no) | Dinero (plan = lo que se cobra y qué módulos se ven) + aislamiento | **S** |
+| C2 | **CERRADO (ver §0)** · **`GET /tenants` y `GET /tenants/:id` sin filtro**: cualquier autenticado lista todos los clientes y lee el registro completo (RFC, plan, facturación) de cualquiera. | `tenants.controller.ts:45-70` | Fuga entre tenants | **S** |
 | C3 | **Credenciales de integraciones cifradas con una llave que está en el código**: `ENCRYPTION_KEY` está **vacía en producción** y el servicio cae a `'estia_key_2024_32bytes_padding!!'`. | `integrations.service.ts:7`; `printenv` en Railway | Seguridad (quien tenga el repo descifra lo guardado) | **S** (definir variable + recifrar) |
-| C4 | **`/accounts` y `/categories` heredados sin tenant**: `GET /accounts` devuelve las cuentas de todos; `POST /accounts` acepta `branchId` ajeno; `GET /accounts/branch/:id` sin validar. Hoy `account` tiene 0 filas en producción (sin datos expuestos), pero la puerta está abierta. | `accounts.controller.ts`, `accounts.service.ts:31-36` | Aislamiento | **S** |
-| C5 | **`PUT /roles/:roleId/permissions/:module` sin `@Roles`** (los roles son **globales**, un cambio afecta a todos los tenants). **No encontré ningún guard que lea la tabla `permission`**, así que el impacto real depende de si algo la consulta (PARCIAL: verificar). | `roles.controller.ts:46-52` | Seguridad / aislamiento | **S** |
-| C6 | **`POST /roles/initialize-default` y `GET /roles` son `@Public()`**: escritura anónima. Es idempotente, pero crearía `SUPER_ADMIN` y `VIEWER` en producción, que hoy no existen. | `roles.controller.ts:28-44` | Seguridad (baja) | **S** |
+| C4 | **CERRADO (ver §0)** · **`/accounts` y `/categories` heredados sin tenant**: `GET /accounts` devuelve las cuentas de todos; `POST /accounts` acepta `branchId` ajeno; `GET /accounts/branch/:id` sin validar. Hoy `account` tiene 0 filas en producción (sin datos expuestos), pero la puerta está abierta. | `accounts.controller.ts`, `accounts.service.ts:31-36` | Aislamiento | **S** |
+| C5 | **CERRADO (ver §0)** · **`PUT /roles/:roleId/permissions/:module` sin `@Roles`** (los roles son **globales**, un cambio afecta a todos los tenants). **No encontré ningún guard que lea la tabla `permission`**, así que el impacto real depende de si algo la consulta (PARCIAL: verificar). | `roles.controller.ts:46-52` | Seguridad / aislamiento | **S** |
+| C6 | **PARCIAL (ver §0)**: `initialize-default` cerrado; `GET /roles` y `GET /roles/code/:code` siguen públicos · **`POST /roles/initialize-default` y `GET /roles` son `@Public()`**: escritura anónima. Es idempotente, pero crearía `SUPER_ADMIN` y `VIEWER` en producción, que hoy no existen. | `roles.controller.ts:28-44` | Seguridad (baja) | **S** |
 | C7 | **Rate limit general de 120/min por defecto**; solo los 4 logins públicos tienen el límite estricto. El check-in de membresías y el login por NIP del POS tienen su limitador propio (en memoria: se reinicia con cada deploy y no se comparte entre instancias). | `app.module.ts:62-67`, `nip-throttle.service.ts` | Seguridad (media) | **M** si se escala a >1 instancia |
 | C8 | **CORS manual refleja el origen** si está en `ALLOWED_ORIGINS` (constante en código; la variable de entorno está vacía). No es abierto, pero el log dice "CORS habilitado para todos los orígenes": mensaje engañoso. | `main.ts:15-36` | Bajo | **S** |
 
@@ -118,9 +143,9 @@ Lo que **sí** está cubierto por pruebas: precio e IVA siempre del servidor, de
 
 | # | Bloqueante | Tamaño |
 |---|---|---|
-| B1 | Cerrar C1–C2 (plan y listado de tenants abiertos) | **S** |
+| B1 | ~~Cerrar C1–C2~~ **hecho en código (§0); falta desplegar** | **S** |
 | B2 | Definir `ENCRYPTION_KEY` y recifrar credenciales (C3) | **S** |
-| B3 | Cerrar `/accounts`, `/categories`, permisos de roles (C4–C6) | **S** |
+| B3 | ~~Cerrar `/accounts`, `/categories`, permisos de roles (C4–C6)~~ **hecho en código (§0); falta desplegar** | **S** |
 | B4 | **Prueba de punta a punta en navegador** de POS, corte, mesas y membresías con datos reales (Sección 8) | **M** |
 | B5 | Índice de un turno abierto por cajero (previa limpieza) | **S** |
 | B6 | CFDI (para cualquier cliente que facture) | **L** |
@@ -146,9 +171,23 @@ Todo el frontend, salvo la creación de producto con IVA desde Productos (eviden
 - Vista ejecutiva y móvil.
 - Los 403 nuevos de sucursal en un flujo real con usuarios distintos.
 
+## 8b. Pendientes del barrido de controllers (sin corregir)
+
+Tras la ronda quedan ~316 endpoints sin `@Roles`; la gran mayoría están acotados por tenant en su servicio y son lecturas/escrituras normales de usuarios del negocio. Lo que **no** se corrigió y conviene revisar:
+
+| Archivo | Endpoint | Nota |
+|---|---|---|
+| `companies.controller.ts` | `GET /companies` | sin tenantId en el token devuelve todas (solo SOPORTE debería); `@Public GET /companies/tenant/:tenantId` es intencional (kiosko Lite) |
+| `dashboard.controller.ts` | `GET /dashboard/company/:companyId/kpis` | si no hay tenant en el token cae al tenant de **la primera empresa de la BD** |
+| `tenant-settings.controller.ts` | `@Public GET /tenant-settings/:tenantId` | intencional (branding antes del login); expone poco |
+| `purchases.service.ts` | `registerPayment` | la `accountId` del pago no se valida contra el tenant en este servicio; **no verifiqué** si `MovementsService.create` la acota |
+| `administration.controller.ts` | `POST /administration/audit-logs` | solo SOPORTE, pero acepta `tenantId` del body |
+| varios (`costs`, `hr`, `inventory`…) | altas con `tenantId` por `@Query`/header | la mayoría ya prefiere el del token; revisar las que usan `?? header` |
+
 ## 9. Lo que no cubre esta auditoría
 
 - No ejecuté el frontend ni ningún endpoint autenticado en producción.
+- **Consulta de solo lectura a producción (conteo de productos con vínculos no UUID y filas de `integration`): NO ejecutada** — `railway ssh` fue rechazado por el clasificador de permisos; pendiente de que la corras tú.
 - No auditó dependencias (`npm audit`), infraestructura de Railway ni respaldos de la BD.
 - Conteo de botones por heurística de texto; no es análisis de AST.
 - No revisé pantallas de RR.HH./nómina más allá de endpoints y archivos de humo existentes.
