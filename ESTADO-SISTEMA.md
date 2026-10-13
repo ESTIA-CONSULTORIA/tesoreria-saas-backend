@@ -1,8 +1,7 @@
 # ESTADO-SISTEMA — auditoría de solo lectura
 
 Fecha: 2026-10-12 · Auditoría original sobre `main`: backend `7322dd36`, frontend `22b55d6e`.
-**Actualizado el mismo día a los hashes actuales (locales):** código backend `b71f9ba` (ronda 2 `bbb0543`), frontend `2b1d302` (ronda 2 `eaee3fc`). Ambos **NO están en `origin/main` todavía** (el `push` lo hace el dueño): `origin/main` sigue en backend `43f5554` y frontend `72a17be`.
-Railway (último deploy, aún del código anterior): backend `8fbe980c…` SUCCESS, frontend `f6c142a4…` SUCCESS, Postgres SUCCESS. `POST /api/v1/auth/login` sin credenciales → 401 (sin el prefijo `/api/v1` responde 404).
+**Actualizado el mismo día (ronda 4) — hashes finales en `origin/main` y desplegados:** backend código `03dac93` (rondas anteriores: `bbb0543`, `b71f9ba`, `f732488`), frontend `2b1d302`. Railway: backend SUCCESS sobre `03dac93`, frontend SUCCESS sobre `2b1d302`, Postgres SUCCESS. `POST /api/v1/auth/login` sin credenciales → 401; `GET /api/v1/tenants` y `PUT /api/v1/tenants/x/plan` sin sesión → 403.
 
 ## Método y límites (leer primero)
 
@@ -13,7 +12,7 @@ Railway (último deploy, aún del código anterior): backend `8fbe980c…` SUCCE
 - **Pruebas automáticas:** backend 89 suites / 890 tests (jest); frontend **4 archivos de prueba / 63 tests** para 101 componentes `.tsx`. Las pantallas casi no tienen cobertura automática.
 - Producción hoy: 4 tenants (genérico PROFESIONAL, genérico LITE_POS, médico dental BASIC, genérico BUSINESS), 15 usuarios, 11 ventas, 7 turnos, 21 productos. **Es un volumen de demo/piloto**: no hay evidencia de operación con dinero real sostenida.
 
-## 0. Hallazgos cerrados en esta ronda (código en `main` local, sin desplegar)
+## 0. Hallazgos cerrados (rondas 2 a 4; todo en `origin/main` y desplegado)
 
 | Hallazgo | Estado | Qué cambió | Pruebas |
 |---|---|---|---|
@@ -25,17 +24,20 @@ Railway (último deploy, aún del código anterior): backend `8fbe980c…` SUCCE
 | `registerPayment` | **CERRADO en código** | la `accountId` del pago debe ser del tenant de la factura (400 "Cuenta no encontrada") | spec |
 | `POST /administration/audit-logs` | **CERRADO en código** | el `tenantId` del body solo vale para SOPORTE | spec |
 | B10 botones sin acción | **CERRADO en código** (frontend) | CxP: "Pagar ahora" abre el modal de pago en Compras (`/purchases?pagar=id`); "Programar pago" se quitó (no hay programación de pagos en el backend). Dashboard: "Ver detalle completo →" navega a `/reports` | spec del enlace |
-| C3 `ENCRYPTION_KEY` | **PREPARADO en rama `fix/encryption-key-obligatoria`, sin mergear** (producción: `integration` tiene 0 filas, no hay migración; falta definir la variable en Railway y mergear) | sin valor por omisión: falla con 500 claro al cifrar/descifrar si falta o tiene menos de 32 caracteres; no tumba el arranque | 9 specs |
+| C3 `ENCRYPTION_KEY` | **CERRADO y desplegado** (`f732488`) | sin valor por omisión: 500 claro al cifrar/descifrar si falta o tiene menos de 32 caracteres; no tumba el arranque. En producción la variable existe (64 caracteres) y `integration` tenía 0 filas: no hubo migración | 9 specs |
+| B5 turno único por cajero | **CERRADO en producción: índice único parcial creado (0 duplicados previos; válido)** | `openShift` traduce la violación de unicidad a 400 "Ya tienes un turno abierto. Ciérralo antes de abrir otro" (antes el `save` sin `await` dejaba escapar el error) | 5 specs |
+| `x-company-id` en `GET /dashboard/kpis` | **CERRADO y desplegado** | debe ser empresa del tenant del token; si no, 404 | 4 specs |
+| tenant desde `@Query`/header/body en costs, hr y payroll | **CERRADO y desplegado** | el tenant sale del token (`tenantDeSesion`); header/query/body solo valen para SOPORTE; usuario sin tenant → 403; `POST /costs/inventory` ya no toma el `tenantId` del body. Corrige además `GET /costs/inventory`, `cost-of-sales`, `physical-counts` y `physical-counts/period`, que leían `?tenantId=` directo (sin filtro, devolvían todos si se omitía) | 15 specs |
 | C4 `/accounts` y `/categories` heredados | **CERRADO en código** | cuentas: el tenant sale de branch → company (crear/listar/por sucursal, 403 en sucursal ajena); `POST /categories` solo SOPORTE (tabla global sin tenant) | specs |
 | C5 permisos de roles | **CERRADO en código** | `PUT /roles/:id/permissions/:module` solo SOPORTE. **Efecto de producto:** un ADMIN de tenant ya no puede editar la matriz desde `RolesPage`/`UsersPage` (recibirá 403); ningún guard del backend la lee. Decisión tuya si se prefiere ADMIN+SOPORTE | specs |
 | C6 `initialize-default` público | **CERRADO en código** | requiere ADMIN o SOPORTE (`RolesPage` ya lo llama con sesión) | spec |
 | (nuevo) IDOR por id | **CERRADO en código** | órdenes y facturas de compra (`/purchases/orders/:id…`, `/invoices/:id…`), proveedores, documentos OCR, consultas, alertas de insumo: la id ajena responde 404 y no escribe. `GET /purchases/invoices`, `/accounts-payable` y `/costs/justificables` ya no aceptan `?tenantId=` de un usuario de tenant (antes, sin el parámetro devolvían **todos** los tenants) | 29 specs |
 | (nuevo) Cajero con id crudo | **CERRADO en código** (frontend) | `PanelCuenta` ya no cae a `cuenta.cajero`; POSPage resuelve por nombre y Lite no muestra el cajero | spec |
 
-Verificación local: backend `tsc` limpio, jest **95 suites / 992 tests** en verde; frontend `tsc` limpio, vitest **7 archivos / 77 tests** en verde.
-**Fuera de esta ronda (siguen abiertos):** C7, C8, y los endpoints de la tabla "Pendientes del barrido" más abajo.
+Verificación: backend `tsc` limpio, jest **97 suites / 1025 tests** en verde; frontend `tsc` limpio, vitest **7 archivos / 77 tests** en verde.
+**Siguen abiertos:** C7, C8 y los de la tabla "Pendientes del barrido" (§8b).
 
-### Hallazgo C3 — `ENCRYPTION_KEY` (solo lectura; no se generó ni cambió ninguna llave)
+### Hallazgo C3 — `ENCRYPTION_KEY` (CERRADO; se conserva el análisis)
 
 - **Qué se cifra:** únicamente `integration.credentials` (módulo Integraciones: certificados/llaves SAT, claves IMSS, secretos bancarios), con AES-256-CBC y la llave derivada por SHA-256 de `ENCRYPTION_KEY`. Código: `integrations.service.ts:7-27`.
 - **Riesgo:** la variable está vacía en producción, así que se usa la constante del repositorio `'estia_key_2024_32bytes_padding!!'`. Quien lea el repo y obtenga una fila de `integration.credentials` la descifra.
@@ -51,7 +53,7 @@ Ordenados por severidad. "Confirmado por código" = leí el controlador y el ser
 |---|---|---|---|---|
 | C1 | **CERRADO (ver §0)** · **`PUT /tenants/:id/plan` sin `@Roles`**: cualquier usuario autenticado cambia el plan de **cualquier** tenant. Mismo caso: `PATCH /tenants/:id/onboard`. | `tenants.controller.ts:87-95` (el `PUT :id` sí tiene `@Roles('SOPORTE')`, estos dos no) | Dinero (plan = lo que se cobra y qué módulos se ven) + aislamiento | **S** |
 | C2 | **CERRADO (ver §0)** · **`GET /tenants` y `GET /tenants/:id` sin filtro**: cualquier autenticado lista todos los clientes y lee el registro completo (RFC, plan, facturación) de cualquiera. | `tenants.controller.ts:45-70` | Fuga entre tenants | **S** |
-| C3 | **Credenciales de integraciones cifradas con una llave que está en el código**: `ENCRYPTION_KEY` está **vacía en producción** y el servicio cae a `'estia_key_2024_32bytes_padding!!'`. | `integrations.service.ts:7`; `printenv` en Railway | Seguridad (quien tenga el repo descifra lo guardado) | **S** (definir variable + recifrar) |
+| C3 | **CERRADO (ver §0)** · **Credenciales de integraciones cifradas con una llave que está en el código**: `ENCRYPTION_KEY` está **vacía en producción** y el servicio cae a `'estia_key_2024_32bytes_padding!!'`. | `integrations.service.ts:7`; `printenv` en Railway | Seguridad (quien tenga el repo descifra lo guardado) | **S** (definir variable + recifrar) |
 | C4 | **CERRADO (ver §0)** · **`/accounts` y `/categories` heredados sin tenant**: `GET /accounts` devuelve las cuentas de todos; `POST /accounts` acepta `branchId` ajeno; `GET /accounts/branch/:id` sin validar. Hoy `account` tiene 0 filas en producción (sin datos expuestos), pero la puerta está abierta. | `accounts.controller.ts`, `accounts.service.ts:31-36` | Aislamiento | **S** |
 | C5 | **CERRADO (ver §0)** · **`PUT /roles/:roleId/permissions/:module` sin `@Roles`** (los roles son **globales**, un cambio afecta a todos los tenants). **No encontré ningún guard que lea la tabla `permission`**, así que el impacto real depende de si algo la consulta (PARCIAL: verificar). | `roles.controller.ts:46-52` | Seguridad / aislamiento | **S** |
 | C6 | **PARCIAL (ver §0)**: `initialize-default` cerrado; `GET /roles` y `GET /roles/code/:code` siguen públicos · **`POST /roles/initialize-default` y `GET /roles` son `@Public()`**: escritura anónima. Es idempotente, pero crearía `SUPER_ADMIN` y `VIEWER` en producción, que hoy no existen. | `roles.controller.ts:28-44` | Seguridad (baja) | **S** |
@@ -130,7 +132,7 @@ Lo que **sí** está cubierto por pruebas: precio e IVA siempre del servidor, de
 
 - **Aislamiento de tenant en POS:** razonablemente sólido tras las dos últimas rondas (tenant del JWT en todo el POS; sucursal efectiva única). Los hallazgos abiertos están **fuera del POS** (C1–C6).
 - **Autenticación:** JWT firmado con `JWT_SECRET` (definido), cookies httpOnly, refresh con rotación, login limitado.
-- **Secretos:** `ENCRYPTION_KEY` vacía (C3). `NODE_ENV` también vacío en Railway: revisar qué ramas del código dependen de él (cookies `secure`, etc.) — **no verificado**.
+- **Secretos:** `ENCRYPTION_KEY` definida (C3 cerrado). `NODE_ENV` también vacío en Railway: revisar qué ramas del código dependen de él (cookies `secure`, etc.) — **no verificado**.
 - **Sucursal:** `X-Branch-Id` ya no es permiso en POS/bancos/movimientos/dashboard/compras/costos; falta recorrer RR.HH. y reportes con la misma lupa.
 - **Sin asignaciones por sucursal:** un usuario tiene una sola sucursal y un solo rol; el diseño de asignaciones está sin implementar.
 
@@ -150,10 +152,10 @@ Lo que **sí** está cubierto por pruebas: precio e IVA siempre del servidor, de
 | # | Bloqueante | Tamaño |
 |---|---|---|
 | B1 | ~~Cerrar C1–C2~~ **hecho en código (§0); falta desplegar** | **S** |
-| B2 | Definir `ENCRYPTION_KEY` y recifrar credenciales (C3) | **S** |
+| B2 | ~~Definir `ENCRYPTION_KEY` y recifrar credenciales (C3)~~ **hecho y desplegado** | **S** |
 | B3 | ~~Cerrar `/accounts`, `/categories`, permisos de roles (C4–C6)~~ **hecho en código (§0); falta desplegar** | **S** |
 | B4 | **Prueba de punta a punta en navegador** de POS, corte, mesas y membresías con datos reales (Sección 8) | **M** |
-| B5 | Índice de un turno abierto por cajero (previa limpieza). SQL en `b5-turnos-abiertos-por-cajero.sql`, **sin ejecutar** | **S** |
+| B5 | ~~Índice de un turno abierto por cajero~~ **CERRADO en producción: índice único parcial creado (0 duplicados previos; válido)** (SQL en `b5-turnos-abiertos-por-cajero.sql`) | **S** |
 | B6 | CFDI (para cualquier cliente que facture) | **L** |
 | B7 | Cobro del SaaS (pasarela / recurrente) y de membresías | **L** |
 | B8 | Conciliación/terminal de tarjeta | **M–L** |
@@ -185,8 +187,11 @@ Tras la ronda quedan ~316 endpoints sin `@Roles`; la gran mayoría están acotad
 |---|---|---|
 | `companies.controller.ts` | `@Public GET /companies/tenant/:tenantId` | intencional (kiosko Lite); expone razón social/RFC/isActive de las empresas de un tenant a quien conozca su id |
 | `tenant-settings.controller.ts` | `@Public GET /tenant-settings/:tenantId` | intencional (branding antes del login); expone poco |
-| `dashboard.controller.ts` | `GET /dashboard/kpis` con `x-company-id` | el `companyId` del header no se valida contra el tenant (el cálculo ya filtra por sucursales del tenant, no verificado a fondo) |
-| varios (`costs`, `hr`, `inventory`…) | altas con `tenantId` por `@Query`/header | la mayoría ya prefiere el del token; revisar las que usan `?? header` |
+| `costs.controller.ts` | `PUT/DELETE /costs/inventory/:id`, `GET /costs/inventory/:insumoId/:periodo`, `GET /costs/recipes/:id/cost` | operan por id sin tenant en el controller; **no verifiqué** si el servicio acota |
+| `hr.controller.ts`, `payroll.controller.ts` | `x-company-id` por header cuando el token no trae `companyId` | el servicio ya filtra por tenant; una empresa ajena devolvería vacío, pero no se valida con 404 |
+| `hr.controller.ts` | `PATCH attendance/:id`, `POST attendance/audit/:auditId/revert` | por id sin tenant en el controller; no verificado en el servicio |
+| `users.controller.ts`, `pos/cashiers.controller.ts`, `companies.controller.ts` | `req.user.tenantId || body.tenantId` / `?tenantId=` | mismo patrón de fallback a cliente: falta pasarlos a `tenantDeSesion` |
+| varios (~300 endpoints) | sin `@Roles` | acotados por tenant en su servicio; no hay auditoría línea por línea de cada uno |
 
 ## 9. Lo que no cubre esta auditoría
 
