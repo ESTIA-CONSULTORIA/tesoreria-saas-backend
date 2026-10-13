@@ -39,7 +39,7 @@ export class AdministrationController {
   }
 
   @Post('audit-logs')
-  createAuditLog(@Body() data: {
+  createAuditLog(@Request() req: any, @Body() data: {
     userId: string;
     userEmail: string;
     roleCode?: string;
@@ -50,7 +50,10 @@ export class AdministrationController {
     ipAddress: string;
     userAgent: string;
   }) {
-    return this.administrationService.createAuditLog(data);
+    // El tenantId del body solo vale para SOPORTE; cualquier otro rol (defensa en profundidad: la clase ya exige SOPORTE)
+    // registra con el tenant de su token.
+    const tenantId = req?.user?.roleCode === 'SOPORTE' ? data.tenantId : req?.user?.tenantId;
+    return this.administrationService.createAuditLog({ ...data, tenantId });
   }
 
   @Get('tenants')

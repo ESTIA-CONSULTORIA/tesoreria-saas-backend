@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { HttpException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
 import { PurchaseOrder } from './entities/purchase-order.entity';
@@ -266,8 +266,11 @@ export class PurchasesService {
         data.amount,
         data.referencia,
         data.userId,
+        // La cuenta bancaria debe ser del mismo tenant que la factura (400 'Cuenta no encontrada' si no).
+        purchase.tenantId,
       );
     } catch (error: any) {
+      if (error instanceof HttpException) throw error;
       throw new Error(`Error al crear movimiento: ${error.message}`);
     }
 

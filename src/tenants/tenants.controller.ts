@@ -100,9 +100,9 @@ export class TenantsController {
     return this.tenantsService.updatePlan(id, plan);
   }
 
-  // OnboardingWizard (ADMIN) marca su propio tenant; SOPORTE puede marcar cualquiera.
+  // OnboardingWizard (ADMIN o GERENTE) marca su propio tenant; SOPORTE puede marcar cualquiera.
   @UseGuards(RolesGuard)
-  @Roles('SOPORTE', 'ADMIN')
+  @Roles('SOPORTE', 'ADMIN', 'GERENTE')
   @Patch(':id/onboard')
   markOnboarded(@Param('id') id: string, @Request() req?: any) {
     assertTenantAccess(req?.user, id, 'No puedes modificar otro tenant');

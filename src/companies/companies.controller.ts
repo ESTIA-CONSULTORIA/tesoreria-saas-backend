@@ -1,6 +1,7 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Request } from '@nestjs/common';
 import { CompaniesService } from './companies.service';
 import { Public } from '../auth/public.decorator';
+import { tenantDeSesion } from '../auth/tenant-access.util';
 
 @Controller('companies')
 export class CompaniesController {
@@ -35,7 +36,8 @@ export class CompaniesController {
 
   @Get()
   findAll(@Request() req) {
-    const tenantId = req.user?.tenantId || req.tenantId;
+    // Solo SOPORTE ve todas las empresas; cualquier otro rol ve las de su tenant (sin tenant en el token: 403).
+    const tenantId = tenantDeSesion(req);
     if (tenantId) {
       return this.companiesService.findByTenant(tenantId);
     }

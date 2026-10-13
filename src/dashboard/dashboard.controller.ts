@@ -1,4 +1,5 @@
-import { Controller, Get, Query, Headers, Request, Param } from '@nestjs/common';
+import { Controller, Get, Query, Headers, Request, Param, NotFoundException } from '@nestjs/common';
+import { esSoporte, tenantDeSesion } from '../auth/tenant-access.util';
 import { DashboardService } from './dashboard.service';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Company } from '../companies/entities/company.entity';
@@ -23,10 +24,8 @@ export class DashboardController {
   ) {
     const userBranchId = req?.user?.branchId;
     const userCompanyId = req?.user?.companyId;
-    const tenantId = req?.user?.tenantId 
-      || req?.tenantId 
-      || headerTenantId
-      || (await this.companiesRepo.findOne({ where: {} }))?.tenantId;
+    // El tenant sale del token; el header solo vale para SOPORTE. Nunca se cae a "la primera empresa de la BD".
+    const tenantId = tenantDeSesion(req) ?? headerTenantId;
     
     // La sucursal del usuario manda; el header (Switch Context) solo elige para quien no tiene sucursal, y debe ser del tenant.
     const efectiva = sucursalEfectiva(req?.user, headerBranchId);
@@ -46,11 +45,13 @@ export class DashboardController {
     @Headers('x-tenant-id') headerTenantId?: string,
     @Request() req?: any,
   ) {
-    const tenantId = req?.user?.tenantId 
-      || req?.tenantId 
-      || headerTenantId
-      || (await this.companiesRepo.findOne({ where: {} }))?.tenantId;
-    
+    // El tenant sale del token y la empresa debe pertenecerle (404 si no existe o es de otro tenant, sin distinguirlas).
+    // SOPORTE (sin tenant en el token) opera sobre el tenant de la propia empresa pedida.
+    const tenantDelToken = tenantDeSesion(req);
+    const empresa = await this.companiesRepo.findOne({ where: tenantDelToken ? { id: companyId, tenantId: tenantDelToken } : { id: companyId } });
+    if (!empresa) throw new NotFoundException('Empresa no encontrada');
+    const tenantId = tenantDelToken ?? (esSoporte(req?.user) ? empresa.tenantId : undefined);
+
     return this.dashboardService.getCompanyKpis(companyId, period, tenantId);
   }
 }
