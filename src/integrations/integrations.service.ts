@@ -1,26 +1,39 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, InternalServerErrorException, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as crypto from 'crypto';
 import { Integration } from './entities/integration.entity';
 
-const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY || 'estia_key_2024_32bytes_padding!!';
 const IV_LENGTH = 16;
+export const ENCRYPTION_KEY_MIN_LENGTH = 32;
 
-function encrypt(text: string): string {
+// La llave sale SIEMPRE de la variable de entorno ENCRYPTION_KEY (nunca de una constante en el código) y se valida en el
+// momento de cifrar/descifrar, no al arrancar: un olvido solo bloquea guardar credenciales de integraciones, no tumba el backend.
+export function getEncryptionKey(): string {
+  const raw = process.env.ENCRYPTION_KEY;
+  if (!raw || raw.length < ENCRYPTION_KEY_MIN_LENGTH) {
+    throw new InternalServerErrorException(
+      `ENCRYPTION_KEY no está configurada o tiene menos de ${ENCRYPTION_KEY_MIN_LENGTH} caracteres: no se pueden guardar credenciales de integraciones. Defínela en el entorno del servidor.`,
+    );
+  }
+  return raw;
+}
+
+export function encrypt(text: string): string {
   const iv = crypto.randomBytes(IV_LENGTH);
-  const key = crypto.createHash('sha256').update(ENCRYPTION_KEY).digest();
+  const key = crypto.createHash('sha256').update(getEncryptionKey()).digest();
   const cipher = crypto.createCipheriv('aes-256-cbc', key, iv);
   const encrypted = Buffer.concat([cipher.update(text, 'utf8'), cipher.final()]);
   return iv.toString('hex') + ':' + encrypted.toString('hex');
 }
 
-function decrypt(text: string): string {
+export function decrypt(text: string): string {
+  // La llave se valida fuera del try: sin ella no se devuelve '' en silencio, se falla con el error claro.
+  const key = crypto.createHash('sha256').update(getEncryptionKey()).digest();
   try {
     const [ivHex, encryptedHex] = text.split(':');
     const iv = Buffer.from(ivHex, 'hex');
     const encrypted = Buffer.from(encryptedHex, 'hex');
-    const key = crypto.createHash('sha256').update(ENCRYPTION_KEY).digest();
     const decipher = crypto.createDecipheriv('aes-256-cbc', key, iv);
     return Buffer.concat([decipher.update(encrypted), decipher.final()]).toString('utf8');
   } catch {

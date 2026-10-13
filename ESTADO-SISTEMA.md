@@ -25,7 +25,7 @@ Railway (último deploy, aún del código anterior): backend `8fbe980c…` SUCCE
 | `registerPayment` | **CERRADO en código** | la `accountId` del pago debe ser del tenant de la factura (400 "Cuenta no encontrada") | spec |
 | `POST /administration/audit-logs` | **CERRADO en código** | el `tenantId` del body solo vale para SOPORTE | spec |
 | B10 botones sin acción | **CERRADO en código** (frontend) | CxP: "Pagar ahora" abre el modal de pago en Compras (`/purchases?pagar=id`); "Programar pago" se quitó (no hay programación de pagos en el backend). Dashboard: "Ver detalle completo →" navega a `/reports` | spec del enlace |
-| C3 `ENCRYPTION_KEY` | **ABIERTO** (a la espera de tu visto bueno; ver "Hallazgo C3") | — | — |
+| C3 `ENCRYPTION_KEY` | **PREPARADO en rama `fix/encryption-key-obligatoria`, sin mergear** (producción: `integration` tiene 0 filas, no hay migración; falta definir la variable en Railway y mergear) | sin valor por omisión: falla con 500 claro al cifrar/descifrar si falta o tiene menos de 32 caracteres; no tumba el arranque | 9 specs |
 | C4 `/accounts` y `/categories` heredados | **CERRADO en código** | cuentas: el tenant sale de branch → company (crear/listar/por sucursal, 403 en sucursal ajena); `POST /categories` solo SOPORTE (tabla global sin tenant) | specs |
 | C5 permisos de roles | **CERRADO en código** | `PUT /roles/:id/permissions/:module` solo SOPORTE. **Efecto de producto:** un ADMIN de tenant ya no puede editar la matriz desde `RolesPage`/`UsersPage` (recibirá 403); ningún guard del backend la lee. Decisión tuya si se prefiere ADMIN+SOPORTE | specs |
 | C6 `initialize-default` público | **CERRADO en código** | requiere ADMIN o SOPORTE (`RolesPage` ya lo llama con sesión) | spec |
