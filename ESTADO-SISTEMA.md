@@ -1,7 +1,7 @@
 # ESTADO-SISTEMA — auditoría de solo lectura
 
 Fecha: 2026-10-12 · Auditoría original sobre `main`: backend `7322dd36`, frontend `22b55d6e`.
-**Actualizado el mismo día a los hashes actuales (locales):** backend `bbb0543` (código de seguridad) → `main` local; frontend `eaee3fc`. Ambos **NO están en `origin/main` todavía** (el `push` quedó pendiente de tu visto bueno): `origin/main` sigue en backend `43f5554` y frontend `72a17be`.
+**Actualizado el mismo día a los hashes actuales (locales):** código backend `b71f9ba` (ronda 2 `bbb0543`), frontend `2b1d302` (ronda 2 `eaee3fc`). Ambos **NO están en `origin/main` todavía** (el `push` lo hace el dueño): `origin/main` sigue en backend `43f5554` y frontend `72a17be`.
 Railway (último deploy, aún del código anterior): backend `8fbe980c…` SUCCESS, frontend `f6c142a4…` SUCCESS, Postgres SUCCESS. `POST /api/v1/auth/login` sin credenciales → 401 (sin el prefijo `/api/v1` responde 404).
 
 ## Método y límites (leer primero)
@@ -19,6 +19,12 @@ Railway (último deploy, aún del código anterior): backend `8fbe980c…` SUCCE
 |---|---|---|---|
 | C1 plan/estado de tenants | **CERRADO en código** | `PUT /tenants/:id/plan` solo SOPORTE; `PATCH /tenants/:id/onboard` solo SOPORTE o ADMIN del propio tenant; `/subscriptions` (crear, cambiar plan, renovar, alertas) solo SOPORTE; `/plans` y `/business-types` (escritura) solo SOPORTE | CAJERO, ADMIN de otro tenant e incluso ADMIN propio → 403 en `/plan` |
 | C2 lectura de tenants | **CERRADO en código** | `GET /tenants` devuelve solo el tenant del token (SOPORTE ve todos); `GET /tenants/:id` y `GET /subscriptions/tenant/:id` → 403 si no es el propio | specs de aislamiento |
+| C5b onboard | **CERRADO en código** | `PATCH /tenants/:id/onboard`: SOPORTE, ADMIN o GERENTE, solo de su propio tenant (otro tenant → 403) | spec |
+| `GET /companies` | **CERRADO en código** | solo SOPORTE ve todas; el resto, las de su tenant; sin tenant en el token → 403 | spec |
+| `GET /dashboard/kpis` y `/company/:id/kpis` | **CERRADO en código** | el tenant sale del token; la empresa debe pertenecerle (404 si no); nunca cae a la primera empresa de la BD | spec |
+| `registerPayment` | **CERRADO en código** | la `accountId` del pago debe ser del tenant de la factura (400 "Cuenta no encontrada") | spec |
+| `POST /administration/audit-logs` | **CERRADO en código** | el `tenantId` del body solo vale para SOPORTE | spec |
+| B10 botones sin acción | **CERRADO en código** (frontend) | CxP: "Pagar ahora" abre el modal de pago en Compras (`/purchases?pagar=id`); "Programar pago" se quitó (no hay programación de pagos en el backend). Dashboard: "Ver detalle completo →" navega a `/reports` | spec del enlace |
 | C3 `ENCRYPTION_KEY` | **ABIERTO** (a la espera de tu visto bueno; ver "Hallazgo C3") | — | — |
 | C4 `/accounts` y `/categories` heredados | **CERRADO en código** | cuentas: el tenant sale de branch → company (crear/listar/por sucursal, 403 en sucursal ajena); `POST /categories` solo SOPORTE (tabla global sin tenant) | specs |
 | C5 permisos de roles | **CERRADO en código** | `PUT /roles/:id/permissions/:module` solo SOPORTE. **Efecto de producto:** un ADMIN de tenant ya no puede editar la matriz desde `RolesPage`/`UsersPage` (recibirá 403); ningún guard del backend la lee. Decisión tuya si se prefiere ADMIN+SOPORTE | specs |
@@ -26,7 +32,7 @@ Railway (último deploy, aún del código anterior): backend `8fbe980c…` SUCCE
 | (nuevo) IDOR por id | **CERRADO en código** | órdenes y facturas de compra (`/purchases/orders/:id…`, `/invoices/:id…`), proveedores, documentos OCR, consultas, alertas de insumo: la id ajena responde 404 y no escribe. `GET /purchases/invoices`, `/accounts-payable` y `/costs/justificables` ya no aceptan `?tenantId=` de un usuario de tenant (antes, sin el parámetro devolvían **todos** los tenants) | 29 specs |
 | (nuevo) Cajero con id crudo | **CERRADO en código** (frontend) | `PanelCuenta` ya no cae a `cuenta.cajero`; POSPage resuelve por nombre y Lite no muestra el cajero | spec |
 
-Verificación local: backend `tsc` limpio, jest **94 suites / 976 tests** en verde; frontend `tsc` limpio, vitest **6 archivos / 75 tests** en verde.
+Verificación local: backend `tsc` limpio, jest **95 suites / 992 tests** en verde; frontend `tsc` limpio, vitest **7 archivos / 77 tests** en verde.
 **Fuera de esta ronda (siguen abiertos):** C7, C8, y los endpoints de la tabla "Pendientes del barrido" más abajo.
 
 ### Hallazgo C3 — `ENCRYPTION_KEY` (solo lectura; no se generó ni cambió ninguna llave)
@@ -34,7 +40,7 @@ Verificación local: backend `tsc` limpio, jest **94 suites / 976 tests** en ver
 - **Qué se cifra:** únicamente `integration.credentials` (módulo Integraciones: certificados/llaves SAT, claves IMSS, secretos bancarios), con AES-256-CBC y la llave derivada por SHA-256 de `ENCRYPTION_KEY`. Código: `integrations.service.ts:7-27`.
 - **Riesgo:** la variable está vacía en producción, así que se usa la constante del repositorio `'estia_key_2024_32bytes_padding!!'`. Quien lea el repo y obtenga una fila de `integration.credentials` la descifra.
 - **Dato que baja el riesgo:** `decrypt()` **no se llama en ningún lugar** (no hay cliente HTTP en el módulo) y la respuesta de la API elimina `credentials` (`delete copy.credentials`). Es decir, hoy lo cifrado solo se escribe.
-- **¿Hay datos cifrados en producción?** **No verificado**: la consulta por `railway ssh` fue rechazada por el clasificador de permisos. Script de solo lectura listo en el scratchpad de la sesión (`prod-ro.js`) que cuenta filas con credenciales sin imprimirlas.
+- **¿Hay datos cifrados en producción?** **No verificado**: la consulta por `railway ssh` fue rechazada por el clasificador de permisos. Consulta de solo lectura (cuenta filas, no imprime credenciales): `SELECT COUNT(*) FILTER (WHERE credentials IS NOT NULL AND length(credentials) > 0) AS con_credenciales, COUNT(*) AS filas FROM integration;` — se corre con `railway connect Postgres` (psql) o con `railway ssh --service tesoreria-saas-backend -- node -e "..."` usando `DATABASE_URL`.
 - **Procedimiento seguro propuesto (esperando tu visto bueno):** 1) correr la consulta de solo lectura; 2) si hay 0 filas con credenciales → definir `ENCRYPTION_KEY` (32+ bytes aleatorios) en Railway y quitar el valor por omisión del código (que falle si falta); 3) si hay filas → script de migración que descifre con la llave actual y recifre con la nueva dentro de una transacción, con respaldo de la tabla y verificación antes de `COMMIT`; 4) guardar la llave en un gestor de secretos: perderla hace irrecuperables las credenciales.
 
 ## 1. Hallazgos críticos (seguridad, aislamiento, dinero)
@@ -94,9 +100,9 @@ Detección por revisión estática de los 101 `.tsx`: 20 `<button>` sin `onClick
 
 | Pantalla | Botón | Estado |
 |---|---|---|
-| `TreasuryPage.tsx` (CxP, ~L898) | "Programar pago" por fila | **sin `onClick`** |
-| `TreasuryPage.tsx` (CxP, ~L914) | segundo botón de acción de la fila | **sin `onClick`** |
-| `DashboardPage.tsx` (~L601) | "Ver detalle completo →" | **sin `onClick`/navegación** |
+| `TreasuryPage.tsx` (CxP) | "Programar pago" por fila | **QUITADO** (no existe programación de pagos en el backend) |
+| `TreasuryPage.tsx` (CxP) | "Pagar ahora" por fila | **CONECTADO**: abre el modal de pago de la factura en Compras |
+| `DashboardPage.tsx` | "Ver detalle completo →" | **CONECTADO**: navega a Reportes |
 | `SettingsPage.tsx` (~L530, 540) y `SettingsPreviewModal.tsx` | botones de vista previa de apariencia | decorativos a propósito |
 | `LoginConfigPage.tsx` (~L102) | botón de vista previa | `disabled` a propósito |
 | `ExecutiveReport.tsx` | módulo PRESUPUESTO | "Próximamente" |
@@ -112,7 +118,7 @@ Detección por revisión estática de los 101 `.tsx`: 20 `<button>` sin `onClick
 | D2 | **No hay cobro automático del SaaS**: sin pasarela ni cobro recurrente; la membresía del gimnasio tampoco se cobra sola | NO IMPLEMENTADO | L |
 | D3 | **Pagos con tarjeta capturados a mano**: el sistema no concilia contra el terminal | PARCIAL | M (conciliación) / L (integración) |
 | D4 | **Sin facturación CFDI** | NO IMPLEMENTADO | L |
-| D5 | Un cajero puede tener **más de un turno abierto** a la vez (sin índice único); el efectivo esperado se calcula por turno, no por persona | confirmado | S (índice) tras limpiar duplicados |
+| D5 | Un cajero puede tener **más de un turno abierto** a la vez (sin índice único); el efectivo esperado se calcula por turno, no por persona | confirmado · SQL listo sin ejecutar: `b5-turnos-abiertos-por-cajero.sql` (conteo, detalle e índice único parcial) | S (índice) tras limpiar duplicados |
 | D6 | Reporte de ingresos de membresías **reparte descuento e IVA de cuenta de forma proporcional** (aproximado) | conocido | S |
 | D7 | Topes de descuento y cortesías **en código**, no por negocio | conocido | S |
 | D8 | Cola offline: ventas en IndexedDB del navegador; si se borra, se pierden; el folio idempotente evita duplicados pero no recupera lo perdido | conocido | M |
@@ -147,12 +153,12 @@ Lo que **sí** está cubierto por pruebas: precio e IVA siempre del servidor, de
 | B2 | Definir `ENCRYPTION_KEY` y recifrar credenciales (C3) | **S** |
 | B3 | ~~Cerrar `/accounts`, `/categories`, permisos de roles (C4–C6)~~ **hecho en código (§0); falta desplegar** | **S** |
 | B4 | **Prueba de punta a punta en navegador** de POS, corte, mesas y membresías con datos reales (Sección 8) | **M** |
-| B5 | Índice de un turno abierto por cajero (previa limpieza) | **S** |
+| B5 | Índice de un turno abierto por cajero (previa limpieza). SQL en `b5-turnos-abiertos-por-cajero.sql`, **sin ejecutar** | **S** |
 | B6 | CFDI (para cualquier cliente que facture) | **L** |
 | B7 | Cobro del SaaS (pasarela / recurrente) y de membresías | **L** |
 | B8 | Conciliación/terminal de tarjeta | **M–L** |
 | B9 | Cola offline: política de respaldo y prueba sin red real | **M** |
-| B10 | Botones sin acción en Tesorería y Dashboard | **S** |
+| B10 | ~~Botones sin acción en Tesorería y Dashboard~~ **hecho en código (§0); falta desplegar** | **S** |
 | B11 | Cobertura automática del frontend (hoy 4 archivos) | **L** |
 
 Orden sugerido: B1–B3 (un día), B5 y B10 (medio día), B4 (con el cliente piloto), luego B9; B6–B8 según el primer cliente.
@@ -177,11 +183,9 @@ Tras la ronda quedan ~316 endpoints sin `@Roles`; la gran mayoría están acotad
 
 | Archivo | Endpoint | Nota |
 |---|---|---|
-| `companies.controller.ts` | `GET /companies` | sin tenantId en el token devuelve todas (solo SOPORTE debería); `@Public GET /companies/tenant/:tenantId` es intencional (kiosko Lite) |
-| `dashboard.controller.ts` | `GET /dashboard/company/:companyId/kpis` | si no hay tenant en el token cae al tenant de **la primera empresa de la BD** |
+| `companies.controller.ts` | `@Public GET /companies/tenant/:tenantId` | intencional (kiosko Lite); expone razón social/RFC/isActive de las empresas de un tenant a quien conozca su id |
 | `tenant-settings.controller.ts` | `@Public GET /tenant-settings/:tenantId` | intencional (branding antes del login); expone poco |
-| `purchases.service.ts` | `registerPayment` | la `accountId` del pago no se valida contra el tenant en este servicio; **no verifiqué** si `MovementsService.create` la acota |
-| `administration.controller.ts` | `POST /administration/audit-logs` | solo SOPORTE, pero acepta `tenantId` del body |
+| `dashboard.controller.ts` | `GET /dashboard/kpis` con `x-company-id` | el `companyId` del header no se valida contra el tenant (el cálculo ya filtra por sucursales del tenant, no verificado a fondo) |
 | varios (`costs`, `hr`, `inventory`…) | altas con `tenantId` por `@Query`/header | la mayoría ya prefiere el del token; revisar las que usan `?? header` |
 
 ## 9. Lo que no cubre esta auditoría
