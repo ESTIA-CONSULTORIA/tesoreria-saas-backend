@@ -72,6 +72,7 @@ describe('SalesService.create — POS normal: precio, descuento, IVA y total los
   const PRODUCTS: Record<string, any> = {
     'p-simple': { id: 'p-simple', type: 'SIMPLE', insumoId: 'ins-1', recipeId: null, tenantId: TENANT_A, name: 'Taco', price: 50, esServicio: false },
     'p-servicio': { id: 'p-servicio', type: 'SIMPLE', insumoId: 'ins-1', recipeId: null, tenantId: TENANT_A, name: 'Consulta', price: 100, esServicio: true },
+    'p-limon': { id: 'p-limon', type: 'SIMPLE', insumoId: null, recipeId: null, tenantId: TENANT_A, name: 'Orden de Limón', price: 10, esServicio: false, tasaIva: null },
     'p-B': { id: 'p-B', type: 'SIMPLE', insumoId: 'ins-1', recipeId: null, tenantId: TENANT_B, name: 'Ajeno', price: 10, esServicio: false },
     'p-cocina-ins': { id: 'p-cocina-ins', type: 'SIMPLE', insumoId: 'ins-1', recipeId: null, tenantId: TENANT_A, name: 'Tacos al pastor', price: 60, esServicio: false, estacionPreparacion: 'COCINA' },
   };
@@ -426,6 +427,48 @@ const ITEM_SIN_COCINA = { productoId: 'p-simple', nombre: 'Taco', cantidad: 2, p
       // mismo cobro con tarjeta pero producto de otro tenant: 400 y no se crea nada en ninguno
       await expect(vender(erp('CAJERO'), [linea('p-B', 1)], [{ forma: 'DEBITO', monto: 500, ultimos4Digitos: '0001' }])).rejects.toThrow(/Producto no encontrado/);
       expect([...ventas.values()]).toHaveLength(1);
+    });
+  });
+
+  describe('Orden de Limón $10.00 con IVA 8%: el cobro de $10.80 (caso reportado)', () => {
+    beforeEach(() => { ivaCfg = { ivaTasaDefault: '8', preciosIncluyenIva: false }; });
+
+    it('el servidor calcula exactamente 10.00 + 0.80 = 10.80 (el redondeo no deja el pago corto)', async () => {
+      const v = await vender(erp('CAJERO'), [linea('p-limon', 1)], efectivo(10.8));
+      expect(venta(v.id)).toMatchObject({ status: 'PAGADA', subtotal: 10, impuestos: 0.8, total: 10.8 });
+      expect(venta(v.id).formasPago[0]).toMatchObject({ forma: 'EFECTIVO', monto: 10.8 });
+    });
+
+    it('con tarjeta y 4 dígitos se cobra; SIN dígitos el 400 dice exactamente qué falta', async () => {
+      const v = await vender(erp('CAJERO'), [linea('p-limon', 1)], [{ forma: 'DEBITO', monto: 10.8, ultimos4Digitos: '1234' }]);
+      expect(venta(v.id).formasPago[0]).toMatchObject({ forma: 'DEBITO', monto: 10.8, ultimos4Digitos: '1234' });
+      const err: any = await vender(erp('CAJERO'), [linea('p-limon', 1)], [{ forma: 'DEBITO', monto: 10.8 }]).catch((e) => e);
+      expect(err).toBeInstanceOf(BadRequestException);
+      expect(err.message).toBe('Forma de pago 1 (DEBITO) requiere los últimos 4 dígitos de la tarjeta (ultimos4Digitos).');
+    });
+
+    it('cambio de tarjeta a efectivo con la línea de tarjeta todavía en la lista: sigue rechazando por los dígitos (no por el efectivo)', async () => {
+      const err: any = await vender(erp('CAJERO'), [linea('p-limon', 1)], [{ forma: 'DEBITO', monto: 10.8 }, { forma: 'EFECTIVO', monto: 10.8 }]).catch((e) => e);
+      expect(err).toBeInstanceOf(BadRequestException);
+      expect(err.message).toMatch(/Forma de pago 1 \(DEBITO\) requiere los últimos 4 dígitos/);
+      expect(ventas.size).toBe(0);
+    });
+
+    it('efectivo solo, aunque antes se haya intentado con tarjeta: se cobra', async () => {
+      const v = await vender(erp('CAJERO'), [linea('p-limon', 1)], [{ forma: 'EFECTIVO', monto: 20, montoRecibido: 20 }]);
+      expect(venta(v.id).formasPago[0]).toMatchObject({ monto: 10.8, montoRecibido: 20, cambio: 9.2 });
+    });
+
+    it('un centavo corto dentro de la tolerancia pasa; dos o más no cubren (400 con ambos importes)', async () => {
+      await vender(erp('CAJERO'), [linea('p-limon', 1)], efectivo(10.79));
+      const err: any = await vender(erp('CAJERO'), [linea('p-limon', 1)], efectivo(10.78)).catch((e) => e);
+      expect(err.message).toBe('Las formas de pago (10.78) no cubren el total de la venta (10.8). Actualiza el catálogo e intenta de nuevo.');
+    });
+
+    it('si el POS cobra con IVA 16% de más (localStorage viejo) el pago de 11.60 se acepta como efectivo y el total sigue siendo 10.80', async () => {
+      const v = await vender(erp('CAJERO'), [linea('p-limon', 1)], [{ forma: 'EFECTIVO', monto: 11.6 }]);
+      expect(venta(v.id)).toMatchObject({ total: 10.8 });
+      expect(venta(v.id).formasPago[0]).toMatchObject({ monto: 10.8, cambio: 0.8 });
     });
   });
 

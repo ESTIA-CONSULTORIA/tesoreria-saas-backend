@@ -4,6 +4,7 @@ import { OfflineVentasService } from './offline-ventas.service';
 import { RolesGuard } from '../auth/roles.guard';
 import { sucursalEfectiva, sucursalParaEscribir } from '../common/sucursal-efectiva';
 import { Roles } from '../auth/roles.decorator';
+import { registrarRechazo } from './log-rechazo';
 
 @Controller('pos/sales')
 export class SalesController {
@@ -18,7 +19,10 @@ export class SalesController {
       ...data,
       ...(sucursalId ? { sucursalId } : {}),
       tenantId,
-    }, req.user ?? {});
+    }, req.user ?? {}).catch((e) => {
+      registrarRechazo('POST /pos/sales', e, req, data);
+      throw e;
+    });
   }
 
   @Get()
@@ -107,13 +111,19 @@ export class SalesController {
   @Post(':id/pagos')
   cobrarCuenta(@Param('id') id: string, @Body() data: any, @Request() req?: any) {
     const tenantId = req?.user?.tenantId;
-    return this.salesService.cobrarCuenta(id, data, tenantId, req?.user ?? {});
+    return this.salesService.cobrarCuenta(id, data, tenantId, req?.user ?? {}).catch((e) => {
+      registrarRechazo('POST /pos/sales/:id/pagos', e, req, data);
+      throw e;
+    });
   }
 
   @Put(':id/pay')
   paySale(@Param('id') id: string, @Body() data: any, @Request() req?: any) {
     const tenantId = req?.user?.tenantId;
-    return this.salesService.pay(id, data, tenantId, req?.user ?? {});
+    return this.salesService.pay(id, data, tenantId, req?.user ?? {}).catch((e) => {
+      registrarRechazo('PUT /pos/sales/:id/pay', e, req, data);
+      throw e;
+    });
   }
 
   @Put(':id/cancel')
