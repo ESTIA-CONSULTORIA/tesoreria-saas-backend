@@ -280,9 +280,9 @@ const ITEM_SIN_COCINA = { productoId: 'p-simple', nombre: 'Taco', cantidad: 2, p
     });
 
     it('pago mixto con exceso: se descuenta del efectivo; tarjeta de más sin efectivo que absorberlo es 400', async () => {
-      const v = await vender(erp('CAJERO'), [linea('p-simple', 2)], [{ forma: 'TARJETA', monto: 100 }, { forma: 'EFECTIVO', monto: 50 }]);
+      const v = await vender(erp('CAJERO'), [linea('p-simple', 2)], [{ forma: 'TARJETA', ultimos4Digitos: '1234', monto: 100 }, { forma: 'EFECTIVO', monto: 50 }]);
       expect(venta(v.id).formasPago.map((p: any) => [p.forma, p.monto])).toEqual([['TARJETA', 100], ['EFECTIVO', 16]]);
-      await expect(vender(erp('CAJERO'), [linea('p-simple', 2)], [{ forma: 'TARJETA', monto: 200 }])).rejects.toThrow(/exceden el total/);
+      await expect(vender(erp('CAJERO'), [linea('p-simple', 2)], [{ forma: 'TARJETA', ultimos4Digitos: '1234', monto: 200 }])).rejects.toThrow(/exceden el total/);
     });
 
     it('producto inexistente o de otro tenant: 400, sin venta ni inventario tocado', async () => {
@@ -370,6 +370,62 @@ const ITEM_SIN_COCINA = { productoId: 'p-simple', nombre: 'Taco', cantidad: 2, p
     it('cortesía (100%): total $0 y se registra con la forma CORTESIA', async () => {
       const v = await vender(erp('GERENTE'), [linea('p-simple', 2, 100)], [{ forma: 'CORTESIA', monto: 0, motivo: 'cortesia_ejecutiva', autorizadoPor: 'dueño' }]);
       expect(venta(v.id)).toMatchObject({ subtotal: 100, descuento: 100, impuestos: 0, total: 0 });
+    });
+  });
+
+  describe('tarjeta: últimos 4 dígitos obligatorios (create)', () => {
+    const TARJETAS = ['DEBITO', 'CREDITO', 'TARJETA'];
+
+    it.each(TARJETAS)('%s sin dígitos: 400 con mensaje claro y no queda venta ni inventario tocado', async (forma) => {
+      const err: any = await vender(erp('CAJERO'), [linea('p-simple', 2)], [{ forma, monto: 116 }]).catch((e) => e);
+      expect(err).toBeInstanceOf(BadRequestException);
+      expect(err.message).toMatch(/últimos 4 dígitos/);
+      expect(err.message).toContain(forma);
+      sinNada();
+    });
+
+    it.each(['123', '12345', 'abcd', '12 4', '12.4', ' ', '1234a'])('dígitos inválidos "%s": 400 y no queda nada', async (malo) => {
+      const err: any = await vender(erp('CAJERO'), [linea('p-simple', 2)], [{ forma: 'DEBITO', monto: 116, ultimos4Digitos: malo }]).catch((e) => e);
+      expect(err).toBeInstanceOf(BadRequestException);
+      expect(err.message).toMatch(/4 dígitos|4 números/);
+      sinNada();
+    });
+
+    it.each(TARJETAS)('%s con 4 dígitos: se guarda en la línea de pago', async (forma) => {
+      const v = await vender(erp('CAJERO'), [linea('p-simple', 2)], [{ forma, monto: 116, ultimos4Digitos: '4242' }]);
+      expect(venta(v.id).formasPago[0]).toMatchObject({ forma, monto: 116, ultimos4Digitos: '4242' });
+    });
+
+    it('pago mixto: la tarjeta sin dígitos rechaza TODA la venta aunque el efectivo esté bien (indica qué pago)', async () => {
+      const err: any = await vender(erp('CAJERO'), [linea('p-simple', 2)], [{ forma: 'EFECTIVO', monto: 50 }, { forma: 'CREDITO', monto: 66 }]).catch((e) => e);
+      expect(err).toBeInstanceOf(BadRequestException);
+      expect(err.message).toMatch(/Forma de pago 2/);
+      sinNada();
+    });
+
+    it('pago mixto con dos tarjetas: cada una guarda sus propios dígitos; efectivo y transferencia no los exigen ni los guardan', async () => {
+      const v = await vender(erp('CAJERO'), [linea('p-simple', 2)], [
+        { forma: 'DEBITO', monto: 30, ultimos4Digitos: '1111' },
+        { forma: 'CREDITO', monto: 30, ultimos4Digitos: '2222' },
+        { forma: 'EFECTIVO', monto: 30, ultimos4Digitos: '9999' },
+        { forma: 'TRANSFERENCIA', monto: 26 },
+      ]);
+      expect(venta(v.id).formasPago.map((p: any) => [p.forma, p.ultimos4Digitos])).toEqual([
+        ['DEBITO', '1111'], ['CREDITO', '2222'], ['EFECTIVO', undefined], ['TRANSFERENCIA', undefined],
+      ]);
+    });
+
+    it('efectivo, transferencia y cortesía no necesitan dígitos', async () => {
+      const v = await vender(erp('CAJERO'), [linea('p-simple', 2)], [{ forma: 'EFECTIVO', monto: 100 }, { forma: 'TRANSFERENCIA', monto: 16 }]);
+      expect(venta(v.id).status).toBe('PAGADA');
+    });
+
+    it('aislamiento: con dígitos válidos la venta queda en el tenant del token; el catálogo de otro tenant no sirve para cobrarla', async () => {
+      const v = await vender(erp('CAJERO'), [linea('p-simple', 2)], [{ forma: 'DEBITO', monto: 116, ultimos4Digitos: '0001' }]);
+      expect(venta(v.id).tenantId).toBe(TENANT_A);
+      // mismo cobro con tarjeta pero producto de otro tenant: 400 y no se crea nada en ninguno
+      await expect(vender(erp('CAJERO'), [linea('p-B', 1)], [{ forma: 'DEBITO', monto: 500, ultimos4Digitos: '0001' }])).rejects.toThrow(/Producto no encontrado/);
+      expect([...ventas.values()]).toHaveLength(1);
     });
   });
 

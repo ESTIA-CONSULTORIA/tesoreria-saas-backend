@@ -28,6 +28,7 @@ import { TenantSettingsService } from '../tenant-settings/tenant-settings.servic
 import { AppointmentsService } from '../appointments/appointments.service';
 import { CostsService } from '../costs/costs.service';
 import { JustifiableCategory } from '../costs/entities/justifiable.entity';
+import { esFormaTarjeta, exigirUltimos4 } from './tarjeta.util';
 
 interface LowStockInsumo {
   id: string;
@@ -225,12 +226,14 @@ export class SalesService {
       if (!p || !FORMAS.includes(p.forma) || !Number.isFinite(monto) || monto < 0) {
         throw new BadRequestException(`Forma de pago ${i + 1} inválida.`);
       }
+      // Tarjeta: exactamente 4 dígitos, sin ellos no hay cobro (create, venta offline sincronizada y cobro dividido/mixto).
+      const ultimos4 = esFormaTarjeta(p.forma) ? exigirUltimos4(p.forma, p.ultimos4Digitos, `Forma de pago ${i + 1}`) : undefined;
       return {
         forma: p.forma as any,
         monto,
         ...(p.montoRecibido !== undefined ? { montoRecibido: Number(p.montoRecibido) } : {}),
         ...(p.cambio !== undefined ? { cambio: Number(p.cambio) } : {}),
-        ...(p.ultimos4Digitos ? { ultimos4Digitos: p.ultimos4Digitos } : {}),
+        ...(ultimos4 ? { ultimos4Digitos: ultimos4 } : {}),
         ...(p.folioVoucher ? { folioVoucher: p.folioVoucher } : {}),
         ...(p.claveRastreo ? { claveRastreo: p.claveRastreo } : {}),
         ...(p.bancoOrigen ? { bancoOrigen: p.bancoOrigen } : {}),
@@ -1243,6 +1246,7 @@ export class SalesService {
       throw new BadRequestException('formaPago inválida.');
     }
     if (data.formaPago === 'CORTESIA') this.assertCortesiaPermitida(actor);
+    const ultimos4 = esFormaTarjeta(data.formaPago) ? exigirUltimos4(data.formaPago, data.ultimos4Digitos, 'El cobro de la cuenta') : undefined;
     if (data.monto !== undefined && data.itemIndexes !== undefined) {
       throw new BadRequestException('Manda monto o itemIndexes, no ambos.');
     }
@@ -1323,7 +1327,7 @@ export class SalesService {
         ...(indices ? { itemIndexes: indices } : {}),
         ...(data.montoRecibido !== undefined ? { montoRecibido: Number(data.montoRecibido) } : {}),
         ...(data.cambio !== undefined ? { cambio: Number(data.cambio) } : {}),
-        ...(data.ultimos4Digitos ? { ultimos4Digitos: data.ultimos4Digitos } : {}),
+        ...(ultimos4 ? { ultimos4Digitos: ultimos4 } : {}),
         ...(data.folioVoucher ? { folioVoucher: data.folioVoucher } : {}),
         ...(data.claveRastreo ? { claveRastreo: data.claveRastreo } : {}),
         ...(data.bancoOrigen ? { bancoOrigen: data.bancoOrigen } : {}),
@@ -1359,12 +1363,14 @@ export class SalesService {
     formaPago: string;
     montoRecibido: number;
     cambio: number;
+    ultimos4Digitos?: string;
   }, tenantId?: string, actor?: Actor) {
     const FORMAS_PAY = ['EFECTIVO', 'TARJETA', 'DEBITO', 'CREDITO', 'TRANSFERENCIA', 'CORTESIA'];
     if (!data || !FORMAS_PAY.includes(data.formaPago)) {
       throw new BadRequestException('formaPago inválida.');
     }
     if (data.formaPago === 'CORTESIA') this.assertCortesiaPermitida(actor);
+    const ultimos4 = esFormaTarjeta(data.formaPago) ? exigirUltimos4(data.formaPago, data.ultimos4Digitos, 'El cobro de la venta') : undefined;
     try {
       const sale = await this.salesRepo.findOne({ where: tenantId ? { id, tenantId } : { id } });
       if (!sale) {
@@ -1412,6 +1418,7 @@ export class SalesService {
           cobradoPorEmail: actor.email,
           cobradoPorRol: actor.roleCode,
           origen: contextoCobro(actor),
+          ...(ultimos4 ? { ultimos4Digitos: ultimos4 } : {}),
           ...(data.formaPago === 'CORTESIA' ? { autorizadoPor: this.autorizadoPorDe(actor) } : {}),
           ...(data.montoRecibido !== undefined ? { montoRecibido: Number(data.montoRecibido) } : {}),
           ...(data.cambio !== undefined ? { cambio: Number(data.cambio) } : {}),
@@ -1422,6 +1429,14 @@ export class SalesService {
           forma: 'CORTESIA' as const,
           monto: this.round2(Number(sale.total)),
           autorizadoPor: this.autorizadoPorDe(actor),
+          ...(actor ? { cobradoPorId: actor.id, cobradoPorEmail: actor.email, cobradoPorRol: actor.roleCode, origen: contextoCobro(actor) } : {}),
+        }];
+      } else if (ultimos4) {
+        // Sin mesa y con tarjeta: los 4 dígitos viven en la línea de pago (formaPago/montoRecibido siguen igual).
+        cambiosPago.formasPago = [{
+          forma: data.formaPago as any,
+          monto: this.round2(Number(sale.total)),
+          ultimos4Digitos: ultimos4,
           ...(actor ? { cobradoPorId: actor.id, cobradoPorEmail: actor.email, cobradoPorRol: actor.roleCode, origen: contextoCobro(actor) } : {}),
         }];
       }

@@ -142,7 +142,7 @@ describe('SalesService.returnSale() — devolución total', () => {
     }
     const abierta = await sales.create(base as any);
     fijar(abierta.id);
-    return sales.pay(abierta.id, { formaPago: opts.formaPago ?? 'EFECTIVO', montoRecibido: total, cambio: 0 } as any, base.tenantId);
+    return sales.pay(abierta.id, { formaPago: opts.formaPago ?? 'EFECTIVO', montoRecibido: total, cambio: 0, ultimos4Digitos: '1234' } as any, base.tenantId);
   }
 
   const devoluciones = () => [...ventas.values()].filter((v) => v.status === 'DEVOLUCION');
@@ -376,7 +376,7 @@ describe('SalesService.returnSale() — devolución total', () => {
       const mixta = await crearPagada({
         formasPago: [
           { forma: 'EFECTIVO', monto: 60 },
-          { forma: 'TARJETA', monto: 30 },
+          { forma: 'TARJETA', ultimos4Digitos: '1234', monto: 30 },
           { forma: 'TRANSFERENCIA', monto: 10 },
         ],
       });
@@ -601,7 +601,7 @@ describe('SalesService.returnSale() — devolución total', () => {
     });
 
     it('queda registrado quién devolvió: en las notas y en formasPago[].autorizadoPor de la DEVOLUCION', async () => {
-      const mixta = await crearPagada({ formasPago: [{ forma: 'EFECTIVO', monto: 60 }, { forma: 'TARJETA', monto: 40 }] });
+      const mixta = await crearPagada({ formasPago: [{ forma: 'EFECTIVO', monto: 60 }, { forma: 'TARJETA', ultimos4Digitos: '1234', monto: 40 }] });
       const dev: any = await sales.returnSale(mixta.id, { motivo: 'queja' }, TENANT_A, GERENTE);
       expect(dev.notas).toBe(`Devolución de venta ${mixta.folio}. Motivo: queja. Devolvió: gerente@demo.com (GERENTE)`);
       expect(dev.formasPago.map((p: any) => p.autorizadoPor)).toEqual(['gerente@demo.com', 'gerente@demo.com']);

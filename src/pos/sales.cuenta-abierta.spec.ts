@@ -398,7 +398,7 @@ describe('SalesService — capacidad mesas_cuenta_abierta', () => {
       expect(r1.sale.status).toBe('ABIERTA');
       expect(mesa()).toBe('OCCUPIED'); // sigue ocupada mientras haya saldo
 
-      await service.cobrarCuenta(v.id, { formaPago: 'TARJETA', monto: 33.33 }, TENANT_A);
+      await service.cobrarCuenta(v.id, { formaPago: 'TARJETA', ultimos4Digitos: '1234', monto: 33.33 }, TENANT_A);
       const r3: any = await service.cobrarCuenta(v.id, { formaPago: 'TRANSFERENCIA' }, TENANT_A); // omite monto → paga el resto
 
       expect(r3.cerrada).toBe(true);
@@ -418,7 +418,7 @@ describe('SalesService — capacidad mesas_cuenta_abierta', () => {
       expect(r1.saldoPendiente).toBe(46.4);
       expect(r1.cerrada).toBe(false);
 
-      const r2: any = await service.cobrarCuenta(v.id, { formaPago: 'TARJETA', itemIndexes: [1] }, TENANT_A);
+      const r2: any = await service.cobrarCuenta(v.id, { formaPago: 'TARJETA', ultimos4Digitos: '1234', itemIndexes: [1] }, TENANT_A);
       expect(r2.sale.formasPago[1].monto).toBe(46.4);
       expect(r2.cerrada).toBe(true);
     });
@@ -455,7 +455,7 @@ describe('SalesService — capacidad mesas_cuenta_abierta', () => {
       await service.cobrarCuenta(v2.id, { formaPago: 'EFECTIVO', monto: 40 }, TENANT_A);
       // el servidor pone precio de catálogo ($80) e IVA (16%): +92.80
       await service.agregarItems(v2.id, { items: [{ productoId: 'p-cocina', nombre: 'Postre', cantidad: 1, precioUnitario: 30, descuento: 0, subtotal: 30 }] }, TENANT_A);
-      const r: any = await service.cobrarCuenta(v2.id, { formaPago: 'TARJETA' }, TENANT_A);
+      const r: any = await service.cobrarCuenta(v2.id, { formaPago: 'TARJETA', ultimos4Digitos: '1234' }, TENANT_A);
       expect(r.sale.formasPago.map((p: any) => p.monto)).toEqual([40, 152.8]); // total 192.80
       expect(r.cerrada).toBe(true);
     });
@@ -545,9 +545,67 @@ describe('SalesService — capacidad mesas_cuenta_abierta', () => {
       expect(mesa()).toBe('OCCUPIED');
     });
 
+    describe('tarjeta: últimos 4 dígitos obligatorios', () => {
+      it.each(['DEBITO', 'CREDITO', 'TARJETA'])('cobrarCuenta %s sin dígitos: 400 claro, la cuenta sigue abierta y sin pagos', async (formaPago) => {
+        const v = await crearVenta();
+        const err: any = await service.cobrarCuenta(v.id, { formaPago }, TENANT_A).catch((e) => e);
+        expect(err).toBeInstanceOf(BadRequestException);
+        expect(err.message).toMatch(/últimos 4 dígitos/);
+        const fila = venta(v.id);
+        expect(fila.status).toBe('ABIERTA');
+        expect(fila.formasPago ?? []).toHaveLength(0);
+      });
+
+      it('cobrarCuenta con dígitos inválidos (3, 5, letras): 400', async () => {
+        const v = await crearVenta();
+        for (const malo of ['123', '12345', 'abcd']) {
+          await expect(service.cobrarCuenta(v.id, { formaPago: 'DEBITO', ultimos4Digitos: malo }, TENANT_A)).rejects.toThrow(BadRequestException);
+        }
+      });
+
+      it('cobro dividido y mixto: efectivo sin dígitos, tarjeta sin dígitos 400, tarjeta con dígitos queda en SU línea', async () => {
+        const v = await crearVenta();
+        await service.cobrarCuenta(v.id, { formaPago: 'EFECTIVO', monto: 30 }, TENANT_A);
+        await expect(service.cobrarCuenta(v.id, { formaPago: 'CREDITO', monto: 30 }, TENANT_A)).rejects.toThrow(/últimos 4 dígitos/);
+        await service.cobrarCuenta(v.id, { formaPago: 'CREDITO', monto: 30, ultimos4Digitos: '7777' }, TENANT_A);
+        const r: any = await service.cobrarCuenta(v.id, { formaPago: 'DEBITO', ultimos4Digitos: '8888' }, TENANT_A); // el resto
+        expect(r.cerrada).toBe(true);
+        expect(r.sale.formasPago.map((p: any) => [p.forma, p.monto, p.ultimos4Digitos])).toEqual([
+          ['EFECTIVO', 30, undefined], ['CREDITO', 30, '7777'], ['DEBITO', 40, '8888'],
+        ]);
+      });
+
+      it('cobrarCuenta por ítems con tarjeta sin dígitos: 400 y el ítem sigue sin cobrar', async () => {
+        const v = await crearVenta({}, [
+          { productoId: 'p-simple', nombre: 'A', cantidad: 1, precioUnitario: 60, descuento: 0, subtotal: 60 },
+          { productoId: 'p-simple', nombre: 'B', cantidad: 1, precioUnitario: 40, descuento: 0, subtotal: 40 },
+        ]);
+        await expect(service.cobrarCuenta(v.id, { formaPago: 'DEBITO', itemIndexes: [0] }, TENANT_A)).rejects.toThrow(/últimos 4 dígitos/);
+        const r: any = await service.cobrarCuenta(v.id, { formaPago: 'DEBITO', itemIndexes: [0], ultimos4Digitos: '3333' }, TENANT_A);
+        expect(r.sale.formasPago[0]).toMatchObject({ itemIndexes: [0], ultimos4Digitos: '3333' });
+      });
+
+      it('pay() con tarjeta sin dígitos: 400 y la venta sigue ABIERTA; con dígitos se guardan en la línea de pago', async () => {
+        const v = await crearVenta();
+        const err: any = await service.pay(v.id, { formaPago: 'DEBITO', montoRecibido: 100, cambio: 0 }, TENANT_A).catch((e) => e);
+        expect(err).toBeInstanceOf(BadRequestException);
+        expect(err.message).toMatch(/últimos 4 dígitos/);
+        expect(venta(v.id).status).toBe('ABIERTA');
+        const r: any = await service.pay(v.id, { formaPago: 'CREDITO', montoRecibido: 100, cambio: 0, ultimos4Digitos: '5555' } as any, TENANT_A);
+        expect(r.status).toBe('PAGADA');
+        expect(r.formasPago[0]).toMatchObject({ forma: 'CREDITO', ultimos4Digitos: '5555' });
+      });
+
+      it('aislamiento: cobrar con dígitos válidos una cuenta de otro tenant sigue siendo 404 y no la toca', async () => {
+        const v = await crearVenta();
+        await expect(service.cobrarCuenta(v.id, { formaPago: 'DEBITO', ultimos4Digitos: '1234' }, TENANT_B)).rejects.toThrow(NotFoundException);
+        expect(venta(v.id).status).toBe('ABIERTA');
+      });
+    });
+
     it('un ítem sin cita ni mesa sigue cobrándose por pay() exactamente igual (venta normal)', async () => {
       const v = await crearVenta({ tableId: undefined });
-      const r: any = await service.pay(v.id, { formaPago: 'TARJETA', montoRecibido: 100, cambio: 0 }, TENANT_A);
+      const r: any = await service.pay(v.id, { formaPago: 'TARJETA', ultimos4Digitos: '1234', montoRecibido: 100, cambio: 0 }, TENANT_A);
       expect(r.status).toBe('PAGADA');
     });
   });
@@ -760,7 +818,7 @@ describe('SalesService — capacidad mesas_cuenta_abierta', () => {
       await service.quitarItem(v.id, 1, TENANT_A); // total 90
       await expect(service.cobrarCuenta(v.id, { formaPago: 'EFECTIVO', itemIndexes: [1] }, TENANT_A)).rejects.toThrow('no existe');
       await service.cobrarCuenta(v.id, { formaPago: 'EFECTIVO', itemIndexes: [0] }, TENANT_A);
-      const r: any = await service.cobrarCuenta(v.id, { formaPago: 'TARJETA', itemIndexes: [2] }, TENANT_A);
+      const r: any = await service.cobrarCuenta(v.id, { formaPago: 'TARJETA', ultimos4Digitos: '1234', itemIndexes: [2] }, TENANT_A);
       expect(r.cerrada).toBe(true);
       expect(r.sale.formasPago.map((x: any) => x.monto)).toEqual([60, 30]);
     });
@@ -800,7 +858,7 @@ describe('SalesService — capacidad mesas_cuenta_abierta', () => {
             const parcial: any = await service.cobrarCuenta(v.id, { formaPago: 'EFECTIVO', monto: base }, TENANT_A);
             expect(parcial.cerrada).toBe(false); // nunca cierra antes del último
           }
-          const ultimo: any = await service.cobrarCuenta(v.id, { formaPago: 'TARJETA' }, TENANT_A);
+          const ultimo: any = await service.cobrarCuenta(v.id, { formaPago: 'TARJETA', ultimos4Digitos: '1234' }, TENANT_A);
           expect(ultimo.cerrada).toBe(true);
           expect(ultimo.saldoPendiente).toBe(0);
           expect(ultimo.sale.formasPago).toHaveLength(n);
@@ -823,7 +881,7 @@ describe('SalesService — capacidad mesas_cuenta_abierta', () => {
       const v = await crearVenta({ impuestos: 16, total: 116 }, [L('p-cocina', 'A', 1, 33.33), L('p-cocina', 'B', 1, 33.33), L('p-cocina', 'C', 1, 33.34)]);
       await service.cobrarCuenta(v.id, { formaPago: 'EFECTIVO', itemIndexes: [0] }, TENANT_A);
       await service.cobrarCuenta(v.id, { formaPago: 'EFECTIVO', itemIndexes: [1] }, TENANT_A);
-      const r: any = await service.cobrarCuenta(v.id, { formaPago: 'TARJETA', itemIndexes: [2] }, TENANT_A);
+      const r: any = await service.cobrarCuenta(v.id, { formaPago: 'TARJETA', ultimos4Digitos: '1234', itemIndexes: [2] }, TENANT_A);
       expect(r.sale.formasPago.map((p: any) => Number(p.monto))).toEqual([38.66, 38.66, 38.68]);
       expect(sumaCents(r.sale.formasPago)).toBe(11600);
       expect(r.cerrada).toBe(true);
@@ -832,7 +890,7 @@ describe('SalesService — capacidad mesas_cuenta_abierta', () => {
     it('por ítems agrupados ([0,2] y luego [1]): suma exacta', async () => {
       const v = await crearVenta({ impuestos: 16, total: 116 }, [L('p-cocina', 'A', 1, 33.33), L('p-cocina', 'B', 1, 33.33), L('p-cocina', 'C', 1, 33.34)]);
       await service.cobrarCuenta(v.id, { formaPago: 'EFECTIVO', itemIndexes: [0, 2] }, TENANT_A);
-      const r: any = await service.cobrarCuenta(v.id, { formaPago: 'TARJETA', itemIndexes: [1] }, TENANT_A);
+      const r: any = await service.cobrarCuenta(v.id, { formaPago: 'TARJETA', ultimos4Digitos: '1234', itemIndexes: [1] }, TENANT_A);
       expect(sumaCents(r.sale.formasPago)).toBe(11600);
       expect(r.cerrada).toBe(true);
     });
@@ -919,7 +977,7 @@ describe('ShiftsService.closeShift() — bloqueo con cuentas abiertas en mesas',
       const total = await cerrarConCanceladas([
         cancelar({ formaPago: 'EFECTIVO' }),
         cancelar({ tableId: 'mesa-1', formasPago: [{ forma: 'EFECTIVO', monto: 100 }] }),
-        cancelar({ total: '50.00', tableId: 'mesa-2', formaPago: 'TARJETA' }),
+        cancelar({ total: '50.00', tableId: 'mesa-2', formaPago: 'TARJETA', ultimos4Digitos: '1234' }),
       ]);
       expect(total).toBe(250);
     });

@@ -510,7 +510,7 @@ const ITEM_SIN_COCINA = { productoId: 'p-simple', nombre: 'Taco', cantidad: 2, p
       await cobrar(c2.id, COMPLETO, ana);
       const c3 = await abrirCuenta(beto, {}, [ITEM_SIN_COCINA], 'mesa-2');
       await cobrar(c3.id, { formaPago: 'EFECTIVO', monto: 60 }, beto);
-      await cobrar(c3.id, { formaPago: 'TARJETA' }, beto);
+      await cobrar(c3.id, { formaPago: 'TARJETA', ultimos4Digitos: '1234' }, beto);
       const c4 = await abrirCuenta(erp('CAJERO'), {}, [ITEM_SIN_COCINA], 'mesa-3');
       await cobrar(c4.id, COMPLETO, erp('CAJERO'));
       return { ana, beto };
@@ -880,7 +880,7 @@ const ITEM_SIN_COCINA = { productoId: 'p-simple', nombre: 'Taco', cantidad: 2, p
       const beto = { ...lite('CAPITAN'), id: 'u-beto', email: 'beto@lite' };
       const c = await abrirCuenta(beto, {}, [ITEM_SIN_COCINA], 'mesa-1');
       await cobrar(c.id, { formaPago: 'EFECTIVO', monto: 60 }, beto);
-      await cobrar(c.id, { formaPago: 'TARJETA' }, beto);
+      await cobrar(c.id, { formaPago: 'TARJETA', ultimos4Digitos: '1234' }, beto);
       await directa(erp('GERENTE'), [{ forma: 'CORTESIA', monto: 116 }]);
       await directa(erp('CAJERO'), [{ forma: 'EFECTIVO', monto: 200, montoRecibido: 200 }]);
       await shiftsService.withdrawal('turno-1', { monto: 100, motivo: 'pago a proveedor', autorizadoPor: 'gerente' }, TENANT_A);

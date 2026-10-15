@@ -369,6 +369,34 @@ const ITEM_SIN_COCINA = { productoId: 'p-simple', nombre: 'Taco', cantidad: 2, p
       expect(ventas.size).toBe(1);
     });
 
+    it('venta offline con tarjeta SIN dígitos: 400 claro y no se pierde (nada se registra, el payload sigue para corregir o descartar)', async () => {
+      const payload = encolada({ formasPago: [{ forma: 'DEBITO', monto: 116 }] });
+      const err: any = await offline.registrar(payload, {}, TENANT_A, GERENTE, CTX).catch((e) => e);
+      expect(err).toBeInstanceOf(BadRequestException);
+      expect(err.message).toMatch(/últimos 4 dígitos/);
+      sinVentas();
+      expect(payload.formasPago[0]).toEqual({ forma: 'DEBITO', monto: 116 }); // el servidor no muta lo encolado
+      // el reenvío por POST /pos/sales (motor de sincronización) da el mismo 400 con motivo legible
+      const dir: any = await sales.create(payload as any, GERENTE).catch((e) => e);
+      expect(dir).toBeInstanceOf(BadRequestException);
+      expect(dir.message).toMatch(/últimos 4 dígitos/);
+      sinVentas();
+    });
+
+    it('venta offline con tarjeta y 4 dígitos: se sincroniza y guarda los dígitos; en otro tenant no aparece', async () => {
+      const r = await offline.registrar(encolada({ formasPago: [{ forma: 'CREDITO', monto: 116, ultimos4Digitos: '4321' }] }), {}, TENANT_A, GERENTE, CTX);
+      expect(venta(r.sale.id).formasPago[0]).toMatchObject({ forma: 'CREDITO', ultimos4Digitos: '4321', cobradoPorEmail: 'gerente@erp' });
+      expect([...ventas.values()].filter((v: any) => v.tenantId === TENANT_B)).toHaveLength(0);
+    });
+
+    it('la diferencia absorbida como cortesía no exige dígitos, pero la tarjeta que sí cobró los exige', async () => {
+      const r = await offline.registrar(
+        encolada({ formasPago: [{ forma: 'DEBITO', monto: 1, ultimos4Digitos: '1000' }] }),
+        { confirmarDiferencia: true }, TENANT_A, GERENTE, CTX,
+      );
+      expect(venta(r.sale.id).formasPago.map((p: any) => p.forma)).toEqual(['DEBITO', 'CORTESIA']);
+    });
+
     it('turno original cerrado: se registra en el turno abierto de la sucursal y la nota lo dice; sin turno abierto, 400', async () => {
       turnos.get('turno-1').status = 'CERRADO';
       await expect(offline.registrar(encolada(), {}, TENANT_A, GERENTE, CTX)).rejects.toThrow(/turno abierto/);
