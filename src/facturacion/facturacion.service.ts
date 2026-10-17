@@ -153,10 +153,25 @@ export class FacturacionService {
   }
 
   // ── receptor ──
-  listarReceptores(tenantId: string, rfc?: string) {
+  // Con los NOMBRES del régimen y del uso de CFDI para la pantalla (los códigos solos no le dicen nada al usuario).
+  private conNombres(r: ReceptorFiscal) {
+    return {
+      ...r,
+      regimenNombre: REGIMENES_FISCALES[r.regimenFiscal] ?? null,
+      usoCfdiNombre: r.usoCfdiDefault ? (USOS_CFDI[r.usoCfdiDefault] ?? null) : null,
+      validadoSat: !!r.validadoEn,
+    };
+  }
+
+  async listarReceptores(tenantId: string, rfc?: string) {
     const where: Record<string, unknown> = { tenantId };
     if (rfc) where.rfc = rfc.trim().toUpperCase();
-    return this.receptores.find({ where, order: { nombreFiscal: 'ASC' }, take: 200 });
+    const filas = await this.receptores.find({ where, order: { nombreFiscal: 'ASC' }, take: 200 });
+    return filas.map((r) => this.conNombres(r));
+  }
+
+  async receptorConNombres(tenantId: string, id: string) {
+    return this.conNombres(await this.obtenerReceptor(tenantId, id));
   }
 
   async obtenerReceptor(tenantId: string, id: string) {

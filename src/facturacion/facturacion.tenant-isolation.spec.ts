@@ -160,7 +160,7 @@ describe('Facturación F0 — aislamiento por tenant', () => {
 
 describe('FacturacionController — tenant del token y roles', () => {
   const service = { obtenerEmisor: jest.fn().mockResolvedValue(null), crearReceptor: jest.fn().mockResolvedValue({}) } as any;
-  const controller = new FacturacionController(service);
+  const controller = new FacturacionController(service, {} as any);
 
   it('usa el tenant del token y nunca uno del body', async () => {
     await controller.crearReceptor({ tenantId: B, rfc: 'X' } as any, { user: { tenantId: A, roleCode: 'ADMIN' } });

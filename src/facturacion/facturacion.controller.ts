@@ -1,5 +1,7 @@
 import { Body, Controller, Delete, ForbiddenException, Get, Param, Post, Put, Query, Request, UseGuards } from '@nestjs/common';
 import { FacturacionService } from './facturacion.service';
+import { FacturacionLecturasService } from './facturacion-lecturas.service';
+import type { LoteInput } from './facturacion-lecturas.service';
 import type { EmisorInput, ProductoFiscalInput, ReceptorInput } from './facturacion.service';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
@@ -13,7 +15,10 @@ const FISCAL = ['ADMIN', 'GERENTE'];
 @Roles(...FISCAL)
 @Controller('facturacion')
 export class FacturacionController {
-  constructor(private service: FacturacionService) {}
+  constructor(
+    private service: FacturacionService,
+    private lecturas: FacturacionLecturasService,
+  ) {}
 
   private tenant(req: any): string {
     const t = req?.user?.tenantId;
@@ -30,6 +35,32 @@ export class FacturacionController {
   validarRfc(@Query('rfc') rfc?: string) {
     const r = validarRfc(rfc);
     return r.ok ? { valido: true, rfc: r.rfc, tipo: r.tipo } : { valido: false, motivo: r.motivo };
+  }
+
+  // ── lecturas de la pantalla "Datos fiscales" (nombres en vez de ids) ──
+  @Get('resumen')
+  resumen(@Request() req: any) {
+    return this.lecturas.resumen(this.tenant(req));
+  }
+
+  @Get('sucursales')
+  sucursales(@Request() req: any) {
+    return this.lecturas.listarSucursales(this.tenant(req));
+  }
+
+  @Get('productos')
+  productos(@Request() req: any, @Query() query: { q?: string; categoria?: string; estado?: string; page?: string }) {
+    return this.lecturas.listarProductos(this.tenant(req), query ?? {});
+  }
+
+  @Put('productos/lote')
+  productosLote(@Body() body: LoteInput, @Request() req: any) {
+    return this.lecturas.guardarLote(this.tenant(req), body ?? {});
+  }
+
+  @Get('sugerencias')
+  sugerencias(@Request() req: any) {
+    return this.lecturas.sugerencias(this.tenant(req));
   }
 
   @Get('emisor/:companyId')
@@ -69,7 +100,7 @@ export class FacturacionController {
 
   @Get('receptores/:id')
   receptor(@Param('id') id: string, @Request() req: any) {
-    return this.service.obtenerReceptor(this.tenant(req), id);
+    return this.service.receptorConNombres(this.tenant(req), id);
   }
 
   @Post('receptores')
