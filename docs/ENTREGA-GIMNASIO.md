@@ -25,8 +25,7 @@ Módulos activos: pos, configuracion_pos, usuarios, empresas, sucursales, report
 - **Sin CFDI integrado:** el sistema no timbra facturas. Los tickets no son comprobantes fiscales.
 - **Sin reservas:** las canchas se siguen reservando en Playtomic; aquí solo se cobra la «Hora de cancha» como servicio.
 - **Membresías cobradas en caja:** cada cobro es una venta del POS y entra al corte del turno; sin turno abierto no se puede cobrar.
-- Las 5 ventas, 9 turnos (6 de ellos sin ventas, de pruebas de pantalla) y 2 check-ins del 17-18/10/2026 son de la **verificación de entrega** (todos los turnos cerrados; la membresía cobrada por CAJERO está devuelta). Antes de operar de verdad, el socio de prueba se puede dar de baja o dejarse como ejemplo.
-
+- Las 5 ventas, 10 turnos (7 de ellos sin ventas, de pruebas de pantalla) y 2 check-ins del 17-18/10/2026 son de la **verificación de entrega** (todos los turnos cerrados; la membresía cobrada por CAJERO está devuelta). Antes de operar de verdad, el socio de prueba se puede dar de baja o dejarse como ejemplo.
 - Cobrar o renovar una membresía solo lo permite el sistema a RECEPCION, GERENTE y ADMIN (un CAJERO recibe 403, también por API). Una devolución de membresía solo la hace GERENTE o ADMIN.
 
 ## Cómo reportar un problema
