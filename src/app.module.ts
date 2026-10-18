@@ -45,6 +45,7 @@ import { StorageModule } from './storage/storage.module';
 import { PatientsModule } from './patients/patients.module';
 import { AppointmentsModule } from './appointments/appointments.module';
 import { MembresiasModule } from './membresias/membresias.module';
+import { PruebaPublicaModule } from './prueba-publica/prueba-publica.module';
 import { FacturacionModule } from './facturacion/facturacion.module';
 import { ModulesModule } from './modules/modules.module';
 import { TenantModule } from './modules/entities/tenant-module.entity';
@@ -133,6 +134,7 @@ import { ExecutiveConfigModule } from './executive-config/executive-config.modul
     AppointmentsModule,
     MembresiasModule,
     FacturacionModule,
+    PruebaPublicaModule,
     ModulesModule,
     TypeOrmModule.forFeature([TenantModule]),
     DeliveryIngestModule,

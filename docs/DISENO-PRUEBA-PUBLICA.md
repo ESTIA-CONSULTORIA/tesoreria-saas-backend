@@ -1,6 +1,6 @@
 # Diseño: prueba pública de ESTIA (autoservicio)
 
-Estado: **solo diseño. No se implementó nada ni se ejecutó SQL.** Fecha: 2026-10-18.
+Estado: diseño + **PP0 implementado** (ver §12). Nada está activo para el público y el SQL no se ha ejecutado. Fecha: 2026-10-18.
 
 > **Aviso sobre el origen de este documento.** Pediste «continuar» el diseño de la prueba pública, pero en el repositorio y en las conversaciones guardadas **no existe ningún borrador previo**. Este documento lo diseña desde cero con una lectura concreta del término: *una persona interesada entra a una página pública, pide una prueba de su giro y recibe, en minutos y sin hablar con nadie, un negocio de demostración propio, aislado, con datos de ejemplo y con fecha de vencimiento.* Si tenías otra cosa en mente (p. ej. una demo compartida de solo lectura, o la prueba de una semana de PAC del CFDI), dímelo antes de construir: la sección 11 lista lo que cambiaría.
 
@@ -158,3 +158,15 @@ La purga es el punto de mayor riesgo (borrar datos): se diseña **por tenant mar
 | D-PP-7 | Aviso de privacidad y términos: texto y responsable. | Lo redacta tu contador/abogado; sin eso no se publica. |
 | D-PP-8 | ¿Se permite elegir giro «genérico» o solo los 3 con plantilla? | Solo los 3 con plantilla. |
 | D-PP-9 | `POST /auth/register` público: cerrarlo o protegerlo. | Cerrarlo (no tiene consumidor conocido) antes de PP1. |
+
+## 12. Estado de la implementación — PP0 (rama `feat/prueba-publica-pp0`)
+
+Decisiones aprobadas: Turnstile, 14 días, topes 50 activas / 20 altas al día / 3 por IP y hora, retención 30 días, solo SOPORTE convierte, solo giros con plantilla.
+
+**Hecho (todo detrás de `PRUEBA_PUBLICA_ACTIVA`, apagado por defecto: sin la variable en `true` ambos endpoints responden 404 y no se crea, envía ni borra nada):**
+- `prueba-publica-pp0-migration.sql` (+ migración TS): tabla `pruebas_publicas` y plan `PRUEBA` con 9 módulos y tope de 5 usuarios. **Sin ejecutar** (termina en ROLLBACK). Cambios respecto al borrador de §4.2: se añaden `correoCifrado` (el correo en claro hace falta hasta crear el ADMIN; va cifrado con `ENCRYPTION_KEY` y se borra al activar), `nombreNegocio`, `nombrePersona` y el estado `FALLIDA`.
+- `POST /prueba/solicitar` (validaciones, Turnstile, topes, respuesta idéntica para un correo repetido, token de 32 bytes guardado solo como hash, 30 min) y `POST /prueba/activar` (un solo uso atómico, crea el tenant con `TenantsService.create`, siembra la plantilla del gimnasio y fija el vencimiento a 14 días). Sin lecturas públicas.
+- Plantilla del gimnasio (la misma de «Gimnasio Demo»), tope de 5 usuarios del plan PRUEBA, `marcarVencidas` y `purgar` con **ensayo por defecto** y doble seguro (fila VENCIDA + pasada la retención + el tenant sigue con plan PRUEBA).
+- Puertos: `CaptchaVerifier` (adaptador Turnstile), `CorreoPrueba` y `TenantPurger`.
+
+**Pendiente (no es PP0):** proveedor de correo (PP1; hoy el enlace no se envía), página pública y recorrido (PP2), **borrado físico del tenant** (PP3: hoy el purgador falla a propósito en lugar de fingir), tarea programada de vencimiento/purga, pantalla y conversión para SOPORTE, y que `/prueba/activar` inicie sesión. Para encenderla en el futuro hacen falta además `PRUEBA_PUBLICA_SAL`, `ENCRYPTION_KEY` y `TURNSTILE_SECRET`, y correr el SQL.
