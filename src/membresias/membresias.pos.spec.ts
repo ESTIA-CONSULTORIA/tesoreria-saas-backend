@@ -256,6 +256,24 @@ describe('Membresías en el POS — cobro, renovación, beneficio y devolución'
   });
 
   describe('lo que se rechaza', () => {
+    it('solo RECEPCION, GERENTE y ADMIN cobran una membresía: CAJERO, MESERO, CAPITAN, SOPORTE, CONTADOR y sin rol → 403 y sin rastro', async () => {
+      for (const rol of ['CAJERO', 'MESERO', 'CAPITAN', 'SOPORTE', 'CONTADOR']) {
+        const err: any = await vender(erp(rol), [item('p-plan-mensual')], 580, { socioId: 'socio-1' }).catch((e) => e);
+        expect(err).toBeInstanceOf(ForbiddenException);
+        expect(err.message).toMatch(/Solo recepción, un gerente o un administrador/);
+      }
+      const sinRol: any = await vender(undefined as any, [item('p-plan-mensual')], 580, { socioId: 'socio-1' }).catch((e) => e);
+      expect(sinRol).toBeInstanceOf(ForbiddenException);
+      sinNada();
+    });
+
+    it('los tres roles autorizados sí cobran', async () => {
+      for (const rol of ['RECEPCION', 'GERENTE', 'ADMIN']) {
+        const v = await vender(erp(rol), [item('p-plan-mensual')], 580, { socioId: 'socio-1' });
+        expect(ventas.get(v.id).status).toBe('PAGADA');
+      }
+    });
+
     it('membresía sin socio: 400', async () => {
       await expect(vender(erp('RECEPCION'), [item('p-plan-mensual')], 580)).rejects.toThrow(/eligiendo al socio/);
       sinNada();

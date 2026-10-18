@@ -212,9 +212,15 @@ export class MembresiasService {
     }
   }
 
-  private limpiarSocio<T extends Socio>(s: T): T {
+  // nipHash es select:false (nunca sale en una lectura normal), así que «tiene NIP» se pregunta aparte y NO se deduce del objeto.
+  private limpiarSocio<T extends Socio>(s: T, tieneNip?: boolean): T {
     const { nipHash: _n, ...resto } = s as any;
-    return { ...resto, tieneNip: !!_n } as T;
+    return { ...resto, tieneNip: tieneNip ?? !!_n } as T;
+  }
+
+  private async idsConNip(tenantId: string): Promise<Set<string>> {
+    const filas = await this.sociosRepo.createQueryBuilder('s').select('s.id', 'id').where('s.tenantId = :tenantId', { tenantId }).andWhere('s.nipHash IS NOT NULL').getRawMany();
+    return new Set(filas.map((f: any) => f.id));
   }
 
   async actualizarSocio(id: string, tenantId: string, d: SocioInput): Promise<Socio> {
@@ -251,7 +257,8 @@ export class MembresiasService {
       }
     }
     await this.sociosRepo.update(id, { ...cambios, updatedAt: new Date() } as any);
-    return this.limpiarSocio((await this.sociosRepo.findOne({ where: { id, tenantId } })) as Socio);
+    const actualizado = (await this.sociosRepo.findOne({ where: { id, tenantId } })) as Socio;
+    return this.limpiarSocio(actualizado, (await this.idsConNip(tenantId)).has(id));
   }
 
   private async periodosPorSocio(tenantId: string, socioIds?: string[]): Promise<Map<string, Membresia[]>> {
@@ -267,12 +274,13 @@ export class MembresiasService {
   async listarSocios(tenantId: string, filtros: { q?: string; estado?: string; situacion?: string } = {}) {
     const socios = await this.sociosRepo.find({ where: { tenantId }, order: { nombre: 'ASC' } });
     const periodos = await this.periodosPorSocio(tenantId);
+    const conNip = await this.idsConNip(tenantId);
     const hoy = hoyLocal();
     const q = filtros.q?.trim().toLowerCase();
     return socios
       .filter((s) => !filtros.estado || s.estado === filtros.estado)
       .filter((s) => !q || `${s.numeroSocio} ${s.nombre} ${s.apellidos ?? ''} ${s.telefono ?? ''} ${s.email ?? ''}`.toLowerCase().includes(q))
-      .map((s) => ({ ...this.limpiarSocio(s), situacion: situacionDeSocio(periodos.get(s.id) ?? [], hoy) }))
+      .map((s) => ({ ...this.limpiarSocio(s, conNip.has(s.id)), situacion: situacionDeSocio(periodos.get(s.id) ?? [], hoy) }))
       .filter((s) => !filtros.situacion || s.situacion.estado === filtros.situacion);
   }
 
@@ -281,7 +289,7 @@ export class MembresiasService {
     if (!socio) throw new NotFoundException('Socio no encontrado.');
     const periodos = await this.membresiasRepo.find({ where: { tenantId, socioId: id }, order: { fechaFin: 'DESC' } });
     const checkins = await this.checkinsRepo.find({ where: { tenantId, socioId: id }, order: { fechaHora: 'DESC' }, take: 20 });
-    return { ...this.limpiarSocio(socio), situacion: situacionDeSocio(periodos, hoyLocal()), membresias: periodos, checkins };
+    return { ...this.limpiarSocio(socio, (await this.idsConNip(tenantId)).has(id)), situacion: situacionDeSocio(periodos, hoyLocal()), membresias: periodos, checkins };
   }
 
   // Para el POS: elegir al socio por su número y saber si su membresía está vigente y qué descuento le toca.
