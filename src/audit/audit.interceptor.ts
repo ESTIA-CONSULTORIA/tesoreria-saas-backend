@@ -7,6 +7,7 @@ import {
 import { Observable } from 'rxjs';
 import { tap } from 'rxjs/operators';
 import { AuditService } from './audit.service';
+import { redactar, redactarUrl } from './redactar';
 
 @Injectable()
 export class AuditInterceptor implements NestInterceptor {
@@ -66,8 +67,9 @@ export class AuditInterceptor implements NestInterceptor {
                 entity: entity || 'SYSTEM',
                 details: {
                   method,
-                  url,
-                  body: request.body,
+                  url: redactarUrl(url),
+                  // Nunca se guardan contraseñas, NIP, tokens, llaves ni certificados (ver redactar.ts).
+                  body: redactar(request.body),
                 },
                 ipAddress,
                 userAgent,
