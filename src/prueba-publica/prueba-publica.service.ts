@@ -13,10 +13,12 @@ import { CategoriesService } from '../pos/categories.service';
 import { MembresiasService } from '../membresias/membresias.service';
 import { cifrarSecreto, descifrarSecreto } from '../facturacion/csd-crypto';
 import {
-  DIAS_PRUEBA, GIROS_PRUEBA, MAX_ACTIVAS, MAX_ALTAS_DIA, MAX_POR_IP_HORA, PLAN_PRUEBA, RETENCION_DIAS, TOKEN_MINUTOS, pruebaPublicaActiva,
+  DIAS_PRUEBA, GIROS_PRUEBA, MAX_ACTIVAS, MAX_ALTAS_DIA, MAX_POR_IP_HORA, PLAN_PRUEBA, RETENCION_DIAS, TOKEN_MINUTOS, pruebaPublicaActiva, variablesFaltantes,
 } from './prueba-publica.config';
 import { dominioDe, esCorreoValido, esDesechable, generarToken, hashCorreo, hashToken, normalizarCorreo, slugPrueba, validarPassword } from './prueba-publica.util';
-import { CAPTCHA_VERIFIER, CORREO_PRUEBA, TENANT_PURGER, type CaptchaVerifier, type CorreoPrueba, type TenantPurger } from './puertos';
+import { CAPTCHA_VERIFIER, TENANT_PURGER, type CaptchaVerifier, type TenantPurger } from './puertos';
+import { CORREO_PROVIDER, type CorreoProvider } from './correo/correo-provider';
+import { enlaceActivacion, plantillaActivacion } from './correo/plantilla-activacion';
 import { sembrarGimnasio, type DepsPlantilla } from './plantilla-gimnasio';
 
 // Prueba pública, PP0 (docs/DISENO-PRUEBA-PUBLICA.md). TODO está detrás de PRUEBA_PUBLICA_ACTIVA (apagado por defecto): apagado, los
@@ -33,7 +35,8 @@ export interface SolicitudInput {
   negocio?: string;
   giro?: string;
   captcha?: string;
-  aceptaTerminos?: boolean;
+  /** Casilla del aviso de privacidad. La fecha de aceptación la pone el servidor. */
+  aceptaAviso?: boolean;
 }
 
 export interface ResultadoPurga {
@@ -59,13 +62,19 @@ export class PruebaPublicaService {
     private categories: CategoriesService,
     private membresias: MembresiasService,
     @Inject(CAPTCHA_VERIFIER) private captcha: CaptchaVerifier,
-    @Inject(CORREO_PRUEBA) private correo: CorreoPrueba,
+    @Inject(CORREO_PROVIDER) private correo: CorreoProvider,
     @Inject(TENANT_PURGER) private purger: TenantPurger,
   ) {}
 
   private asegurarActiva() {
     // Apagado = como si la ruta no existiera.
     if (!pruebaPublicaActiva()) throw new NotFoundException();
+    // Encendido pero mal configurado: no se opera a medias. Se loguean solo los NOMBRES de lo que falta, nunca valores.
+    const faltan = variablesFaltantes();
+    if (faltan.length) {
+      this.log.error(`Prueba pública encendida pero faltan variables: ${faltan.join(', ')}`);
+      throw new ServiceUnavailableException('La prueba no está disponible por ahora.');
+    }
   }
 
   // ── 1. solicitar ──
@@ -79,7 +88,7 @@ export class PruebaPublicaService {
     if (!nombre || nombre.length > 120) throw new BadRequestException('Escribe tu nombre (máx. 120 caracteres).');
     if (!negocio || negocio.length > 120) throw new BadRequestException('Escribe el nombre de tu negocio (máx. 120 caracteres).');
     if (!(GIROS_PRUEBA as readonly string[]).includes(giro)) throw new BadRequestException('Por ahora la prueba solo está disponible para gimnasio.');
-    if (input.aceptaTerminos !== true) throw new BadRequestException('Debes aceptar el aviso de privacidad y los términos.');
+    if (input.aceptaAviso !== true) throw new BadRequestException('Debes aceptar el aviso de privacidad para continuar.');
     const dominio = dominioDe(correo);
     if (esDesechable(dominio)) throw new BadRequestException('Usa un correo de tu negocio o personal, no uno temporal.');
 
@@ -104,7 +113,7 @@ export class PruebaPublicaService {
     }
 
     const token = generarToken();
-    await this.pruebas.save(
+    const fila = await this.pruebas.save(
       this.pruebas.create({
         tenantId: null,
         correoHash,
@@ -113,6 +122,10 @@ export class PruebaPublicaService {
         nombreNegocio: negocio,
         nombrePersona: nombre,
         giro,
+        // Consentimiento: fecha del servidor + versión y URL del aviso vigentes en este momento (evidencia, no lo que diga el cliente).
+        avisoAceptadoEn: ahora,
+        avisoVersion: process.env.PRUEBA_AVISO_VERSION as string,
+        avisoUrl: process.env.PRUEBA_AVISO_URL as string,
         tokenHash: hashToken(token),
         tokenVenceEn: new Date(t + TOKEN_MINUTOS * 60_000),
         estado: 'SOLICITADA',
@@ -121,7 +134,16 @@ export class PruebaPublicaService {
         extendida: false,
       }),
     );
-    await this.correo.enviarEnlace(correo, token, nombre);
+    const enlace = enlaceActivacion(process.env.PRUEBA_PUBLICA_URL_BASE as string, token);
+    const plantilla = plantillaActivacion({ nombre, enlace, avisoUrl: process.env.PRUEBA_AVISO_URL as string });
+    try {
+      await this.correo.enviar({ para: correo, ...plantilla, claveIdempotencia: `prueba-activacion:${fila.id}` });
+    } catch (e: any) {
+      // El enlace nunca llegó: la solicitud no sirve. Se invalida (sin correo ni token guardados) para que pueda pedir otra.
+      this.log.error(`No se pudo enviar el correo de la prueba ${fila.id}: ${e?.codigo ?? 'ERROR'}`);
+      await this.pruebas.update({ id: fila.id } as any, { estado: 'FALLIDA', correoCifrado: null, tokenHash: null } as any);
+      throw new ServiceUnavailableException('No pudimos enviar el correo. Intenta de nuevo en unos minutos.');
+    }
     return { mensaje: MENSAJE_SOLICITUD };
   }
 

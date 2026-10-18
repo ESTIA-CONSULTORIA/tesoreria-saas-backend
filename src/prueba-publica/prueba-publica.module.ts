@@ -11,7 +11,9 @@ import { PosModule } from '../pos/pos.module';
 import { MembresiasModule } from '../membresias/membresias.module';
 import { PruebaPublicaService } from './prueba-publica.service';
 import { PruebaPublicaController } from './prueba-publica.controller';
-import { CAPTCHA_VERIFIER, CORREO_PRUEBA, TENANT_PURGER, CorreoSinProveedor, PurgadorPendiente, TurnstileVerifier } from './puertos';
+import { CAPTCHA_VERIFIER, TENANT_PURGER, PurgadorPendiente, TurnstileVerifier } from './puertos';
+import { CORREO_PROVIDER } from './correo/correo-provider';
+import { crearCorreoProvider } from './correo/correo-provider.factory';
 
 // Prueba pública, PP0: nada se activa al público (PRUEBA_PUBLICA_ACTIVA apagado por defecto). Tabla nueva: prueba-publica-pp0-migration.sql.
 @Module({
@@ -19,7 +21,7 @@ import { CAPTCHA_VERIFIER, CORREO_PRUEBA, TENANT_PURGER, CorreoSinProveedor, Pur
   providers: [
     PruebaPublicaService,
     { provide: CAPTCHA_VERIFIER, useClass: TurnstileVerifier },
-    { provide: CORREO_PRUEBA, useClass: CorreoSinProveedor },
+    { provide: CORREO_PROVIDER, useFactory: () => crearCorreoProvider() },
     { provide: TENANT_PURGER, useClass: PurgadorPendiente },
   ],
   controllers: [PruebaPublicaController],

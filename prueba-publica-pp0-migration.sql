@@ -5,7 +5,7 @@
 --
 -- Solo CREA una tabla nueva y AGREGA la fila del plan PRUEBA (con sus módulos). No modifica ninguna fila ni tabla existente.
 -- El código de PP0 se puede desplegar antes de correr este SQL: la prueba pública está APAGADA por defecto (PRUEBA_PUBLICA_ACTIVA),
--- sus endpoints responden 404 y nada la usa. Para encenderla (NO en PP0) hacen falta además PRUEBA_PUBLICA_SAL, ENCRYPTION_KEY y TURNSTILE_SECRET.
+-- sus endpoints responden 404 y nada la usa. Para encenderla (NO en PP0) hacen falta además las variables listadas en docs/PRUEBA-PUBLICA-CONFIGURACION.md.
 BEGIN;
 
 -- ── 1. pruebas_publicas: solicitudes y pruebas de autoservicio (el correo en claro vive cifrado solo hasta activar; el token solo como hash) ───
@@ -18,6 +18,9 @@ CREATE TABLE IF NOT EXISTS "pruebas_publicas" (
   "nombreNegocio" character varying(120) NOT NULL,
   "nombrePersona" character varying(120) NOT NULL,
   "giro" character varying(20) NOT NULL,
+  "avisoAceptadoEn" TIMESTAMPTZ NOT NULL,
+  "avisoVersion" character varying(40) NOT NULL,
+  "avisoUrl" character varying(300) NOT NULL,
   "tokenHash" character varying(64),
   "tokenVenceEn" TIMESTAMPTZ,
   "estado" character varying(16) NOT NULL,

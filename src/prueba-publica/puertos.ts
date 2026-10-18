@@ -1,16 +1,8 @@
-import { Logger } from '@nestjs/common';
-
-// Puertos de la prueba pública: lo externo (Turnstile, correo, borrado físico) entra por aquí y se prueba con dobles.
+// Puertos de la prueba pública: lo externo (Turnstile y borrado físico; el correo vive en ./correo) entra por aquí y se prueba con dobles.
 
 export const CAPTCHA_VERIFIER = Symbol('CAPTCHA_VERIFIER');
 export interface CaptchaVerifier {
   verificar(token: string | undefined, ip: string): Promise<boolean>;
-}
-
-export const CORREO_PRUEBA = Symbol('CORREO_PRUEBA');
-export interface CorreoPrueba {
-  /** Envía el enlace de activación. El token NUNCA se escribe en logs. */
-  enviarEnlace(correo: string, token: string, nombre: string): Promise<void>;
 }
 
 export const TENANT_PURGER = Symbol('TENANT_PURGER');
@@ -37,14 +29,6 @@ export class TurnstileVerifier implements CaptchaVerifier {
     } catch {
       return false;
     }
-  }
-}
-
-/** PP0: no hay proveedor de correo (D-PP-4). Solo deja constancia de que habría enviado, sin correo ni token. */
-export class CorreoSinProveedor implements CorreoPrueba {
-  private log = new Logger('PruebaPublica');
-  async enviarEnlace(): Promise<void> {
-    this.log.warn('Enlace de prueba generado pero NO enviado: aún no hay proveedor de correo configurado (PP1).');
   }
 }
 
