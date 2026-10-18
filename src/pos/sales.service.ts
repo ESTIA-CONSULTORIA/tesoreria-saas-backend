@@ -360,6 +360,7 @@ export class SalesService {
         tenantId: data.tenantId,
         permitirBeneficio: !abreCuentaEnMesa,
         nacePagada,
+        rol: actor?.roleCode,
       });
       data = { ...data, items: prep.items };
       if (prep.nota) data = { ...data, notas: [data.notas, prep.nota].filter(Boolean).join(' ') };

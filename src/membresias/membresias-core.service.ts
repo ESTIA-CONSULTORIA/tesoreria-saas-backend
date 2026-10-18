@@ -1,4 +1,6 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable } from '@nestjs/common';
+
+export const ROLES_COBRAN_MEMBRESIA = ['RECEPCION', 'GERENTE', 'ADMIN'];
 import { InjectRepository } from '@nestjs/typeorm';
 import { EntityManager, In, Repository } from 'typeorm';
 import { Socio } from './entities/socio.entity';
@@ -33,6 +35,8 @@ export class MembresiasCoreService {
     tenantId: string;
     permitirBeneficio: boolean; // false en una cuenta abierta de mesa (el descuento va por PUT /discount)
     nacePagada: boolean;
+    /** Rol de quien cobra. Cobrar o renovar una membresía es solo de RECEPCION, GERENTE y ADMIN (el CAJERO vende barra, no membresías). */
+    rol?: string;
   }): Promise<VentaPreparada> {
     const { tenantId } = input;
     const ids = [...new Set((input.items || []).map((i: any) => i?.productoId).filter((x: unknown): x is string => typeof x === 'string'))];
@@ -45,6 +49,9 @@ export class MembresiasCoreService {
     }
     const plan = lineasPlan.length === 1 ? porProducto.get(lineasPlan[0].productoId)! : null;
     if (plan) {
+      if (!input.rol || !ROLES_COBRAN_MEMBRESIA.includes(input.rol)) {
+        throw new ForbiddenException('Solo recepción, un gerente o un administrador pueden cobrar una membresía.');
+      }
       if (Number(lineasPlan[0].cantidad) !== 1) throw new BadRequestException('La membresía se cobra de una en una (cantidad 1).');
       if (!plan.activo) throw new BadRequestException(`El plan "${plan.nombre}" está desactivado: no se puede cobrar.`);
       if (!input.nacePagada) throw new BadRequestException('Una membresía se cobra al momento: indica las formas de pago.');

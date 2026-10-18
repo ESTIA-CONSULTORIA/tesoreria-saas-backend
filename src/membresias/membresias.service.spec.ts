@@ -49,6 +49,17 @@ function repoEnMemoria<T extends Record<string, any>>(filas: T[], defaults: Reco
       if (f) Object.assign(f, patch);
       return Promise.resolve(undefined);
     }),
+    // Solo lo que usa idsConNip(): socios del tenant con nipHash.
+    createQueryBuilder: jest.fn(() => {
+      let tenantId: string | undefined;
+      const qb: any = {
+        select: () => qb,
+        andWhere: () => qb,
+        where: (_c: string, p: any) => { tenantId = p?.tenantId; return qb; },
+        getRawMany: () => Promise.resolve(filas.filter((f: any) => f.tenantId === tenantId && f.nipHash).map((f: any) => ({ id: f.id }))),
+      };
+      return qb;
+    }),
     delete: jest.fn((id: string) => {
       const i = filas.findIndex((x: any) => x.id === id);
       if (i >= 0) filas.splice(i, 1);
@@ -163,6 +174,19 @@ describe('MembresiasService', () => {
       expect(await svc.listarSocios(B)).toHaveLength(0);
       await expect(svc.obtenerSocio(ana.id, B)).rejects.toThrow(NotFoundException);
       await expect(svc.buscarPorNumero(B, '1')).rejects.toThrow(NotFoundException);
+    });
+
+    it('«tiene NIP» sale bien en la lista, el detalle y al actualizar (nipHash no se lee, se pregunta aparte)', async () => {
+      const conNip = await svc.crearSocio(A, { nombre: 'Con', nip: '2337' });
+      const sinNip = await svc.crearSocio(A, { nombre: 'Sin' });
+      const lista: any[] = await svc.listarSocios(A);
+      expect(lista.map((x) => [x.nombre, x.tieneNip])).toEqual([['Con', true], ['Sin', false]]);
+      expect(((await svc.obtenerSocio(conNip.id, A)) as any).tieneNip).toBe(true);
+      expect(((await svc.obtenerSocio(sinNip.id, A)) as any).tieneNip).toBe(false);
+      expect(((await svc.actualizarSocio(conNip.id, A, { telefono: '1' })) as any).tieneNip).toBe(true);
+      expect(((await svc.actualizarSocio(sinNip.id, A, { nip: '4455' })) as any).tieneNip).toBe(true);
+      expect(((await svc.actualizarSocio(sinNip.id, A, { nip: null })) as any).tieneNip).toBe(false);
+      expect(JSON.stringify(lista)).not.toMatch(/nipHash/);
     });
 
     it('buscarPorNumero devuelve su descuento de beneficio si la membresía está vigente', async () => {
