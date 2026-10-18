@@ -25,12 +25,6 @@ export class AuthController {
   ) {}
 
   @Public()
-  @Post('register')
-  register(@Body() body: { email: string; password: string }) {
-    return this.authService.register(body.email, body.password);
-  }
-
-  @Public()
   @Throttle(LOGIN_THROTTLE)
   @Post('login')
   async login(

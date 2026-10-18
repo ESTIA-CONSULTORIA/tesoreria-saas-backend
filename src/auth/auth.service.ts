@@ -28,21 +28,6 @@ export class AuthService {
     @InjectRepository(TenantModule) private tenantModuleRepo: Repository<TenantModule>,
   ) {}
 
-  async register(email: string, password: string) {
-    const existingUser = await this.usersService.findByEmail(email);
-
-    if (existingUser) {
-      throw new BadRequestException('El correo ya está registrado');
-    }
-
-    const user = await this.usersService.create(email, password);
-
-    return {
-      message: 'Usuario creado correctamente',
-      userId: user.id,
-    };
-  }
-
   // Compartido por login(), serviceLogin() y portalLogin() (portalLogin llama a login())
   // — mismo bcrypt.compare para todos, no una copia. El mensaje de credenciales
   // incorrectas es siempre el mismo genérico tanto si el email no existe como si la
