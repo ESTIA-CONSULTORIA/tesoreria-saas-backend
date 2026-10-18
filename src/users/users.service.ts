@@ -34,6 +34,13 @@ export class UsersService {
           throw new BadRequestException('El plan LITE permite máximo 3 usuarios');
         }
       }
+      // Prueba pública: tope de usuarios (docs/DISENO-PRUEBA-PUBLICA.md §6).
+      if (tenant?.plan === 'PRUEBA') {
+        const count = await this.usersRepository.count({ where: { tenantId } });
+        if (count >= 5) {
+          throw new BadRequestException('La prueba permite máximo 5 usuarios');
+        }
+      }
     }
 
     // Auditoría de seguridad (GoodsHabits): un CAJERO/GERENTE sin companyId/branchId

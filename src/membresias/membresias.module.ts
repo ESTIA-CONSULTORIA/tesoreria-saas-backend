@@ -19,6 +19,6 @@ import { MembresiasController } from './membresias.controller';
   imports: [TypeOrmModule.forFeature([Socio, PlanMembresia, Membresia, CheckinSocio, Product, PosCategory, Sale]), TenantSettingsModule, NipThrottleModule],
   providers: [MembresiasCoreService, MembresiasService],
   controllers: [MembresiasController],
-  exports: [MembresiasCoreService],
+  exports: [MembresiasCoreService, MembresiasService],
 })
 export class MembresiasModule {}
