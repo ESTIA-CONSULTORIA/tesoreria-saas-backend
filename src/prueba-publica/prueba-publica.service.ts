@@ -19,7 +19,7 @@ import { dominioDe, esCorreoValido, esDesechable, generarToken, hashCorreo, hash
 import { CAPTCHA_VERIFIER, TENANT_PURGER, type CaptchaVerifier, type TenantPurger } from './puertos';
 import { CORREO_PROVIDER, type CorreoProvider } from './correo/correo-provider';
 import { enlaceActivacion, plantillaActivacion } from './correo/plantilla-activacion';
-import { sembrarGimnasio, type DepsPlantilla } from './plantilla-gimnasio';
+import { sembrarGimnasio, type DepsPlantilla, type ResultadoPlantilla } from './plantilla-gimnasio';
 
 // Prueba pública, PP0 (docs/DISENO-PRUEBA-PUBLICA.md). TODO está detrás de PRUEBA_PUBLICA_ACTIVA (apagado por defecto): apagado, los
 // endpoints responden 404 y no se crea, envía ni borra nada. Un tenant de prueba es un tenant normal (TenantsService.create) con plan PRUEBA.
@@ -37,6 +37,24 @@ export interface SolicitudInput {
   captcha?: string;
   /** Casilla del aviso de privacidad. La fecha de aceptación la pone el servidor. */
   aceptaAviso?: boolean;
+}
+
+export interface ResultadoActivacion {
+  slug: string;
+  venceEn: Date;
+  /** NIP en claro del socio de ejemplo, devuelto UNA sola vez en esta respuesta. No se guarda ni se registra en ningún lado. */
+  socioNip: string;
+  socioNumero: string;
+}
+
+export interface EstadoPrueba {
+  esPrueba: true;
+  estado: string;
+  venceEn: Date;
+  /** Días completos que quedan (0 el último día o ya vencida). */
+  diasRestantes: number;
+  vencida: boolean;
+  extendida: boolean;
 }
 
 export interface ResultadoPurga {
@@ -148,7 +166,7 @@ export class PruebaPublicaService {
   }
 
   // ── 2. activar (el token se canjea UNA vez) ──
-  async activar(input: { token?: string; password?: string }, ahora = new Date()): Promise<{ slug: string; venceEn: Date }> {
+  async activar(input: { token?: string; password?: string }, ahora = new Date()): Promise<ResultadoActivacion> {
     this.asegurarActiva();
     const errPass = validarPassword(input.password);
     if (errPass) throw new BadRequestException(errPass);
@@ -186,11 +204,11 @@ export class PruebaPublicaService {
       const empresa = (await this.companies.find({ where: { tenantId: tenant.id } as any }))[0];
       const sucursal = empresa ? (await this.branches.find({ where: { companyId: empresa.id } as any }))[0] : null;
       if (!empresa || !sucursal) throw new Error('el tenant de prueba no quedó con empresa y sucursal');
-      await this.sembrar(fila.giro, tenant.id, sucursal.id);
+      const sembrado = await this.sembrar(fila.giro, tenant.id, sucursal.id);
       await this.subscriptions.fijarFin(tenant.id, venceEn);
 
       await this.pruebas.update({ id: fila.id } as any, { estado: 'ACTIVA', tenantId: tenant.id, venceEn, correoCifrado: null } as any);
-      return { slug, venceEn };
+      return { slug, venceEn, socioNip: sembrado.socioNip, socioNumero: sembrado.socioNumero };
     } catch (e: any) {
       // Sin detalle al público; el motivo queda en el log del servidor (sin correo ni contraseña).
       this.log.error(`Activación fallida de la prueba ${fila.id}: ${e?.message ?? e}`);
@@ -211,9 +229,27 @@ export class PruebaPublicaService {
     };
   }
 
-  private async sembrar(giro: string, tenantId: string, branchId: string) {
+  private async sembrar(giro: string, tenantId: string, branchId: string): Promise<ResultadoPlantilla> {
     if (giro === 'gimnasio') return sembrarGimnasio(this.depsPlantilla(), tenantId, branchId);
     throw new Error(`No hay plantilla para el giro ${giro}`);
+  }
+
+  // ── 2b. estado de MI prueba (autenticado: el tenant sale SIEMPRE del token, nunca de la URL ni del cuerpo) ──
+  async estado(tenantId: string, ahora = new Date()): Promise<EstadoPrueba> {
+    if (!pruebaPublicaActiva()) throw new NotFoundException();
+    if (!tenantId) throw new NotFoundException();
+    // Solo una fila de ESTE tenant y de una prueba viva o vencida. Cualquier otro caso es 404 (no revela si el negocio es o no una prueba).
+    const fila = (await this.pruebas.find({ where: { tenantId } as any })).find((p) => (p.estado === 'ACTIVA' || p.estado === 'VENCIDA') && p.venceEn);
+    if (!fila || !fila.venceEn) throw new NotFoundException();
+    const ms = new Date(fila.venceEn).getTime() - ahora.getTime();
+    return {
+      esPrueba: true,
+      estado: fila.estado,
+      venceEn: new Date(fila.venceEn),
+      diasRestantes: Math.max(0, Math.ceil(ms / MS_DIA)),
+      vencida: ms <= 0 || fila.estado === 'VENCIDA',
+      extendida: fila.extendida === true,
+    };
   }
 
   // ── 3. ciclo de vida ──

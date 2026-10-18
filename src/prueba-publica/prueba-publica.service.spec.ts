@@ -49,18 +49,19 @@ function montar(opts: { captcha?: boolean; crearFalla?: boolean; crearConWarning
   };
   const subscriptions = { fijarFin: jest.fn(async () => undefined) };
   const llamadas: Array<[string, string]> = []; // [operación, tenantId]
+  const socios: any[] = [];
   const settings = { upsert: jest.fn(async (t: string) => void llamadas.push(['settings', t])) };
   const categories = { create: jest.fn(async (d: any, t: string) => { llamadas.push(['categoria', t]); return { id: `cat-${d.name}` }; }) };
   const products = { create: jest.fn(async (_d: any, t: string) => void llamadas.push(['producto', t])) };
   const membresias = {
     crearPlan: jest.fn(async (t: string) => void llamadas.push(['plan', t])),
-    crearSocio: jest.fn(async (t: string) => void llamadas.push(['socio', t])),
+    crearSocio: jest.fn(async (t: string, s: any) => { llamadas.push(['socio', t]); socios.push({ tenantId: t, ...s }); }),
   };
   const captcha = { verificar: jest.fn<Promise<boolean>, [string | undefined, string]>(async () => opts.captcha !== false) };
   const correo = new MockCorreoProvider(opts.correoFalla ? { fallar: opts.correoFalla } : {});
   const purger = { purgarTenant: jest.fn<Promise<void>, [string]>(async () => undefined) };
   const svc = new PruebaPublicaService(pruebas as any, tenants as any, companies as any, branches as any, tenantsService as any, subscriptions as any, settings as any, products as any, categories as any, membresias as any, captcha, correo, purger);
-  return { svc, pruebas, tenants, tenantsService, subscriptions, llamadas, captcha, correo, purger };
+  return { svc, pruebas, tenants, tenantsService, subscriptions, llamadas, socios, captcha, correo, purger };
 }
 
 const sol = (over: Record<string, any> = {}) => ({ correo: 'Ana@Gym.mx', nombre: 'Ana', negocio: 'Gym Ana', giro: 'gimnasio', captcha: 'ok', aceptaAviso: true, ...over });
@@ -347,6 +348,87 @@ describe('Prueba pública PP0', () => {
       expect(m.tenants.filas[0].isActive).toBe(false);
       expect(m.pruebas.filas[0].estado).toBe('FALLIDA');
       expect(m.subscriptions.fijarFin).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('NIP del socio de ejemplo: aleatorio por prueba, mostrado una vez, nunca guardado en claro', () => {
+    it('activar devuelve el NIP (4 dígitos, no el «de siempre») y el n.º de socio; es el mismo que se le puso al socio', async () => {
+      const m = montar();
+      const token = await pedirYObtenerToken(m);
+      const r = await m.svc.activar({ token, password: 'MiClaveSegura1' }, AHORA);
+      expect(r.socioNip).toMatch(/^\d{4}$/);
+      expect(r.socioNip).not.toBe('4321');
+      expect(r.socioNumero).toBe('1');
+      expect(m.socios).toHaveLength(1);
+      expect(m.socios[0]).toMatchObject({ tenantId: 't-1', nip: r.socioNip });
+    });
+
+    it('el NIP no queda en claro en la prueba guardada ni en ningún log del servicio', async () => {
+      const m = montar();
+      const token = await pedirYObtenerToken(m);
+      const espia = [jest.spyOn(console, 'log'), jest.spyOn(console, 'error'), jest.spyOn(console, 'warn'), jest.spyOn(process.stdout, 'write'), jest.spyOn(process.stderr, 'write')];
+      const r = await m.svc.activar({ token, password: 'MiClaveSegura1' }, AHORA);
+      const escrito = espia.flatMap((e) => e.mock.calls.map((c) => String(c[0]))).join('\n');
+      espia.forEach((e) => e.mockRestore());
+      expect(escrito).not.toContain(r.socioNip);
+      expect(JSON.stringify(m.pruebas.filas)).not.toContain('"' + r.socioNip + '"');
+      expect(JSON.stringify(m.tenants.filas)).not.toContain(r.socioNip);
+      expect(JSON.stringify(m.tenantsService.create.mock.calls)).not.toContain(r.socioNip);
+    });
+
+    it('si la activación falla no se devuelve ningún NIP', async () => {
+      const m = montar({ crearFalla: true });
+      const token = await pedirYObtenerToken(m);
+      const e: any = await m.svc.activar({ token, password: 'MiClaveSegura1' }, AHORA).catch((x) => x);
+      expect(JSON.stringify(e.getResponse())).not.toMatch(/\b\d{4}\b/);
+    });
+  });
+
+  describe('estado de MI prueba (GET /prueba/estado)', () => {
+    const activa = (m: ReturnType<typeof montar>, tenantId: string, venceEn: Date, estado = 'ACTIVA') => m.pruebas.filas.push({ id: 'p-' + tenantId, tenantId, estado, venceEn, extendida: false });
+
+    it('días restantes de la prueba del tenant del token (redondeo hacia arriba; 14 recién activada)', async () => {
+      const m = montar();
+      activa(m, 'T1', new Date(AHORA.getTime() + 14 * MS_DIA));
+      expect(await m.svc.estado('T1', AHORA)).toMatchObject({ esPrueba: true, estado: 'ACTIVA', diasRestantes: 14, vencida: false, extendida: false });
+      expect((await m.svc.estado('T1', new Date(AHORA.getTime() + 13.2 * MS_DIA))).diasRestantes).toBe(1);
+      expect((await m.svc.estado('T1', new Date(AHORA.getTime() + 13.99 * MS_DIA))).diasRestantes).toBe(1);
+    });
+
+    it('vencida: 0 días y vencida=true (por fecha o por estado)', async () => {
+      const m = montar();
+      activa(m, 'T1', new Date(AHORA.getTime() - 2 * MS_DIA), 'ACTIVA');
+      activa(m, 'T2', new Date(AHORA.getTime() + 3 * MS_DIA), 'VENCIDA');
+      expect(await m.svc.estado('T1', AHORA)).toMatchObject({ diasRestantes: 0, vencida: true });
+      expect(await m.svc.estado('T2', AHORA)).toMatchObject({ vencida: true });
+    });
+
+    it('aislamiento: cada tenant ve SOLO la suya; uno que no es prueba, ajeno o sin tenant → 404', async () => {
+      const m = montar();
+      activa(m, 'T1', new Date(AHORA.getTime() + 5 * MS_DIA));
+      activa(m, 'T2', new Date(AHORA.getTime() + 9 * MS_DIA));
+      expect((await m.svc.estado('T1', AHORA)).diasRestantes).toBe(5);
+      expect((await m.svc.estado('T2', AHORA)).diasRestantes).toBe(9);
+      for (const ajeno of ['T-CLIENTE-REAL', '', undefined as any]) await expect(m.svc.estado(ajeno, AHORA)).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('solo filas ACTIVA/VENCIDA: una solicitud pendiente, fallida, convertida o purgada no cuenta', async () => {
+      const m = montar();
+      for (const estado of ['SOLICITADA', 'FALLIDA', 'CONVERTIDA', 'PURGADA']) activa(m, 'T-' + estado, new Date(AHORA.getTime() + MS_DIA), estado);
+      for (const estado of ['SOLICITADA', 'FALLIDA', 'CONVERTIDA', 'PURGADA']) await expect(m.svc.estado('T-' + estado, AHORA)).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('no expone datos personales: solo estado, fecha, días y banderas', async () => {
+      const m = montar();
+      m.pruebas.filas.push({ id: 'p', tenantId: 'T1', estado: 'ACTIVA', venceEn: new Date(AHORA.getTime() + MS_DIA), extendida: false, correoCifrado: 'x', correoHash: 'h', ip: '1.2.3.4', nombrePersona: 'Ana' });
+      expect(Object.keys(await m.svc.estado('T1', AHORA)).sort()).toEqual(['diasRestantes', 'esPrueba', 'estado', 'extendida', 'venceEn', 'vencida']);
+    });
+
+    it('apagado → 404 aunque el tenant sea una prueba', async () => {
+      const m = montar();
+      activa(m, 'T1', new Date(AHORA.getTime() + MS_DIA));
+      process.env.PRUEBA_PUBLICA_ACTIVA = 'false';
+      await expect(m.svc.estado('T1', AHORA)).rejects.toBeInstanceOf(NotFoundException);
     });
   });
 

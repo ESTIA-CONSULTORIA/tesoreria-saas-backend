@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from 'crypto';
+import { createHash, randomBytes, randomInt } from 'crypto';
 
 // Piezas puras de la prueba pública (con spec).
 
@@ -35,6 +35,21 @@ export function validarPassword(p: unknown): string | null {
   if (s.length > 128) return 'La contraseña es demasiado larga.';
   if (!/[A-Za-z]/.test(s) || !/\d/.test(s)) return 'La contraseña debe llevar letras y números.';
   return null;
+}
+
+/**
+ * NIP de 4 dígitos del socio de ejemplo, ALEATORIO por prueba (criptográfico). Evita los obvios (0000, 1111, 1234, 4321, 1212…) para que
+ * no sea adivinable por ser «el de siempre». Se muestra UNA vez a la persona; en la base solo queda su HMAC (como cualquier NIP de socio).
+ */
+export function generarNipSocio(): string {
+  for (;;) {
+    const n = String(randomInt(0, 10000)).padStart(4, '0');
+    const d = n.split('').map(Number);
+    const repetido = d.every((x) => x === d[0]);
+    const escalera = d.every((x, i) => i === 0 || x === d[i - 1] + 1) || d.every((x, i) => i === 0 || x === d[i - 1] - 1);
+    const par = n[0] === n[2] && n[1] === n[3]; // 1212, 7878…
+    if (!repetido && !escalera && !par) return n;
+  }
 }
 
 export const slugPrueba = (): string => `prueba-${randomBytes(5).toString('hex')}`;

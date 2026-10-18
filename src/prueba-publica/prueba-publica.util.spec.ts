@@ -1,5 +1,5 @@
 import { PLANTILLA_GIMNASIO, sembrarGimnasio } from './plantilla-gimnasio';
-import { dominioDe, esCorreoValido, esDesechable, generarToken, hashCorreo, hashToken, ipDe, normalizarCorreo, slugPrueba, validarPassword } from './prueba-publica.util';
+import { dominioDe, esCorreoValido, esDesechable, generarNipSocio, generarToken, hashCorreo, hashToken, ipDe, normalizarCorreo, slugPrueba, validarPassword } from './prueba-publica.util';
 import { GIROS_PRUEBA, MAX_ACTIVAS, MAX_ALTAS_DIA, MAX_POR_IP_HORA, DIAS_PRUEBA, RETENCION_DIAS, pruebaPublicaActiva } from './prueba-publica.config';
 import { PruebaPublicaController } from './prueba-publica.controller';
 import { IS_PUBLIC_KEY } from '../auth/public.decorator';
@@ -63,6 +63,17 @@ describe('utilidades', () => {
   });
 });
 
+describe('NIP aleatorio del socio de ejemplo', () => {
+  it('4 dígitos, sin los obvios, y con buena dispersión (no hay un NIP «de siempre»)', () => {
+    const muestra = Array.from({ length: 400 }, () => generarNipSocio());
+    for (const n of muestra) {
+      expect(n).toMatch(/^\d{4}$/);
+      expect(['0000', '1111', '2222', '9999', '1234', '4321', '0123', '3210', '6789', '9876', '1212', '7878']).not.toContain(n);
+    }
+    expect(new Set(muestra).size).toBeGreaterThan(300);
+  });
+});
+
 describe('plantilla del gimnasio', () => {
   function deps() {
     const llamadas: Array<[string, string, any]> = [];
@@ -81,12 +92,13 @@ describe('plantilla del gimnasio', () => {
 
   it('crea lo mismo que «Gimnasio Demo»: 2 categorías, 5 productos, 2 planes, 1 socio con NIP, IVA 16 % sin incluir', async () => {
     const { d, llamadas } = deps();
-    expect(await sembrarGimnasio(d, 'T1', 'B1')).toEqual({ categorias: 2, productos: 5, planes: 2, socios: 1 });
+    expect(await sembrarGimnasio(d, 'T1', 'B1')).toMatchObject({ categorias: 2, productos: 5, planes: 2, socios: 1, socioNumero: '1' });
     expect(llamadas.find(([o]) => o === 'configurar')![2]).toMatchObject({ ivaTasaDefault: '16', preciosIncluyenIva: false, stockPolicy: 'PERMITIR_NEGATIVO', posCapabilities: { membresias: true, venta_de_servicio: true } });
     const prods = llamadas.filter(([o]) => o === 'producto').map(([, , p]) => [p.name, p.price, p.esServicio]);
     expect(prods).toEqual([['Agua 600 ml', 20, false], ['Isotónica 600 ml', 30, false], ['Proteína (batido)', 80, false], ['Pase de día', 100, true], ['Hora de cancha', 300, true]]);
     expect(llamadas.filter(([o]) => o === 'plan').map(([, , p]) => [p.nombre, p.precio])).toEqual([['Mensual', 500], ['Anual', 5000]]);
     expect(llamadas.find(([o]) => o === 'socio')![2].nip).toMatch(/^\d{4}$/);
+    expect(PLANTILLA_GIMNASIO.socio).not.toHaveProperty('nip'); // ya no hay NIP fijo en la plantilla
   });
 
   it('cada producto cae en la categoría correcta y siempre en la sucursal recibida', async () => {
@@ -120,10 +132,19 @@ describe('plantilla del gimnasio', () => {
     await expect(sembrarGimnasio(d, 'T', '')).rejects.toThrow();
   });
 
-  it('es repetible: dos corridas dan exactamente las mismas llamadas', async () => {
+  it('el NIP se puede fijar (pruebas) o se genera al azar; el resultado lo devuelve una sola vez junto con el n.º de socio', async () => {
+    const { d, llamadas } = deps();
+    const r = await sembrarGimnasio(d, 'T', 'B', '7391');
+    expect(r).toMatchObject({ socioNip: '7391', socioNumero: '1' });
+    expect(llamadas.find(([o]) => o === 'socio')![2]).toMatchObject({ nip: '7391' });
+    const a = await sembrarGimnasio(deps().d, 'T', 'B');
+    expect(a.socioNip).toMatch(/^\d{4}$/);
+  });
+
+  it('es repetible: con el mismo NIP, dos corridas dan exactamente las mismas llamadas', async () => {
     const a = deps(); const b = deps();
-    await sembrarGimnasio(a.d, 'T', 'B');
-    await sembrarGimnasio(b.d, 'T', 'B');
+    await sembrarGimnasio(a.d, 'T', 'B', '7391');
+    await sembrarGimnasio(b.d, 'T', 'B', '7391');
     expect(JSON.stringify(a.llamadas)).toBe(JSON.stringify(b.llamadas));
   });
 });
@@ -131,13 +152,29 @@ describe('plantilla del gimnasio', () => {
 describe('controlador público', () => {
   const metodos = Object.getOwnPropertyNames(PruebaPublicaController.prototype).filter((n) => n !== 'constructor');
 
-  it('es público y solo expone dos POST: solicitar y activar (ninguna lectura)', () => {
-    expect(Reflect.getMetadata(IS_PUBLIC_KEY, PruebaPublicaController)).toBe(true);
-    expect(metodos.sort()).toEqual(['activar', 'solicitar']);
-    for (const m of metodos) {
-      expect(Reflect.getMetadata(METHOD_METADATA, (PruebaPublicaController.prototype as any)[m])).toBe(RequestMethod.POST);
-    }
-    expect(metodos.map((m) => Reflect.getMetadata(PATH_METADATA, (PruebaPublicaController.prototype as any)[m])).sort()).toEqual(['activar', 'solicitar']);
+  it('solicitar y activar son POST públicos; estado es GET y EXIGE sesión (no es público)', () => {
+    const p = (m: string) => (PruebaPublicaController.prototype as any)[m];
+    expect(Reflect.getMetadata(IS_PUBLIC_KEY, PruebaPublicaController)).toBeUndefined(); // ya no es público a nivel de clase
+    expect(metodos.sort()).toEqual(['activar', 'estado', 'solicitar']);
+    expect(Reflect.getMetadata(IS_PUBLIC_KEY, p('solicitar'))).toBe(true);
+    expect(Reflect.getMetadata(IS_PUBLIC_KEY, p('activar'))).toBe(true);
+    expect(Reflect.getMetadata(IS_PUBLIC_KEY, p('estado'))).toBeUndefined();
+    expect(Reflect.getMetadata(METHOD_METADATA, p('solicitar'))).toBe(RequestMethod.POST);
+    expect(Reflect.getMetadata(METHOD_METADATA, p('activar'))).toBe(RequestMethod.POST);
+    expect(Reflect.getMetadata(METHOD_METADATA, p('estado'))).toBe(RequestMethod.GET);
+    expect(metodos.map((m) => Reflect.getMetadata(PATH_METADATA, p(m))).sort()).toEqual(['activar', 'estado', 'solicitar']);
     expect(Reflect.getMetadata(PATH_METADATA, PruebaPublicaController)).toBe('prueba');
+  });
+});
+
+describe('GET /prueba/estado: el tenant sale solo del token', () => {
+  it('sin tenant en la sesión (SOPORTE) → 403; con tenant, usa EXACTAMENTE ese id y nada de la URL ni del cuerpo', () => {
+    const llamado: string[] = [];
+    const svc: any = { estado: (t: string) => { llamado.push(t); return {}; } };
+    const c = new PruebaPublicaController(svc);
+    expect(() => c.estado({ user: { roleCode: 'SOPORTE' } })).toThrow(/negocio/);
+    expect(() => c.estado({})).toThrow(/negocio/);
+    c.estado({ user: { tenantId: 'T-DEL-TOKEN' }, query: { tenantId: 'T-AJENO' }, params: { tenantId: 'T-AJENO' }, body: { tenantId: 'T-AJENO' } });
+    expect(llamado).toEqual(['T-DEL-TOKEN']);
   });
 });
