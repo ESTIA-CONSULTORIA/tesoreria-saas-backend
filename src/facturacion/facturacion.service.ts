@@ -1,3 +1,4 @@
+import { FACTURACION_ACTIVABLE } from './facturacion-limites';
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -99,7 +100,12 @@ export class FacturacionService {
     if (!nombreFiscal || nombreFiscal.length > 254) throw new BadRequestException('El nombre fiscal es obligatorio (máx. 254 caracteres).');
     if (!REGIMENES_FISCALES[regimenFiscal]) throw new BadRequestException('Régimen fiscal inválido.');
     if (serie !== null && !esSerie(serie)) throw new BadRequestException('La serie solo admite letras y números (máx. 25).');
-    const activa = input.facturacionActiva ?? previo?.facturacionActiva ?? false;
+    // P-03: «Facturación activa» no se puede encender mientras no haya CSD, proveedor autorizado y timbrado real (F2+).
+    // Candado en el servidor, no solo en la pantalla.
+    if (input.facturacionActiva === true && !FACTURACION_ACTIVABLE) {
+      throw new BadRequestException('Facturación activa no se puede activar todavía: el sistema solo emite comprobantes de prueba sin validez fiscal.');
+    }
+    const activa = FACTURACION_ACTIVABLE ? (input.facturacionActiva ?? previo?.facturacionActiva ?? false) : false;
 
     const fila = this.emisores.create({
       ...(previo ?? {}),

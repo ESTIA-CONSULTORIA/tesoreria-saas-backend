@@ -435,3 +435,11 @@ Cada fase se entrega con specs de aislamiento por tenant, de permisos y de idemp
 | **D-13** | ¿Se factura a socios de membresía desde el perfil del socio y se envía por correo, WhatsApp o ambos? | Define `MessagingProvider`. |
 | **D-14** | ¿Contador que valide las reglas marcadas [VALIDAR] antes de F3? | Sin esto, F3 no debería salir a producción. |
 | **D-15** | ¿Retención del XML y del PDF (mínimo 5 años) y almacenamiento (el actual o uno dedicado)? | Costo y cumplimiento. |
+
+## 11. Estado de la implementación
+
+- **F0** (datos fiscales, `PacProvider` + Mock): hecho y en producción (tablas `fiscal_emisores`, `fiscal_sucursales`, `fiscal_productos`, `receptores_fiscales`).
+- **F1 preparada** (rama `feat/cfdi-f1`; **SQL sin ejecutar**: `facturacion-f1-migration.sql`): CSD cifrado con `ENCRYPTION_KEY` (AES-256-GCM versionado, contexto tenant|empresa, rotación con `ENCRYPTION_KEY_PREVIOUS`; carga solo ADMIN, validación local de `.cer`/`.key`/contraseña/RFC/vigencia; nada de la llave sale por la API); tablas `facturas`, `factura_ventas` (candado anti-doble facturación), `factura_eventos`, `fiscal_series` (folio atómico); factura desde una venta de caja (`POST /facturacion/facturas/desde-venta/:ventaId`); nota de crédito total o por partidas; cancelación (motivos 01–04); reintento de `INCIERTO` consultando primero por referencia; reportes (facturado vs. cobrado). **Todo con el Mock y marcado `sinValidezFiscal`** (restricción `CHECK` en la base de datos). «Facturación activa» bloqueada en el servidor (`facturacion-limites.ts`).
+- **No incluido en F1** (para fases siguientes): pantalla de facturación en el ERP/Terminal, devolución del POS → nota de crédito automática (hoy se emite aparte; el cobro y `returnSale` no se tocaron), autofactura pública, global, complemento de pago, adaptador de PAC real, almacenamiento del XML fuera de la fila.
+- Límite del Mock: guarda su estado en memoria del proceso; tras un reinicio no puede cancelar comprobantes emitidos antes (un PAC real sí).
+- Las claves SAT de producto siguen **vacías** hasta que el contador las entregue (`docs/RESUMEN-CONTADOR-CFDI.md`): sin ellas una venta real responde 422 «falta la clave SAT de…».
