@@ -1,5 +1,6 @@
 import { BadRequestException, HttpException, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
 import { PruebaPublicaService } from './prueba-publica.service';
+import { MockCorreoProvider } from './correo/mock-correo.provider';
 import { hashToken } from './prueba-publica.util';
 import { DIAS_PRUEBA, MAX_ACTIVAS, MAX_ALTAS_DIA, MAX_POR_IP_HORA, RETENCION_DIAS } from './prueba-publica.config';
 
@@ -30,7 +31,7 @@ function repo(filas: any[]) {
 const KEY = 'k'.repeat(40);
 const SAL = 's'.repeat(24);
 
-function montar(opts: { captcha?: boolean; crearFalla?: boolean; crearConWarning?: boolean } = {}) {
+function montar(opts: { captcha?: boolean; crearFalla?: boolean; crearConWarning?: boolean; correoFalla?: 'RECHAZADO' | 'NO_DISPONIBLE' } = {}) {
   const pruebas = repo([]);
   const tenants = repo([]);
   const companies = repo([]);
@@ -56,17 +57,23 @@ function montar(opts: { captcha?: boolean; crearFalla?: boolean; crearConWarning
     crearSocio: jest.fn(async (t: string) => void llamadas.push(['socio', t])),
   };
   const captcha = { verificar: jest.fn<Promise<boolean>, [string | undefined, string]>(async () => opts.captcha !== false) };
-  const correo = { enviarEnlace: jest.fn<Promise<void>, [string, string, string]>(async () => undefined) };
+  const correo = new MockCorreoProvider(opts.correoFalla ? { fallar: opts.correoFalla } : {});
   const purger = { purgarTenant: jest.fn<Promise<void>, [string]>(async () => undefined) };
   const svc = new PruebaPublicaService(pruebas as any, tenants as any, companies as any, branches as any, tenantsService as any, subscriptions as any, settings as any, products as any, categories as any, membresias as any, captcha, correo, purger);
   return { svc, pruebas, tenants, tenantsService, subscriptions, llamadas, captcha, correo, purger };
 }
 
-const sol = (over: Record<string, any> = {}) => ({ correo: 'Ana@Gym.mx', nombre: 'Ana', negocio: 'Gym Ana', giro: 'gimnasio', captcha: 'ok', aceptaTerminos: true, ...over });
+const sol = (over: Record<string, any> = {}) => ({ correo: 'Ana@Gym.mx', nombre: 'Ana', negocio: 'Gym Ana', giro: 'gimnasio', captcha: 'ok', aceptaAviso: true, ...over });
+
+// El token viaja en el fragmento del enlace del correo (#token=…).
+function tokenDelUltimoCorreo(m: ReturnType<typeof montar>): string {
+  const ult = m.correo.enviados[m.correo.enviados.length - 1];
+  return decodeURIComponent((ult.texto.match(/#token=([A-Za-z0-9_%-]+)/) as RegExpMatchArray)[1]);
+}
 
 async function pedirYObtenerToken(m: ReturnType<typeof montar>, over: Record<string, any> = {}, ip = '1.1.1.1', ahora = AHORA) {
   await m.svc.solicitar(sol(over), ip, ahora);
-  return m.correo.enviarEnlace.mock.calls[m.correo.enviarEnlace.mock.calls.length - 1][1] as string;
+  return tokenDelUltimoCorreo(m);
 }
 
 describe('Prueba pública PP0', () => {
@@ -75,6 +82,12 @@ describe('Prueba pública PP0', () => {
     process.env.PRUEBA_PUBLICA_ACTIVA = 'true';
     process.env.ENCRYPTION_KEY = KEY;
     process.env.PRUEBA_PUBLICA_SAL = SAL;
+    process.env.TURNSTILE_SECRET = 'turnstile-secret-de-prueba';
+    process.env.PRUEBA_AVISO_URL = 'https://aviso.ejemplo.mx/privacidad';
+    process.env.PRUEBA_AVISO_VERSION = '2026-10-01';
+    process.env.PRUEBA_PUBLICA_URL_BASE = 'https://app.ejemplo.mx/prueba/activar';
+    process.env.CORREO_PROVIDER = 'mock';
+    process.env.NODE_ENV = 'test';
   });
   afterAll(() => {
     process.env = original;
@@ -89,7 +102,7 @@ describe('Prueba pública PP0', () => {
         await expect(m.svc.activar({ token: 'x'.repeat(43), password: 'Segura12345' }, AHORA)).rejects.toBeInstanceOf(NotFoundException);
         expect(m.captcha.verificar).not.toHaveBeenCalled();
         expect(m.pruebas.filas).toHaveLength(0);
-        expect(m.correo.enviarEnlace).not.toHaveBeenCalled();
+        expect(m.correo.enviados).toHaveLength(0);
         expect(m.tenantsService.create).not.toHaveBeenCalled();
       }
     });
@@ -115,13 +128,13 @@ describe('Prueba pública PP0', () => {
       expect(serializado).not.toContain(token);
       expect(fila.correoCifrado.startsWith('v2:gcm:')).toBe(true);
       expect(new Date(fila.tokenVenceEn).getTime() - AHORA.getTime()).toBe(30 * 60_000);
-      expect(m.correo.enviarEnlace).toHaveBeenCalledTimes(1);
-      expect(m.correo.enviarEnlace.mock.calls[0][0]).toBe('ana@gym.mx');
+      expect(m.correo.enviados).toHaveLength(1);
+      expect(m.correo.enviados[0].para).toBe('ana@gym.mx');
     });
 
-    it('validaciones: correo, nombre, negocio, giro sin plantilla, términos, dominio desechable', async () => {
+    it('validaciones: correo, nombre, negocio, giro sin plantilla, casilla del aviso, dominio desechable', async () => {
       const m = montar();
-      for (const mala of [{ correo: 'no-es-correo' }, { nombre: '' }, { negocio: '' }, { giro: 'restaurante' }, { giro: 'generico' }, { aceptaTerminos: false }, { aceptaTerminos: undefined }, { correo: 'x@mailinator.com' }]) {
+      for (const mala of [{ correo: 'no-es-correo' }, { nombre: '' }, { negocio: '' }, { giro: 'restaurante' }, { giro: 'generico' }, { aceptaAviso: false }, { aceptaAviso: undefined }, { aceptaAviso: 'true' as any }, { correo: 'x@mailinator.com' }]) {
         await expect(m.svc.solicitar(sol(mala), '1.1.1.1', AHORA)).rejects.toBeInstanceOf(BadRequestException);
       }
       expect(m.pruebas.filas).toHaveLength(0);
@@ -132,7 +145,7 @@ describe('Prueba pública PP0', () => {
       const m = montar({ captcha: false });
       await expect(m.svc.solicitar(sol(), '1.1.1.1', AHORA)).rejects.toBeInstanceOf(BadRequestException);
       expect(m.pruebas.filas).toHaveLength(0);
-      expect(m.correo.enviarEnlace).not.toHaveBeenCalled();
+      expect(m.correo.enviados).toHaveLength(0);
     });
 
     it('respuesta idéntica para un correo que ya tiene prueba: no enumera, no crea otra, no envía de más', async () => {
@@ -141,7 +154,43 @@ describe('Prueba pública PP0', () => {
       const b = await m.svc.solicitar(sol({ correo: ' ANA@gym.mx ' }), '2.2.2.2', AHORA);
       expect(b).toEqual(a);
       expect(m.pruebas.filas).toHaveLength(1);
-      expect(m.correo.enviarEnlace).toHaveBeenCalledTimes(1);
+      expect(m.correo.enviados).toHaveLength(1);
+    });
+
+    it('aviso de privacidad: sin casilla NO se guarda nada; con casilla se guarda la fecha del SERVIDOR, la versión y la URL (no lo que mande el cliente)', async () => {
+      const m = montar();
+      await expect(m.svc.solicitar(sol({ aceptaAviso: false }), '1.1.1.1', AHORA)).rejects.toThrow(/aviso de privacidad/);
+      expect(m.pruebas.filas).toHaveLength(0);
+      await m.svc.solicitar(sol({ avisoAceptadoEn: '1999-01-01', avisoVersion: 'inventada', avisoUrl: 'https://otro.mx' } as any), '1.1.1.1', AHORA);
+      expect(m.pruebas.filas[0]).toMatchObject({ avisoVersion: '2026-10-01', avisoUrl: 'https://aviso.ejemplo.mx/privacidad' });
+      expect(new Date(m.pruebas.filas[0].avisoAceptadoEn).toISOString()).toBe(AHORA.toISOString());
+    });
+
+    it('el correo trae el enlace de activación con el token en el FRAGMENTO, el aviso de privacidad y el nombre escapado; clave de idempotencia por solicitud', async () => {
+      const m = montar();
+      await m.svc.solicitar(sol({ nombre: '<b>Ana</b>' }), '1.1.1.1', AHORA);
+      const c = m.correo.enviados[0];
+      expect(c.asunto).toBe('Activa tu prueba de ESTIA');
+      expect(c.texto).toContain('Hola <b>Ana</b>,');
+      expect(c.html).toContain('Hola &lt;b&gt;Ana&lt;/b&gt;');
+      expect(c.texto).toContain('https://app.ejemplo.mx/prueba/activar#token=');
+      expect(c.texto).toMatch(/#token=[A-Za-z0-9_-]{43}(\s|$)/);
+      expect(c.texto).not.toContain('?token=');
+      expect(c.html).toContain('https://aviso.ejemplo.mx/privacidad');
+      expect(c.claveIdempotencia).toBe('prueba-activacion:p-1');
+    });
+
+    it('si el proveedor de correo falla: 503, la solicitud queda FALLIDA sin correo ni token guardados, y la persona puede pedir otra', async () => {
+      for (const fallo of ['RECHAZADO', 'NO_DISPONIBLE'] as const) {
+        const m = montar({ correoFalla: fallo });
+        const err: any = await m.svc.solicitar(sol(), '1.1.1.1', AHORA).catch((e) => e);
+        expect(err).toBeInstanceOf(ServiceUnavailableException);
+        expect(m.pruebas.filas[0]).toMatchObject({ estado: 'FALLIDA', correoCifrado: null, tokenHash: null });
+        // FALLIDA no cuenta como activa ni bloquea el correo
+        const m2 = montar();
+        m2.pruebas.filas.push(m.pruebas.filas[0]);
+        await expect(m2.svc.solicitar(sol(), '2.2.2.2', AHORA)).resolves.toBeDefined();
+      }
     });
 
     describe('límites (50 activas · 20 altas/día · 3 por IP/hora)', () => {
@@ -180,6 +229,29 @@ describe('Prueba pública PP0', () => {
         for (let i = 0; i < MAX_ACTIVAS; i++) m.pruebas.filas.push({ id: `x${i}`, estado: i % 3 === 0 ? 'VENCIDA' : i % 3 === 1 ? 'PURGADA' : 'FALLIDA', correoHash: `h${i}`, ip: `z${i}`, createdAt: new Date(AHORA.getTime() - 5 * MS_DIA) });
         await expect(m.svc.solicitar(sol(), '1.1.1.1', AHORA)).resolves.toBeDefined();
       });
+    });
+  });
+
+  describe('configuración incompleta: encendida pero sin variables → 503 y no hace nada', () => {
+    const variables = ['PRUEBA_PUBLICA_SAL', 'ENCRYPTION_KEY', 'TURNSTILE_SECRET', 'PRUEBA_AVISO_URL', 'PRUEBA_AVISO_VERSION', 'PRUEBA_PUBLICA_URL_BASE'];
+    it.each(variables)('sin %s', async (v) => {
+      delete process.env[v];
+      const m = montar();
+      await expect(m.svc.solicitar(sol(), '1.1.1.1', AHORA)).rejects.toBeInstanceOf(ServiceUnavailableException);
+      await expect(m.svc.activar({ token: 'x'.repeat(43), password: 'MiClaveSegura1' }, AHORA)).rejects.toBeInstanceOf(ServiceUnavailableException);
+      expect(m.pruebas.filas).toHaveLength(0);
+      expect(m.captcha.verificar).not.toHaveBeenCalled();
+      expect(m.correo.enviados).toHaveLength(0);
+    });
+
+    it('el adaptador mock no se permite en producción; con Resend exige su llave y remitente', async () => {
+      process.env.NODE_ENV = 'production';
+      await expect(montar().svc.solicitar(sol(), '1.1.1.1', AHORA)).rejects.toBeInstanceOf(ServiceUnavailableException);
+      process.env.CORREO_PROVIDER = 'resend';
+      await expect(montar().svc.solicitar(sol(), '1.1.1.1', AHORA)).rejects.toBeInstanceOf(ServiceUnavailableException);
+      process.env.RESEND_API_KEY = 're_x';
+      process.env.CORREO_REMITENTE = 'ESTIA <prueba@mail.ejemplo.mx>';
+      await expect(montar().svc.solicitar(sol(), '1.1.1.1', AHORA)).resolves.toBeDefined();
     });
   });
 

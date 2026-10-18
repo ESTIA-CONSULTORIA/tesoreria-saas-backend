@@ -30,6 +30,16 @@ export class PruebaPublica {
   @Column({ type: 'varchar', length: 20 })
   giro: string;
 
+  // Consentimiento del aviso de privacidad: lo estampa el SERVIDOR (nunca el cliente) con la versión y la URL vigentes al aceptar.
+  @Column({ type: 'timestamptz' })
+  avisoAceptadoEn: Date;
+
+  @Column({ type: 'varchar', length: 40 })
+  avisoVersion: string;
+
+  @Column({ type: 'varchar', length: 300 })
+  avisoUrl: string;
+
   // Del enlace de activación; se pone en NULL al canjearlo (un solo uso). Nunca se guarda el token en claro.
   @Column({ type: 'varchar', length: 64, nullable: true })
   tokenHash: string | null;
