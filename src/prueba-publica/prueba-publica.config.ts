@@ -15,6 +15,10 @@ export const MAX_ACTIVAS = 50;
 export const MAX_ALTAS_DIA = 20;
 export const MAX_POR_IP_HORA = 3;
 export const MAX_USUARIOS_PRUEBA = 5;
+/** Giros sin plantilla todavía: solo se les puede pedir un aviso (lista de espera), no una prueba. */
+export const GIROS_PROXIMOS = ['restaurante', 'retail', 'otro'] as const;
+export const MAX_AVISOS_POR_IP_HORA = 5;
+export const MAX_AVISOS_DIA = 200;
 /** Solo los giros que ya tienen plantilla de datos. */
 export const GIROS_PRUEBA = ['gimnasio'] as const;
 export type GiroPrueba = (typeof GIROS_PRUEBA)[number];

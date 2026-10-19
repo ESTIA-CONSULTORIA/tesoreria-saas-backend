@@ -156,14 +156,15 @@ describe('controlador público', () => {
   it('solicitar y activar son POST públicos; estado es GET y EXIGE sesión (no es público)', () => {
     const p = (m: string) => (PruebaPublicaController.prototype as any)[m];
     expect(Reflect.getMetadata(IS_PUBLIC_KEY, PruebaPublicaController)).toBeUndefined(); // ya no es público a nivel de clase
-    expect(metodos.sort()).toEqual(['activar', 'estado', 'solicitar']);
+    expect(metodos.sort()).toEqual(['activar', 'avisame', 'estado', 'solicitar']);
     expect(Reflect.getMetadata(IS_PUBLIC_KEY, p('solicitar'))).toBe(true);
     expect(Reflect.getMetadata(IS_PUBLIC_KEY, p('activar'))).toBe(true);
+    expect(Reflect.getMetadata(IS_PUBLIC_KEY, p('avisame'))).toBe(true);
     expect(Reflect.getMetadata(IS_PUBLIC_KEY, p('estado'))).toBeUndefined();
     expect(Reflect.getMetadata(METHOD_METADATA, p('solicitar'))).toBe(RequestMethod.POST);
     expect(Reflect.getMetadata(METHOD_METADATA, p('activar'))).toBe(RequestMethod.POST);
     expect(Reflect.getMetadata(METHOD_METADATA, p('estado'))).toBe(RequestMethod.GET);
-    expect(metodos.map((m) => Reflect.getMetadata(PATH_METADATA, p(m))).sort()).toEqual(['activar', 'estado', 'solicitar']);
+    expect(metodos.map((m) => Reflect.getMetadata(PATH_METADATA, p(m))).sort()).toEqual(['activar', 'avisame', 'estado', 'solicitar']);
     expect(Reflect.getMetadata(PATH_METADATA, PruebaPublicaController)).toBe('prueba');
   });
 });
@@ -172,7 +173,7 @@ describe('GET /prueba/estado: el tenant sale solo del token', () => {
   it('sin tenant en la sesión (SOPORTE) → 403; con tenant, usa EXACTAMENTE ese id y nada de la URL ni del cuerpo', () => {
     const llamado: string[] = [];
     const svc: any = { estado: (t: string) => { llamado.push(t); return {}; } };
-    const c = new PruebaPublicaController(svc);
+    const c = new PruebaPublicaController(svc, {} as any);
     expect(() => c.estado({ user: { roleCode: 'SOPORTE' } })).toThrow(/negocio/);
     expect(() => c.estado({})).toThrow(/negocio/);
     c.estado({ user: { tenantId: 'T-DEL-TOKEN' }, query: { tenantId: 'T-AJENO' }, params: { tenantId: 'T-AJENO' }, body: { tenantId: 'T-AJENO' } });

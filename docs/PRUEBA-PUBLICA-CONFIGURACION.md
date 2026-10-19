@@ -5,6 +5,8 @@ Hoy está **apagada** (`PRUEBA_PUBLICA_ACTIVA` no existe) y los endpoints `/prue
 ## 0. SQL (una vez, con ROLLBACK primero)
 `prueba-publica-pp0-migration.sql` (tabla `pruebas_publicas` y plan `PRUEBA`). Sin esto, activar una prueba falla de forma segura (la solicitud queda FALLIDA) y no se crea nada utilizable.
 
+`prueba-publica-lista-espera-migration.sql` (tabla `pruebas_lista_espera`, sin ejecutar): guarda los correos de quien pide «Avísame» para un giro todavía sin plantilla (restaurante, tienda, otro). Solo la solicitud de aviso: correo cifrado + hash con sal, y fecha/versión/URL del aviso de privacidad aceptado. Sin esta tabla, `POST /prueba/avisame` responde 503 con un mensaje genérico y la prueba del gimnasio no se ve afectada.
+
 ## 1. Registros DNS (dominio `estiaconsultoria.com`)
 
 **Estado actual que revisé** (consulta pública): la raíz tiene `TXT "v=spf1 include:_spf.mx.cloudflare.net ~all"` y MX a `route1/2/3.mx.cloudflare.net` (Cloudflare Email Routing). **No existe DMARC.** Por eso el envío va por un **subdominio** (`mail.`): así no se toca el SPF ni el correo entrante de la raíz (solo puede haber un SPF por nombre).
