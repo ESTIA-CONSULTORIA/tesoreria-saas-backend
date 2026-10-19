@@ -1,4 +1,6 @@
-import { Body, Controller, ForbiddenException, Get, Post, Request } from '@nestjs/common';
+import { Body, Controller, ForbiddenException, Get, Post, Request, UseGuards } from '@nestjs/common';
+import { RolesGuard } from '../auth/roles.guard';
+import { Roles } from '../auth/roles.decorator';
 import { Throttle } from '@nestjs/throttler';
 import { Public } from '../auth/public.decorator';
 import { PruebaPublicaService } from './prueba-publica.service';
@@ -41,5 +43,25 @@ export class PruebaPublicaController {
     const tenantId = req?.user?.tenantId;
     if (!tenantId) throw new ForbiddenException('Se requiere un negocio (tenant) en la sesión.');
     return this.service.estado(tenantId);
+  }
+
+  // Avance real de MI negocio de prueba (conteos) para que la guía marque sola los pasos. Solo ADMIN; el tenant es SIEMPRE el del token.
+  @UseGuards(RolesGuard)
+  @Roles('ADMIN')
+  @Get('progreso')
+  progreso(@Request() req: any) {
+    const tenantId = req?.user?.tenantId;
+    if (!tenantId) throw new ForbiddenException('Se requiere un negocio (tenant) en la sesión.');
+    return this.service.progreso(tenantId);
+  }
+
+  // «Cargar datos de ejemplo» (opcional): siembra la plantilla mínima del giro SOLO en el tenant del token, solo ADMIN y solo si el negocio sigue vacío.
+  @UseGuards(RolesGuard)
+  @Roles('ADMIN')
+  @Post('datos-ejemplo')
+  datosEjemplo(@Request() req: any) {
+    const tenantId = req?.user?.tenantId;
+    if (!tenantId) throw new ForbiddenException('Se requiere un negocio (tenant) en la sesión.');
+    return this.service.datosEjemplo(tenantId);
   }
 }

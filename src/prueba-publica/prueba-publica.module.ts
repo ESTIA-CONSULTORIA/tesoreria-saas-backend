@@ -6,6 +6,9 @@ import { ListaEsperaService } from './lista-espera.service';
 import { Tenant } from '../tenants/entities/tenant.entity';
 import { Company } from '../companies/entities/company.entity';
 import { Branch } from '../branches/entities/branch.entity';
+import { User } from '../users/entities/user.entity';
+import { Shift } from '../pos/entities/shift.entity';
+import { Sale } from '../pos/entities/sale.entity';
 import { TenantsModule } from '../tenants/tenants.module';
 import { SubscriptionsModule } from '../subscriptions/subscriptions.module';
 import { TenantSettingsModule } from '../tenant-settings/tenant-settings.module';
@@ -19,7 +22,7 @@ import { crearCorreoProvider } from './correo/correo-provider.factory';
 
 // Prueba pública, PP0: nada se activa al público (PRUEBA_PUBLICA_ACTIVA apagado por defecto). Tabla nueva: prueba-publica-pp0-migration.sql.
 @Module({
-  imports: [TypeOrmModule.forFeature([PruebaPublica, ListaEsperaGiro, Tenant, Company, Branch]), TenantsModule, SubscriptionsModule, TenantSettingsModule, PosModule, MembresiasModule],
+  imports: [TypeOrmModule.forFeature([PruebaPublica, ListaEsperaGiro, Tenant, Company, Branch, User, Shift, Sale]), TenantsModule, SubscriptionsModule, TenantSettingsModule, PosModule, MembresiasModule],
   providers: [
     PruebaPublicaService,
     ListaEsperaService,

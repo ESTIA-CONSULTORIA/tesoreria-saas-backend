@@ -25,7 +25,7 @@ function montar(opts: { captcha?: boolean; tablaFalla?: boolean } = {}) {
   const svc = new ListaEsperaService(lista as any, captcha as any);
   return { svc, lista, captcha };
 }
-const ok = { correo: 'Ana@Negocio.mx', giro: 'restaurante', aceptaAviso: true, captcha: 'tok' };
+const ok = { correo: 'Ana@Negocio.mx', giro: 'medico_dental', aceptaAviso: true, captcha: 'tok' };
 
 describe('ListaEsperaService (avísame cuando esté listo mi giro)', () => {
   beforeEach(() => {
@@ -67,7 +67,7 @@ describe('ListaEsperaService (avísame cuando esté listo mi giro)', () => {
     expect(f.correoCifrado).toMatch(/^v2:gcm:/);
     expect(descifrarSecreto(f.correoCifrado, 'prueba|aviso-giro')).toBe('ana@negocio.mx');
     expect(JSON.stringify(f)).not.toMatch(/ana@negocio\.mx/i);
-    expect(f).toMatchObject({ giro: 'restaurante', correoDominio: 'negocio.mx', avisoVersion: 'v2', avisoUrl: 'https://aviso.example/privacidad', ip: '9.9.9.9', avisadoEn: null });
+    expect(f).toMatchObject({ giro: 'medico_dental', correoDominio: 'negocio.mx', avisoVersion: 'v2', avisoUrl: 'https://aviso.example/privacidad', ip: '9.9.9.9', avisadoEn: null });
     expect(f.avisoAceptadoEn).toEqual(AHORA); // no lo que mande el cliente
   });
 
@@ -84,10 +84,10 @@ describe('ListaEsperaService (avísame cuando esté listo mi giro)', () => {
     expect(sin.lista.filas).toHaveLength(0);
   });
 
-  it('solo giros próximos: el gimnasio (que ya tiene prueba) y cualquier otro valor se rechazan', async () => {
+  it('solo giros próximos: los giros con prueba (gimnasio, restaurante, tienda, genérico) y cualquier otro valor se rechazan', async () => {
     const m = montar();
     expect([...GIROS_PROXIMOS].some((g) => (GIROS_PRUEBA as readonly string[]).includes(g))).toBe(false);
-    for (const g of ['gimnasio', 'inventado', '', undefined]) {
+    for (const g of ['gimnasio', 'restaurante', 'retail', 'generico', 'inventado', '', undefined]) {
       await expect(m.svc.avisar({ ...ok, giro: g as any }, '1.1.1.1', AHORA)).rejects.toBeInstanceOf(BadRequestException);
     }
     for (const g of GIROS_PROXIMOS) await m.svc.avisar({ ...ok, correo: `a-${g}@negocio.mx`, giro: g }, '1.1.1.1', AHORA);
@@ -101,7 +101,7 @@ describe('ListaEsperaService (avísame cuando esté listo mi giro)', () => {
     expect(b).toEqual(a);
     expect(m.lista.filas).toHaveLength(1);
     // mismo correo, otro giro = otra solicitud
-    await m.svc.avisar({ ...ok, giro: 'retail' }, '1.1.1.1', AHORA);
+    await m.svc.avisar({ ...ok, giro: 'medico_general' }, '1.1.1.1', AHORA);
     expect(m.lista.filas).toHaveLength(2);
   });
 
@@ -116,7 +116,7 @@ describe('ListaEsperaService (avísame cuando esté listo mi giro)', () => {
     await expect(m.svc.avisar({ ...ok, correo: 'despues@negocio.mx' }, '5.5.5.5', new Date(AHORA.getTime() + 2 * MS_HORA))).resolves.toBeDefined();
 
     const lleno = montar();
-    for (let i = 0; i < MAX_AVISOS_DIA; i++) lleno.lista.filas.push({ id: `x${i}`, createdAt: new Date(AHORA), ip: `10.0.${i % 250}.${i % 7}`, correoHash: `h${i}`, giro: 'retail' });
+    for (let i = 0; i < MAX_AVISOS_DIA; i++) lleno.lista.filas.push({ id: `x${i}`, createdAt: new Date(AHORA), ip: `10.0.${i % 250}.${i % 7}`, correoHash: `h${i}`, giro: 'medico_general' });
     const d = await lleno.svc.avisar({ ...ok, correo: 'nuevo@negocio.mx' }, '7.7.7.7', AHORA).catch((x) => x);
     expect(d).toBeInstanceOf(ServiceUnavailableException);
   });
