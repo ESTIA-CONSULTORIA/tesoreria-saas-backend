@@ -38,7 +38,7 @@ CREATE INDEX IF NOT EXISTS "IDX_pruebas_ip" ON "pruebas_publicas" ("ip", "create
 CREATE INDEX IF NOT EXISTS "IDX_pruebas_tenant" ON "pruebas_publicas" ("tenantId");
 
 -- ── 2. Plan PRUEBA (hasta 5 usuarios; sin costos, compras, tesorería, integraciones ni nómina). Idempotente ───────────────
-INSERT INTO "plan" ("code", "name", "monthlyPrice", "maxCompanies", "maxBranches", "maxUsers", "isActive") SELECT 'PRUEBA', 'Prueba pública (14 días)', 0, 1, 1, 5, true WHERE NOT EXISTS (SELECT 1 FROM "plan" WHERE "code" = 'PRUEBA');
+INSERT INTO "plan" ("code", "name", "monthlyPrice", "maxCompanies", "maxBranches", "maxUsers", "isActive") SELECT 'PRUEBA', 'Prueba pública', 0, 1, 1, 5, true WHERE NOT EXISTS (SELECT 1 FROM "plan" WHERE "code" = 'PRUEBA');
 INSERT INTO "plan_modules" ("planCode", "moduleCode", "included") SELECT 'PRUEBA', 'dashboard', true WHERE NOT EXISTS (SELECT 1 FROM "plan_modules" WHERE "planCode" = 'PRUEBA' AND "moduleCode" = 'dashboard');
 INSERT INTO "plan_modules" ("planCode", "moduleCode", "included") SELECT 'PRUEBA', 'usuarios', true WHERE NOT EXISTS (SELECT 1 FROM "plan_modules" WHERE "planCode" = 'PRUEBA' AND "moduleCode" = 'usuarios');
 INSERT INTO "plan_modules" ("planCode", "moduleCode", "included") SELECT 'PRUEBA', 'empresas', true WHERE NOT EXISTS (SELECT 1 FROM "plan_modules" WHERE "planCode" = 'PRUEBA' AND "moduleCode" = 'empresas');

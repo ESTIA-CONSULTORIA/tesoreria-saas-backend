@@ -95,7 +95,7 @@ export class SubscriptionsService {
     });
   }
 
-  /** Fija la fecha de fin de la suscripción ACTIVA del tenant (la prueba pública vence exactamente a los 14 días). */
+  /** Fija la fecha de fin de la suscripción ACTIVA del tenant (la prueba pública vence exactamente al cumplirse la duración de la prueba (DIAS_PRUEBA)). */
   async fijarFin(tenantId: string, fin: Date) {
     await this.subscriptionRepo.update({ tenantId, status: 'ACTIVE' }, { endDate: fin.toISOString().split('T')[0] });
   }

@@ -257,7 +257,7 @@ describe('Prueba pública PP0', () => {
   });
 
   describe('activar: token de un solo uso', () => {
-    it('crea el tenant PRUEBA con la plantilla, 14 días de vigencia y deja la solicitud ACTIVA sin correo ni token', async () => {
+    it('crea el tenant PRUEBA con la plantilla, la vigencia de DIAS_PRUEBA y deja la solicitud ACTIVA sin correo ni token', async () => {
       const m = montar();
       const token = await pedirYObtenerToken(m);
       const r = await m.svc.activar({ token, password: 'MiClaveSegura1' }, AHORA);
@@ -387,12 +387,12 @@ describe('Prueba pública PP0', () => {
   describe('estado de MI prueba (GET /prueba/estado)', () => {
     const activa = (m: ReturnType<typeof montar>, tenantId: string, venceEn: Date, estado = 'ACTIVA') => m.pruebas.filas.push({ id: 'p-' + tenantId, tenantId, estado, venceEn, extendida: false });
 
-    it('días restantes de la prueba del tenant del token (redondeo hacia arriba; 14 recién activada)', async () => {
+    it('días restantes de la prueba del tenant del token (redondeo hacia arriba; DIAS_PRUEBA recién activada)', async () => {
       const m = montar();
-      activa(m, 'T1', new Date(AHORA.getTime() + 14 * MS_DIA));
-      expect(await m.svc.estado('T1', AHORA)).toMatchObject({ esPrueba: true, estado: 'ACTIVA', diasRestantes: 14, vencida: false, extendida: false });
-      expect((await m.svc.estado('T1', new Date(AHORA.getTime() + 13.2 * MS_DIA))).diasRestantes).toBe(1);
-      expect((await m.svc.estado('T1', new Date(AHORA.getTime() + 13.99 * MS_DIA))).diasRestantes).toBe(1);
+      activa(m, 'T1', new Date(AHORA.getTime() + DIAS_PRUEBA * MS_DIA));
+      expect(await m.svc.estado('T1', AHORA)).toMatchObject({ esPrueba: true, estado: 'ACTIVA', diasRestantes: DIAS_PRUEBA, vencida: false, extendida: false });
+      expect((await m.svc.estado('T1', new Date(AHORA.getTime() + (DIAS_PRUEBA - 0.8) * MS_DIA))).diasRestantes).toBe(1);
+      expect((await m.svc.estado('T1', new Date(AHORA.getTime() + (DIAS_PRUEBA - 0.01) * MS_DIA))).diasRestantes).toBe(1);
     });
 
     it('vencida: 0 días y vencida=true (por fecha o por estado)', async () => {
