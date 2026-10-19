@@ -1,7 +1,8 @@
-import { BadRequestException, HttpException, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
+import { BadRequestException, ConflictException, HttpException, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
 import { PruebaPublicaService } from './prueba-publica.service';
 import { MockCorreoProvider } from './correo/mock-correo.provider';
 import { hashToken } from './prueba-publica.util';
+import { configEstructural } from './giros-prueba';
 import { DIAS_PRUEBA, MAX_ACTIVAS, MAX_ALTAS_DIA, MAX_POR_IP_HORA, RETENCION_DIAS } from './prueba-publica.config';
 
 const MS_DIA = 86_400_000;
@@ -41,18 +42,28 @@ function montar(opts: { captcha?: boolean; crearFalla?: boolean; crearConWarning
     create: jest.fn(async (dto: any) => {
       if (opts.crearFalla) throw new Error('boom con detalle interno');
       const id = `t-${++nTenant}`;
-      tenants.filas.push({ id, plan: dto.plan, slug: dto.slug, isActive: true });
+      tenants.filas.push({ id, plan: dto.plan, slug: dto.slug, giro: dto.giro, isActive: true });
       companies.filas.push({ id: `c-${id}`, tenantId: id });
       branches.filas.push({ id: `b-${id}`, companyId: `c-${id}` });
       return opts.crearConWarning ? { id, warning: 'No se pudieron inicializar los módulos' } : { id, slug: dto.slug };
     }),
   };
   const subscriptions = { fijarFin: jest.fn(async () => undefined) };
-  const llamadas: Array<[string, string]> = []; // [operación, tenantId]
+  const users = { filas: [] as any[], count: jest.fn(async ({ where }: any) => users.filas.filter((f) => coincide(f, where)).length) };
+  const shifts = { filas: [] as any[], count: jest.fn(async ({ where }: any) => shifts.filas.filter((f) => coincide(f, where)).length) };
+  const sales = { filas: [] as any[], count: jest.fn(async ({ where }: any) => sales.filas.filter((f) => coincide(f, where)).length) };
+  const catalogo = { categorias: [] as Array<{ id: string; tenantId: string; name: string }>, productos: [] as Array<{ tenantId: string; name: string; price: number; esServicio?: boolean }> };
+  const llamadas: Array<[string, string, any?]> = []; // [operación, tenantId, detalle]
   const socios: any[] = [];
-  const settings = { upsert: jest.fn(async (t: string) => void llamadas.push(['settings', t])) };
-  const categories = { create: jest.fn(async (d: any, t: string) => { llamadas.push(['categoria', t]); return { id: `cat-${d.name}` }; }) };
-  const products = { create: jest.fn(async (_d: any, t: string) => void llamadas.push(['producto', t])) };
+  const settings = { upsert: jest.fn(async (t: string, body: any) => void llamadas.push(['settings', t, body])) };
+  const categories = {
+    create: jest.fn(async (d: any, t: string) => { llamadas.push(['categoria', t]); const id = `cat-${t}-${d.name}`; catalogo.categorias.push({ id, tenantId: t, name: d.name }); return { id }; }),
+    findAll: jest.fn(async (_b: any, t: string) => catalogo.categorias.filter((c) => c.tenantId === t)),
+  };
+  const products = {
+    create: jest.fn(async (d: any, t: string) => { llamadas.push(['producto', t]); catalogo.productos.push({ tenantId: t, name: d.name, price: d.price, esServicio: d.esServicio }); }),
+    findAll: jest.fn(async (_b: any, t: string) => catalogo.productos.filter((p) => p.tenantId === t)),
+  };
   const membresias = {
     crearPlan: jest.fn(async (t: string) => void llamadas.push(['plan', t])),
     crearSocio: jest.fn(async (t: string, s: any) => { llamadas.push(['socio', t]); socios.push({ tenantId: t, ...s }); }),
@@ -60,8 +71,8 @@ function montar(opts: { captcha?: boolean; crearFalla?: boolean; crearConWarning
   const captcha = { verificar: jest.fn<Promise<boolean>, [string | undefined, string]>(async () => opts.captcha !== false) };
   const correo = new MockCorreoProvider(opts.correoFalla ? { fallar: opts.correoFalla } : {});
   const purger = { purgarTenant: jest.fn<Promise<void>, [string]>(async () => undefined) };
-  const svc = new PruebaPublicaService(pruebas as any, tenants as any, companies as any, branches as any, tenantsService as any, subscriptions as any, settings as any, products as any, categories as any, membresias as any, captcha, correo, purger);
-  return { svc, pruebas, tenants, tenantsService, subscriptions, llamadas, socios, captcha, correo, purger };
+  const svc = new PruebaPublicaService(pruebas as any, tenants as any, companies as any, branches as any, users as any, shifts as any, sales as any, tenantsService as any, subscriptions as any, settings as any, products as any, categories as any, membresias as any, captcha, correo, purger);
+  return { svc, pruebas, tenants, tenantsService, subscriptions, llamadas, socios, captcha, correo, purger, users, shifts, sales, catalogo, categories, products, settings };
 }
 
 const sol = (over: Record<string, any> = {}) => ({ correo: 'Ana@Gym.mx', nombre: 'Ana', negocio: 'Gym Ana', giro: 'gimnasio', captcha: 'ok', aceptaAviso: true, ...over });
@@ -133,9 +144,9 @@ describe('Prueba pública PP0', () => {
       expect(m.correo.enviados[0].para).toBe('ana@gym.mx');
     });
 
-    it('validaciones: correo, nombre, negocio, giro sin plantilla, casilla del aviso, dominio desechable', async () => {
+    it('validaciones: correo, nombre, negocio, giro excluido, casilla del aviso, dominio desechable', async () => {
       const m = montar();
-      for (const mala of [{ correo: 'no-es-correo' }, { nombre: '' }, { negocio: '' }, { giro: 'restaurante' }, { giro: 'generico' }, { aceptaAviso: false }, { aceptaAviso: undefined }, { aceptaAviso: 'true' as any }, { correo: 'x@mailinator.com' }]) {
+      for (const mala of [{ correo: 'no-es-correo' }, { nombre: '' }, { negocio: '' }, { giro: 'medico_dental' }, { giro: 'medico_general' }, { aceptaAviso: false }, { aceptaAviso: undefined }, { aceptaAviso: 'true' as any }, { correo: 'x@mailinator.com' }]) {
         await expect(m.svc.solicitar(sol(mala), '1.1.1.1', AHORA)).rejects.toBeInstanceOf(BadRequestException);
       }
       expect(m.pruebas.filas).toHaveLength(0);
@@ -257,7 +268,7 @@ describe('Prueba pública PP0', () => {
   });
 
   describe('activar: token de un solo uso', () => {
-    it('crea el tenant PRUEBA con la plantilla, la vigencia de DIAS_PRUEBA y deja la solicitud ACTIVA sin correo ni token', async () => {
+    it('crea el tenant PRUEBA VACÍO (solo lo estructural), con la vigencia de DIAS_PRUEBA, y deja la solicitud ACTIVA sin correo ni token', async () => {
       const m = montar();
       const token = await pedirYObtenerToken(m);
       const r = await m.svc.activar({ token, password: 'MiClaveSegura1' }, AHORA);
@@ -272,9 +283,10 @@ describe('Prueba pública PP0', () => {
       const fila = m.pruebas.filas[0];
       expect(fila).toMatchObject({ estado: 'ACTIVA', tenantId: 't-1', tokenHash: null, correoCifrado: null });
       expect(JSON.stringify(fila)).not.toContain('MiClaveSegura1');
-      // plantilla del gimnasio: 1 configuración, 2 categorías, 5 productos, 2 planes, 1 socio — todo en el tenant creado
+      // nace vacío: 1 configuración estructural y NADA más (sin categorías, productos, planes ni socios)
       const cuenta = (op: string) => m.llamadas.filter(([o]) => o === op).length;
-      expect([cuenta('settings'), cuenta('categoria'), cuenta('producto'), cuenta('plan'), cuenta('socio')]).toEqual([1, 2, 5, 2, 1]);
+      expect([cuenta('settings'), cuenta('categoria'), cuenta('producto'), cuenta('plan'), cuenta('socio')]).toEqual([1, 0, 0, 0, 0]);
+      expect(Object.keys(r).sort()).toEqual(['slug', 'venceEn']);
     });
 
     it('un solo uso: el mismo enlace dos veces → la segunda falla y NO crea un segundo tenant', async () => {
@@ -351,38 +363,141 @@ describe('Prueba pública PP0', () => {
     });
   });
 
-  describe('NIP del socio de ejemplo: aleatorio por prueba, mostrado una vez, nunca guardado en claro', () => {
-    it('activar devuelve el NIP (4 dígitos, no el «de siempre») y el n.º de socio; es el mismo que se le puso al socio', async () => {
+  describe('giros: cada uno nace con su estructura, vacío, y aislado de los demás', () => {
+    const GIRO_PRUEBA = ['gimnasio', 'restaurante', 'retail', 'generico'] as const;
+    const activar = async (m: ReturnType<typeof montar>, giro: string, correo = 'ana@neg.mx') => {
+      const token = await pedirYObtenerToken(m, { giro, correo, negocio: `Neg ${giro}` }, '1.1.1.' + Math.floor(Math.random() * 200 + 1));
+      return m.svc.activar({ token, password: 'MiClaveSegura1' }, AHORA);
+    };
+    const tenantDe = (m: ReturnType<typeof montar>, i = 0) => m.tenants.filas[i].id as string;
+
+    it.each(GIRO_PRUEBA)('%s: la solicitud se acepta y el tenant nace con giro, plan PRUEBA e IVA 16 %% sin incluir', async (giro) => {
       const m = montar();
-      const token = await pedirYObtenerToken(m);
-      const r = await m.svc.activar({ token, password: 'MiClaveSegura1' }, AHORA);
-      expect(r.socioNip).toMatch(/^\d{4}$/);
-      expect(r.socioNip).not.toBe('4321');
-      expect(r.socioNumero).toBe('1');
-      expect(m.socios).toHaveLength(1);
-      expect(m.socios[0]).toMatchObject({ tenantId: 't-1', nip: r.socioNip });
+      await activar(m, giro);
+      expect(m.tenantsService.create.mock.calls[0][0]).toMatchObject({ giro, plan: 'PRUEBA' });
+      const cfg = m.llamadas.find(([o]) => o === 'settings')![2];
+      expect(cfg).toMatchObject({ ivaTasaDefault: '16', preciosIncluyenIva: false, stockPolicy: 'PERMITIR_NEGATIVO' });
+      expect(cfg.posCapabilities).toEqual(configEstructural(giro).posCapabilities);
+      // vacío: ninguna categoría, producto, plan ni socio
+      expect(m.llamadas.filter(([o]) => o !== 'settings')).toHaveLength(0);
     });
 
-    it('el NIP no queda en claro en la prueba guardada ni en ningún log del servicio', async () => {
-      const m = montar();
-      const token = await pedirYObtenerToken(m);
-      const espia = [jest.spyOn(console, 'log'), jest.spyOn(console, 'error'), jest.spyOn(console, 'warn'), jest.spyOn(process.stdout, 'write'), jest.spyOn(process.stderr, 'write')];
-      const r = await m.svc.activar({ token, password: 'MiClaveSegura1' }, AHORA);
-      const escrito = espia.flatMap((e) => e.mock.calls.map((c) => String(c[0]))).join('\n');
-      espia.forEach((e) => e.mockRestore());
-      expect(escrito).not.toContain(r.socioNip);
-      expect(JSON.stringify(m.pruebas.filas)).not.toContain('"' + r.socioNip + '"');
-      expect(JSON.stringify(m.tenants.filas)).not.toContain(r.socioNip);
-      expect(JSON.stringify(m.tenantsService.create.mock.calls)).not.toContain(r.socioNip);
+    it('capacidades por giro: gimnasio con membresías, restaurante con mesas y cocina, tienda y genérico con venta directa', () => {
+      expect(configEstructural('gimnasio').posCapabilities).toEqual({ membresias: true, venta_de_servicio: true });
+      expect(configEstructural('restaurante').posCapabilities).toEqual({ mesas_cuenta_abierta: true, notas_cocina_barra: true });
+      expect(configEstructural('retail').posCapabilities).toEqual({ venta_directa_producto: true });
+      expect(configEstructural('generico').posCapabilities).toEqual({ venta_directa_producto: true });
     });
 
-    it('si la activación falla no se devuelve ningún NIP', async () => {
-      const m = montar({ crearFalla: true });
-      const token = await pedirYObtenerToken(m);
-      const e: any = await m.svc.activar({ token, password: 'MiClaveSegura1' }, AHORA).catch((x) => x);
-      expect(JSON.stringify(e.getResponse())).not.toMatch(/\b\d{4}\b/);
+    it('los giros excluidos (médicos) y los inventados se rechazan al solicitar', async () => {
+      const m = montar();
+      for (const giro of ['medico_dental', 'medico_general', 'inventado', '']) {
+        await expect(m.svc.solicitar(sol({ giro }), '9.9.9.9', AHORA)).rejects.toBeInstanceOf(BadRequestException);
+      }
+      expect(m.pruebas.filas).toHaveLength(0);
+    });
+
+    describe('POST /prueba/datos-ejemplo (opcional, solo SU tenant, una vez)', () => {
+      it.each([['restaurante', 7], ['retail', 7], ['generico', 5]] as const)('%s: siembra su plantilla mínima (%i productos, 5 a 8) solo en su tenant', async (giro, n) => {
+        const m = montar();
+        await activar(m, giro);
+        const t = tenantDe(m);
+        const r = await m.svc.datosEjemplo(t);
+        expect(r).toMatchObject({ giro, productos: n, planes: 0, socios: 0 });
+        expect(r.productos).toBeGreaterThanOrEqual(5);
+        expect(r.productos).toBeLessThanOrEqual(8);
+        expect(r.socioNip).toBeUndefined();
+        expect(m.catalogo.productos.every((p) => p.tenantId === t)).toBe(true);
+        expect(m.catalogo.categorias.every((c) => c.tenantId === t)).toBe(true);
+        expect(m.catalogo.productos).toHaveLength(n);
+      });
+
+      it('gimnasio: la plantilla conocida (2 categorías, 5 productos, 2 planes, 1 socio) y el NIP sale UNA vez, aleatorio y sin guardarse', async () => {
+        const m = montar();
+        await activar(m, 'gimnasio');
+        const t = tenantDe(m);
+        const espia = [jest.spyOn(console, 'log'), jest.spyOn(console, 'error'), jest.spyOn(console, 'warn'), jest.spyOn(process.stdout, 'write'), jest.spyOn(process.stderr, 'write')];
+        const r = await m.svc.datosEjemplo(t);
+        const escrito = espia.flatMap((e) => e.mock.calls.map((c) => String(c[0]))).join('\n');
+        espia.forEach((e) => e.mockRestore());
+        expect(r).toMatchObject({ giro: 'gimnasio', categorias: 2, productos: 5, planes: 2, socios: 1, socioNumero: '1' });
+        expect(r.socioNip).toMatch(/^\d{4}$/);
+        expect(r.socioNip).not.toBe('4321');
+        expect(m.socios).toHaveLength(1);
+        expect(m.socios[0]).toMatchObject({ tenantId: t, nip: r.socioNip });
+        expect(escrito).not.toContain(r.socioNip as string);
+        expect(JSON.stringify(m.pruebas.filas)).not.toContain('"' + r.socioNip + '"');
+        expect(JSON.stringify(m.tenants.filas)).not.toContain(r.socioNip as string);
+      });
+
+      it('una sola vez: con productos o categorías ya creados → 409 y no siembra nada más', async () => {
+        const m = montar();
+        await activar(m, 'retail');
+        const t = tenantDe(m);
+        await m.svc.datosEjemplo(t);
+        const antes = m.catalogo.productos.length;
+        await expect(m.svc.datosEjemplo(t)).rejects.toBeInstanceOf(ConflictException);
+        expect(m.catalogo.productos).toHaveLength(antes);
+        // y si el negocio ya hizo lo suyo a mano, tampoco
+        const m2 = montar();
+        await activar(m2, 'restaurante');
+        m2.catalogo.productos.push({ tenantId: tenantDe(m2), name: 'Mío', price: 10 });
+        await expect(m2.svc.datosEjemplo(tenantDe(m2))).rejects.toBeInstanceOf(ConflictException);
+      });
+
+      it('AISLAMIENTO: dos negocios de giros distintos; cargar el de uno no toca al otro, ni en datos ni en conteos', async () => {
+        const m = montar();
+        await activar(m, 'restaurante', 'a@neg.mx');
+        await activar(m, 'retail', 'b@neg.mx');
+        const [tA, tB] = [tenantDe(m, 0), tenantDe(m, 1)];
+        await m.svc.datosEjemplo(tA);
+        expect(m.catalogo.productos.filter((p) => p.tenantId === tB)).toHaveLength(0);
+        expect(m.catalogo.categorias.filter((c) => c.tenantId === tB)).toHaveLength(0);
+        expect((await m.svc.progreso(tB)).productos).toBe(0);
+        expect((await m.svc.progreso(tB)).puedeCargarEjemplo).toBe(true);
+        expect((await m.svc.progreso(tA)).productos).toBe(7);
+        // toda llamada de siembra llevó el tenant A
+        expect(m.llamadas.filter(([o]) => o === 'producto' || o === 'categoria').every(([, t]) => t === tA)).toBe(true);
+      });
+
+      it('solo una prueba VIVA: un negocio sin prueba, una solicitud pendiente, el interruptor apagado o sin tenant → 404 sin tocar nada', async () => {
+        const m = montar();
+        await expect(m.svc.datosEjemplo('t-que-no-existe')).rejects.toBeInstanceOf(NotFoundException);
+        await expect(m.svc.datosEjemplo(undefined as any)).rejects.toBeInstanceOf(NotFoundException);
+        await pedirYObtenerToken(m); // SOLICITADA, sin tenant
+        await expect(m.svc.datosEjemplo('t-1')).rejects.toBeInstanceOf(NotFoundException);
+        expect(m.catalogo.productos).toHaveLength(0);
+        await activar(m, 'retail', 'c@neg.mx');
+        process.env.PRUEBA_PUBLICA_ACTIVA = 'false';
+        await expect(m.svc.datosEjemplo(tenantDe(m))).rejects.toBeInstanceOf(NotFoundException);
+        await expect(m.svc.progreso(tenantDe(m))).rejects.toBeInstanceOf(NotFoundException);
+      });
+
+      it('si la siembra falla: 503 genérico sin detalles internos', async () => {
+        const m = montar();
+        await activar(m, 'retail');
+        m.categories.create.mockRejectedValueOnce(new Error('boom con detalle interno'));
+        const e: any = await m.svc.datosEjemplo(tenantDe(m)).catch((x) => x);
+        expect(e).toBeInstanceOf(ServiceUnavailableException);
+        expect(JSON.stringify(e.getResponse())).not.toContain('boom');
+      });
+    });
+
+    describe('GET /prueba/progreso: conteos del tenant del token y de nadie más', () => {
+      it('cuenta solo los de su tenant (categorías, productos, usuarios, turnos, cortes, ventas)', async () => {
+        const m = montar();
+        await activar(m, 'retail', 'a@neg.mx');
+        await activar(m, 'restaurante', 'b@neg.mx');
+        const [tA, tB] = [tenantDe(m, 0), tenantDe(m, 1)];
+        m.users.filas.push({ tenantId: tA }, { tenantId: tA }, { tenantId: tB });
+        m.shifts.filas.push({ tenantId: tA, status: 'CERRADO' }, { tenantId: tA, status: 'ABIERTO' }, { tenantId: tB, status: 'CERRADO' });
+        m.sales.filas.push({ tenantId: tA }, { tenantId: tB }, { tenantId: tB });
+        expect(await m.svc.progreso(tA)).toEqual({ categorias: 0, productos: 0, usuarios: 2, turnos: 2, turnosCerrados: 1, ventas: 1, puedeCargarEjemplo: true });
+        expect(await m.svc.progreso(tB)).toEqual({ categorias: 0, productos: 0, usuarios: 1, turnos: 1, turnosCerrados: 1, ventas: 2, puedeCargarEjemplo: true });
+      });
     });
   });
+
 
   describe('estado de MI prueba (GET /prueba/estado)', () => {
     const activa = (m: ReturnType<typeof montar>, tenantId: string, venceEn: Date, estado = 'ACTIVA') => m.pruebas.filas.push({ id: 'p-' + tenantId, tenantId, estado, venceEn, extendida: false });

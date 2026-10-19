@@ -15,12 +15,12 @@ export const MAX_ACTIVAS = 50;
 export const MAX_ALTAS_DIA = 20;
 export const MAX_POR_IP_HORA = 3;
 export const MAX_USUARIOS_PRUEBA = 5;
-/** Giros sin plantilla todavía: solo se les puede pedir un aviso (lista de espera), no una prueba. */
-export const GIROS_PROXIMOS = ['restaurante', 'retail', 'otro'] as const;
+/** Giros sin prueba (los excluidos en giros-prueba.ts y «otro»): solo se les puede pedir un aviso (lista de espera). Hoy la pantalla no lo usa. */
+export const GIROS_PROXIMOS = ['medico_dental', 'medico_general', 'otro'] as const;
 export const MAX_AVISOS_POR_IP_HORA = 5;
 export const MAX_AVISOS_DIA = 200;
-/** Solo los giros que ya tienen plantilla de datos. */
-export const GIROS_PRUEBA = ['gimnasio'] as const;
+/** Giros que se ofrecen en la prueba (el negocio nace vacío salvo lo estructural; los datos de ejemplo son opcionales). Ver giros-prueba.ts. */
+export const GIROS_PRUEBA = ['gimnasio', 'restaurante', 'retail', 'generico'] as const;
 export type GiroPrueba = (typeof GIROS_PRUEBA)[number];
 
 export type EstadoPrueba = 'SOLICITADA' | 'ACTIVA' | 'VENCIDA' | 'CONVERTIDA' | 'PURGADA' | 'FALLIDA';

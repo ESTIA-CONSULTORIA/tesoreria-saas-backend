@@ -7,10 +7,10 @@ import { RequestMethod } from '@nestjs/common';
 import { METHOD_METADATA, PATH_METADATA } from '@nestjs/common/constants';
 
 describe('configuración aprobada', () => {
-  it('30 días, avisos 25/28/30, topes 50/20/3, retención 30 días y solo gimnasio', () => {
+  it('30 días, avisos 25/28/30, topes 50/20/3, retención 30 días y 4 giros', () => {
     expect([DIAS_PRUEBA, MAX_ACTIVAS, MAX_ALTAS_DIA, MAX_POR_IP_HORA, RETENCION_DIAS]).toEqual([30, 50, 20, 3, 30]);
     expect([...DIAS_AVISO]).toEqual([25, 28, 30]);
-    expect([...GIROS_PRUEBA]).toEqual(['gimnasio']);
+    expect([...GIROS_PRUEBA]).toEqual(['gimnasio', 'restaurante', 'retail', 'generico']);
   });
   it('apagado por defecto', () => {
     const v = process.env.PRUEBA_PUBLICA_ACTIVA;
@@ -156,15 +156,22 @@ describe('controlador público', () => {
   it('solicitar y activar son POST públicos; estado es GET y EXIGE sesión (no es público)', () => {
     const p = (m: string) => (PruebaPublicaController.prototype as any)[m];
     expect(Reflect.getMetadata(IS_PUBLIC_KEY, PruebaPublicaController)).toBeUndefined(); // ya no es público a nivel de clase
-    expect(metodos.sort()).toEqual(['activar', 'avisame', 'estado', 'solicitar']);
+    expect(metodos.sort()).toEqual(['activar', 'avisame', 'datosEjemplo', 'estado', 'progreso', 'solicitar']);
     expect(Reflect.getMetadata(IS_PUBLIC_KEY, p('solicitar'))).toBe(true);
     expect(Reflect.getMetadata(IS_PUBLIC_KEY, p('activar'))).toBe(true);
     expect(Reflect.getMetadata(IS_PUBLIC_KEY, p('avisame'))).toBe(true);
     expect(Reflect.getMetadata(IS_PUBLIC_KEY, p('estado'))).toBeUndefined();
+    // progreso y datos-ejemplo: con sesión y SOLO ADMIN; nunca públicos
+    for (const m of ['progreso', 'datosEjemplo']) {
+      expect(Reflect.getMetadata(IS_PUBLIC_KEY, p(m))).toBeUndefined();
+      expect(Reflect.getMetadata('roles', p(m))).toEqual(['ADMIN']);
+    }
+    expect(Reflect.getMetadata(METHOD_METADATA, p('progreso'))).toBe(RequestMethod.GET);
+    expect(Reflect.getMetadata(METHOD_METADATA, p('datosEjemplo'))).toBe(RequestMethod.POST);
     expect(Reflect.getMetadata(METHOD_METADATA, p('solicitar'))).toBe(RequestMethod.POST);
     expect(Reflect.getMetadata(METHOD_METADATA, p('activar'))).toBe(RequestMethod.POST);
     expect(Reflect.getMetadata(METHOD_METADATA, p('estado'))).toBe(RequestMethod.GET);
-    expect(metodos.map((m) => Reflect.getMetadata(PATH_METADATA, p(m))).sort()).toEqual(['activar', 'avisame', 'estado', 'solicitar']);
+    expect(metodos.map((m) => Reflect.getMetadata(PATH_METADATA, p(m))).sort()).toEqual(['activar', 'avisame', 'datos-ejemplo', 'estado', 'progreso', 'solicitar']);
     expect(Reflect.getMetadata(PATH_METADATA, PruebaPublicaController)).toBe('prueba');
   });
 });

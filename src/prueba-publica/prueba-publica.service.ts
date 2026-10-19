@@ -1,6 +1,9 @@
-import { BadRequestException, HttpException, Inject, Injectable, Logger, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
+import { BadRequestException, ConflictException, HttpException, Inject, Injectable, Logger, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { User } from '../users/entities/user.entity';
+import { Shift } from '../pos/entities/shift.entity';
+import { Sale } from '../pos/entities/sale.entity';
 import { PruebaPublica } from './entities/prueba-publica.entity';
 import { Tenant } from '../tenants/entities/tenant.entity';
 import { Company } from '../companies/entities/company.entity';
@@ -20,6 +23,7 @@ import { CAPTCHA_VERIFIER, TENANT_PURGER, type CaptchaVerifier, type TenantPurge
 import { CORREO_PROVIDER, type CorreoProvider } from './correo/correo-provider';
 import { enlaceActivacion, plantillaActivacion } from './correo/plantilla-activacion';
 import { sembrarGimnasio, type DepsPlantilla, type ResultadoPlantilla } from './plantilla-gimnasio';
+import { GIROS_OFRECIDOS, configEstructural, sembrarMinima } from './giros-prueba';
 
 // Prueba pública, PP0 (docs/DISENO-PRUEBA-PUBLICA.md). TODO está detrás de PRUEBA_PUBLICA_ACTIVA (apagado por defecto): apagado, los
 // endpoints responden 404 y no se crea, envía ni borra nada. Un tenant de prueba es un tenant normal (TenantsService.create) con plan PRUEBA.
@@ -42,9 +46,29 @@ export interface SolicitudInput {
 export interface ResultadoActivacion {
   slug: string;
   venceEn: Date;
-  /** NIP en claro del socio de ejemplo, devuelto UNA sola vez en esta respuesta. No se guarda ni se registra en ningún lado. */
-  socioNip: string;
-  socioNumero: string;
+}
+
+/** Resultado de cargar los datos de ejemplo (opcional, desde la guía). Solo el gimnasio trae NIP: se devuelve UNA vez y no se guarda en claro. */
+export interface ResultadoDatosEjemplo {
+  giro: string;
+  categorias: number;
+  productos: number;
+  planes: number;
+  socios: number;
+  socioNip?: string;
+  socioNumero?: string;
+}
+
+/** Avance real del negocio de prueba, para que la guía marque sola los pasos hechos. Solo conteos de ESTE tenant. */
+export interface ProgresoPrueba {
+  categorias: number;
+  productos: number;
+  usuarios: number;
+  turnos: number;
+  turnosCerrados: number;
+  ventas: number;
+  /** true = el negocio sigue vacío y se pueden cargar los datos de ejemplo. */
+  puedeCargarEjemplo: boolean;
 }
 
 export interface EstadoPrueba {
@@ -73,6 +97,9 @@ export class PruebaPublicaService {
     @InjectRepository(Tenant) private tenants: Repository<Tenant>,
     @InjectRepository(Company) private companies: Repository<Company>,
     @InjectRepository(Branch) private branches: Repository<Branch>,
+    @InjectRepository(User) private users: Repository<User>,
+    @InjectRepository(Shift) private shifts: Repository<Shift>,
+    @InjectRepository(Sale) private sales: Repository<Sale>,
     private tenantsService: TenantsService,
     private subscriptions: SubscriptionsService,
     private settings: TenantSettingsService,
@@ -105,7 +132,7 @@ export class PruebaPublicaService {
     if (!esCorreoValido(correo)) throw new BadRequestException('Escribe un correo válido.');
     if (!nombre || nombre.length > 120) throw new BadRequestException('Escribe tu nombre (máx. 120 caracteres).');
     if (!negocio || negocio.length > 120) throw new BadRequestException('Escribe el nombre de tu negocio (máx. 120 caracteres).');
-    if (!(GIROS_PRUEBA as readonly string[]).includes(giro)) throw new BadRequestException('Por ahora la prueba solo está disponible para gimnasio.');
+    if (!(GIROS_PRUEBA as readonly string[]).includes(giro)) throw new BadRequestException('Ese giro no está disponible en la prueba.');
     if (input.aceptaAviso !== true) throw new BadRequestException('Debes aceptar el aviso de privacidad para continuar.');
     const dominio = dominioDe(correo);
     if (esDesechable(dominio)) throw new BadRequestException('Usa un correo de tu negocio o personal, no uno temporal.');
@@ -204,11 +231,12 @@ export class PruebaPublicaService {
       const empresa = (await this.companies.find({ where: { tenantId: tenant.id } as any }))[0];
       const sucursal = empresa ? (await this.branches.find({ where: { companyId: empresa.id } as any }))[0] : null;
       if (!empresa || !sucursal) throw new Error('el tenant de prueba no quedó con empresa y sucursal');
-      const sembrado = await this.sembrar(fila.giro, tenant.id, sucursal.id);
+      // Nace vacío salvo lo estructural: capacidades del giro, IVA 16 % sin incluir y política de existencias. Los datos de ejemplo son opcionales (datosEjemplo).
+      await this.settings.upsert(tenant.id, configEstructural(fila.giro) as any);
       await this.subscriptions.fijarFin(tenant.id, venceEn);
 
       await this.pruebas.update({ id: fila.id } as any, { estado: 'ACTIVA', tenantId: tenant.id, venceEn, correoCifrado: null } as any);
-      return { slug, venceEn, socioNip: sembrado.socioNip, socioNumero: sembrado.socioNumero };
+      return { slug, venceEn };
     } catch (e: any) {
       // Sin detalle al público; el motivo queda en el log del servidor (sin correo ni contraseña).
       this.log.error(`Activación fallida de la prueba ${fila.id}: ${e?.message ?? e}`);
@@ -229,9 +257,51 @@ export class PruebaPublicaService {
     };
   }
 
-  private async sembrar(giro: string, tenantId: string, branchId: string): Promise<ResultadoPlantilla> {
-    if (giro === 'gimnasio') return sembrarGimnasio(this.depsPlantilla(), tenantId, branchId);
-    throw new Error(`No hay plantilla para el giro ${giro}`);
+  // ── 2c. datos de ejemplo (opcional, solo ADMIN, solo dentro de SU tenant, una vez) ──
+  private async filaVigente(tenantId: string) {
+    if (!pruebaPublicaActiva()) throw new NotFoundException();
+    if (!tenantId) throw new NotFoundException();
+    const fila = (await this.pruebas.find({ where: { tenantId } as any })).find((p) => p.estado === 'ACTIVA');
+    if (!fila) throw new NotFoundException(); // no es una prueba viva: no se revela nada
+    return fila;
+  }
+
+  /** Avance del negocio de prueba del tenant del token (conteos, nada de datos). */
+  async progreso(tenantId: string): Promise<ProgresoPrueba> {
+    await this.filaVigente(tenantId);
+    const [categorias, productos, usuarios, turnos, turnosCerrados, ventas] = await Promise.all([
+      this.categories.findAll(undefined, tenantId).then((x: any[]) => x.length),
+      this.products.findAll(undefined, tenantId).then((x: any[]) => x.length),
+      this.users.count({ where: { tenantId } as any }),
+      this.shifts.count({ where: { tenantId } as any }),
+      this.shifts.count({ where: { tenantId, status: 'CERRADO' } as any }),
+      this.sales.count({ where: { tenantId } as any }),
+    ]);
+    return { categorias, productos, usuarios, turnos, turnosCerrados, ventas, puedeCargarEjemplo: categorias === 0 && productos === 0 };
+  }
+
+  /** Siembra la plantilla mínima del giro del tenant del token. Solo si el negocio sigue vacío (sin categorías ni productos): una sola vez. */
+  async datosEjemplo(tenantId: string): Promise<ResultadoDatosEjemplo> {
+    await this.filaVigente(tenantId);
+    const tenant = await this.tenants.findOne({ where: { id: tenantId } as any });
+    const giro = String((tenant as any)?.giro ?? '');
+    if (!(GIROS_OFRECIDOS as readonly string[]).includes(giro)) throw new BadRequestException('Este negocio no tiene datos de ejemplo.');
+    const p = await this.progreso(tenantId);
+    if (!p.puedeCargarEjemplo) throw new ConflictException('Tu negocio ya tiene categorías o productos: los datos de ejemplo solo se cargan en un negocio vacío.');
+    const empresa = (await this.companies.find({ where: { tenantId } as any }))[0];
+    const sucursal = empresa ? (await this.branches.find({ where: { companyId: empresa.id } as any }))[0] : null;
+    if (!sucursal) throw new BadRequestException('Tu negocio no tiene sucursal.');
+    try {
+      if (giro === 'gimnasio') {
+        const r = await sembrarGimnasio(this.depsPlantilla(), tenantId, sucursal.id);
+        return { giro, categorias: r.categorias, productos: r.productos, planes: r.planes, socios: r.socios, socioNip: r.socioNip, socioNumero: r.socioNumero };
+      }
+      const r = await sembrarMinima(this.depsPlantilla(), giro, tenantId, sucursal.id);
+      return { giro, categorias: r.categorias, productos: r.productos, planes: 0, socios: 0 };
+    } catch (e: any) {
+      this.log.error(`No se pudieron cargar los datos de ejemplo del tenant ${tenantId}: ${e?.message ?? e}`);
+      throw new ServiceUnavailableException('No pudimos cargar los datos de ejemplo. Puedes crear tus productos a mano.');
+    }
   }
 
   // ── 2b. estado de MI prueba (autenticado: el tenant sale SIEMPRE del token, nunca de la URL ni del cuerpo) ──
