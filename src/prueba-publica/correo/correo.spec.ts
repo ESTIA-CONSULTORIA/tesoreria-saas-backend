@@ -3,7 +3,7 @@ import { MockCorreoProvider } from './mock-correo.provider';
 import { ResendCorreoProvider } from './resend-correo.provider';
 import { crearCorreoProvider } from './correo-provider.factory';
 import { enlaceActivacion, plantillaActivacion } from './plantilla-activacion';
-import { variablesFaltantes } from '../prueba-publica.config';
+import { DIAS_PRUEBA, variablesFaltantes } from '../prueba-publica.config';
 
 const msg = { para: 'ana@gym.mx', asunto: 'Hola', html: '<p>hola</p>', texto: 'hola', claveIdempotencia: 'prueba-activacion:1' };
 const ENV = { RESEND_API_KEY: 're_llave_secreta_123', CORREO_REMITENTE: 'ESTIA <prueba@mail.ejemplo.mx>' } as NodeJS.ProcessEnv;
@@ -87,6 +87,14 @@ describe('plantilla de activación', () => {
     expect(enlaceActivacion('https://app.x.mx/prueba/activar', 'abc_-')).toBe('https://app.x.mx/prueba/activar#token=abc_-');
     expect(enlaceActivacion('https://app.x.mx/prueba/activar?utm=1#viejo', 't')).toBe('https://app.x.mx/prueba/activar#token=t');
   });
+  it('el correo dice la duración configurada (DIAS_PRUEBA = 30), sin un número fijo', () => {
+    const p = plantillaActivacion({ nombre: 'Ana', enlace: 'https://a.mx/#token=1', avisoUrl: 'https://aviso.mx/' });
+    expect(DIAS_PRUEBA).toBe(30);
+    expect(p.texto).toContain(`(${DIAS_PRUEBA} días)`);
+    expect(p.html).toContain(`(${DIAS_PRUEBA} días)`);
+    expect(p.texto + p.html).not.toMatch(/14/);
+  });
+
   it('escapa HTML en nombre y enlaces', () => {
     const p = plantillaActivacion({ nombre: '"><script>x</script>', enlace: 'https://a.mx/#token=1&b=2', avisoUrl: 'https://aviso.mx/?a=1&b="2"' });
     expect(p.html).not.toContain('<script>');

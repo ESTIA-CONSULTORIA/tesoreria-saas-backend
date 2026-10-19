@@ -1,7 +1,7 @@
 # Proveedor de correo transaccional: Resend vs. Amazon SES vs. Postmark
 
 Fecha de consulta: **2026-10-18**, en los sitios de cada proveedor (enlaces al final). **No se creó ninguna cuenta.** Los precios y límites cambian: confírmalos en el sitio antes de contratar.
-Caso de uso: correo de activación de la prueba pública (1 correo por solicitud; tope aprobado de 20 altas/día, es decir **menos de ~600 correos al mes**), más los correos de aviso de vencimiento (días 10, 13 y 14) que llegarán en PP3.
+Caso de uso: correo de activación de la prueba pública (1 correo por solicitud; tope aprobado de 20 altas/día, es decir **menos de ~600 correos al mes**), más los correos de aviso de vencimiento (días 25, 28 y 30) que llegarán en PP3.
 
 | Criterio | Resend | Amazon SES | Postmark |
 |---|---|---|---|

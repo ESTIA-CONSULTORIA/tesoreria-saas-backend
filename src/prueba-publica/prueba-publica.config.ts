@@ -1,11 +1,14 @@
-// Prueba pública (docs/DISENO-PRUEBA-PUBLICA.md, fase PP0). Decisiones aprobadas: Turnstile, 14 días, topes 50/20/3,
+// Prueba pública (docs/DISENO-PRUEBA-PUBLICA.md, fase PP0). Decisiones aprobadas: Turnstile, 30 días, topes 50/20/3,
 // retención 30 días, solo SOPORTE convierte, solo giros con plantilla.
 
 /** Interruptor general. APAGADO por defecto: sin PRUEBA_PUBLICA_ACTIVA=true los endpoints responden 404, como si no existieran. */
 export const pruebaPublicaActiva = (): boolean => process.env.PRUEBA_PUBLICA_ACTIVA === 'true';
 
 export const PLAN_PRUEBA = 'PRUEBA';
-export const DIAS_PRUEBA = 14;
+/** Única fuente de la duración en el backend: vencimiento, correo de activación y avisos salen de aquí. */
+export const DIAS_PRUEBA = 30;
+/** Días (desde la activación) en que se avisa del vencimiento: 5 días antes, 2 días antes y el último día (25, 28 y 30 con 30 días). Los correos llegan en PP3. */
+export const DIAS_AVISO = [DIAS_PRUEBA - 5, DIAS_PRUEBA - 2, DIAS_PRUEBA] as const;
 export const RETENCION_DIAS = 30; // tras vencer, antes de poder purgar
 export const TOKEN_MINUTOS = 30;
 export const MAX_ACTIVAS = 50;

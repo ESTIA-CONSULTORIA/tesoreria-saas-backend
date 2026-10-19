@@ -12,7 +12,7 @@ export class CreatePruebaPublicaPp01789600000000 implements MigrationInterface {
         await queryRunner.query(`CREATE INDEX IF NOT EXISTS "IDX_pruebas_estado" ON "pruebas_publicas" ("estado", "venceEn")`);
         await queryRunner.query(`CREATE INDEX IF NOT EXISTS "IDX_pruebas_ip" ON "pruebas_publicas" ("ip", "createdAt")`);
         await queryRunner.query(`CREATE INDEX IF NOT EXISTS "IDX_pruebas_tenant" ON "pruebas_publicas" ("tenantId")`);
-        await queryRunner.query(`INSERT INTO "plan" ("code", "name", "monthlyPrice", "maxCompanies", "maxBranches", "maxUsers", "isActive") SELECT 'PRUEBA', 'Prueba pública (14 días)', 0, 1, 1, 5, true WHERE NOT EXISTS (SELECT 1 FROM "plan" WHERE "code" = 'PRUEBA')`);
+        await queryRunner.query(`INSERT INTO "plan" ("code", "name", "monthlyPrice", "maxCompanies", "maxBranches", "maxUsers", "isActive") SELECT 'PRUEBA', 'Prueba pública', 0, 1, 1, 5, true WHERE NOT EXISTS (SELECT 1 FROM "plan" WHERE "code" = 'PRUEBA')`);
         await queryRunner.query(`INSERT INTO "plan_modules" ("planCode", "moduleCode", "included") SELECT 'PRUEBA', 'dashboard', true WHERE NOT EXISTS (SELECT 1 FROM "plan_modules" WHERE "planCode" = 'PRUEBA' AND "moduleCode" = 'dashboard')`);
         await queryRunner.query(`INSERT INTO "plan_modules" ("planCode", "moduleCode", "included") SELECT 'PRUEBA', 'usuarios', true WHERE NOT EXISTS (SELECT 1 FROM "plan_modules" WHERE "planCode" = 'PRUEBA' AND "moduleCode" = 'usuarios')`);
         await queryRunner.query(`INSERT INTO "plan_modules" ("planCode", "moduleCode", "included") SELECT 'PRUEBA', 'empresas', true WHERE NOT EXISTS (SELECT 1 FROM "plan_modules" WHERE "planCode" = 'PRUEBA' AND "moduleCode" = 'empresas')`);

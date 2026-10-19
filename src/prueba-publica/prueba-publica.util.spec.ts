@@ -1,14 +1,15 @@
 import { PLANTILLA_GIMNASIO, sembrarGimnasio } from './plantilla-gimnasio';
 import { dominioDe, esCorreoValido, esDesechable, generarNipSocio, generarToken, hashCorreo, hashToken, ipDe, normalizarCorreo, slugPrueba, validarPassword } from './prueba-publica.util';
-import { GIROS_PRUEBA, MAX_ACTIVAS, MAX_ALTAS_DIA, MAX_POR_IP_HORA, DIAS_PRUEBA, RETENCION_DIAS, pruebaPublicaActiva } from './prueba-publica.config';
+import { DIAS_AVISO, GIROS_PRUEBA, MAX_ACTIVAS, MAX_ALTAS_DIA, MAX_POR_IP_HORA, DIAS_PRUEBA, RETENCION_DIAS, pruebaPublicaActiva } from './prueba-publica.config';
 import { PruebaPublicaController } from './prueba-publica.controller';
 import { IS_PUBLIC_KEY } from '../auth/public.decorator';
 import { RequestMethod } from '@nestjs/common';
 import { METHOD_METADATA, PATH_METADATA } from '@nestjs/common/constants';
 
 describe('configuración aprobada', () => {
-  it('14 días, topes 50/20/3, retención 30 días y solo gimnasio', () => {
-    expect([DIAS_PRUEBA, MAX_ACTIVAS, MAX_ALTAS_DIA, MAX_POR_IP_HORA, RETENCION_DIAS]).toEqual([14, 50, 20, 3, 30]);
+  it('30 días, avisos 25/28/30, topes 50/20/3, retención 30 días y solo gimnasio', () => {
+    expect([DIAS_PRUEBA, MAX_ACTIVAS, MAX_ALTAS_DIA, MAX_POR_IP_HORA, RETENCION_DIAS]).toEqual([30, 50, 20, 3, 30]);
+    expect([...DIAS_AVISO]).toEqual([25, 28, 30]);
     expect([...GIROS_PRUEBA]).toEqual(['gimnasio']);
   });
   it('apagado por defecto', () => {
