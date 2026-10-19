@@ -2,6 +2,7 @@ import { Body, Controller, ForbiddenException, Get, Post, Request } from '@nestj
 import { Throttle } from '@nestjs/throttler';
 import { Public } from '../auth/public.decorator';
 import { PruebaPublicaService } from './prueba-publica.service';
+import { ListaEsperaService } from './lista-espera.service';
 import { ipDe } from './prueba-publica.util';
 
 // Endpoints de la prueba. solicitar y activar son PÚBLICOS; estado exige sesión y solo ve la prueba de SU tenant (el del token).
@@ -9,7 +10,7 @@ import { ipDe } from './prueba-publica.util';
 // solo SOPORTE las verá, en una fase posterior.
 @Controller('prueba')
 export class PruebaPublicaController {
-  constructor(private service: PruebaPublicaService) {}
+  constructor(private service: PruebaPublicaService, private lista: ListaEsperaService) {}
 
   // Freno por IP además de los topes propios del servicio.
   @Public()
@@ -17,6 +18,14 @@ export class PruebaPublicaController {
   @Post('solicitar')
   solicitar(@Body() body: any, @Request() req: any) {
     return this.service.solicitar(body ?? {}, ipDe(req));
+  }
+
+  // «Avísame cuando esté listo mi giro»: solo guarda la solicitud de aviso (sin cuenta ni negocio). Con captcha, topes y 404 si está apagada.
+  @Public()
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @Post('avisame')
+  avisame(@Body() body: any, @Request() req: any) {
+    return this.lista.avisar(body ?? {}, ipDe(req));
   }
 
   @Public()
