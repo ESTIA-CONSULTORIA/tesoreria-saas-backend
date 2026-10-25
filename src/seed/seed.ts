@@ -1,4 +1,5 @@
 import { DataSource, IsNull, In } from 'typeorm';
+import { sembrarSolicitudesRHDemo } from './seed-rh-solicitudes';
 import * as bcrypt from 'bcrypt';
 
 function randomDateDistributed(): Date {
@@ -47,10 +48,7 @@ export async function seedDatabase(dataSource: DataSource) {
   const inventoryRecordsRepository = dataSource.getRepository('Inventory');
   const subscriptionRepository = dataSource.getRepository('Subscription');
   const areasRepository = dataSource.getRepository('Area');
-  const permissionsRepository = dataSource.getRepository('Permission');
   const tablesRepository = dataSource.getRepository('Table');
-  const moduleRepo = dataSource.getRepository('Module');
-  const planModuleRepo = dataSource.getRepository('PlanModule');
   const tenantModuleRepo = dataSource.getRepository('TenantModule');
 
   // Limpiar testTenant y todos sus datos
@@ -149,16 +147,7 @@ export async function seedDatabase(dataSource: DataSource) {
   // Crear usuario de prueba con rol ADMIN (administrador del cliente)
   const existingAdminUser = await usersRepository.findOne({ where: { email: 'admin@empresademo.com' } });
   
-  // Buscar o crear rol ADMIN (necesario para PARTE 1)
-  let adminRole = await rolesRepository.findOne({ where: { code: 'ADMIN' } });
-  if (!adminRole) {
-    adminRole = await rolesRepository.save({
-      code: 'ADMIN',
-      name: 'Administrador',
-      description: 'Administrador del cliente (tenant)',
-      isActive: true,
-    });
-  }
+  const adminRole = await rolesRepository.findOne({ where: { code: 'ADMIN' } });
   
   if (!existingAdminUser) {
     // Crear usuario admin del cliente
@@ -167,7 +156,7 @@ export async function seedDatabase(dataSource: DataSource) {
       email: 'admin@empresademo.com',
       password: hashedPassword,
       name: 'Administrador Cliente',
-      roleId: adminRole.id,
+      roleId: adminRole!.id,
       roleCode: 'ADMIN',
       tenantId: testTenant.id, // Asociado al tenant de prueba
       isActive: true,
@@ -207,36 +196,10 @@ export async function seedDatabase(dataSource: DataSource) {
     console.log('✅ Suscripción creada para tenant demo');
   }
 
-  // Crear roles adicionales si no existen
-  let gerenteRole = await rolesRepository.findOne({ where: { code: 'GERENTE' } });
-  if (!gerenteRole) {
-    gerenteRole = await rolesRepository.save({
-      code: 'GERENTE',
-      name: 'Gerente',
-      description: 'Gerente de sucursal',
-      isActive: true,
-    });
-  }
-
-  let cajeroRole = await rolesRepository.findOne({ where: { code: 'CAJERO' } });
-  if (!cajeroRole) {
-    cajeroRole = await rolesRepository.save({
-      code: 'CAJERO',
-      name: 'Cajero',
-      description: 'Cajero de POS',
-      isActive: true,
-    });
-  }
-
-  let contadorRole = await rolesRepository.findOne({ where: { code: 'CONTADOR' } });
-  if (!contadorRole) {
-    contadorRole = await rolesRepository.save({
-      code: 'CONTADOR',
-      name: 'Contador',
-      description: 'Contador/Finanzas',
-      isActive: true,
-    });
-  }
+  // Los roles base los garantiza seedCatalogos() (corre siempre, también en producción).
+  const gerenteRole = await rolesRepository.findOne({ where: { code: 'GERENTE' } });
+  const cajeroRole = await rolesRepository.findOne({ where: { code: 'CAJERO' } });
+  const contadorRole = await rolesRepository.findOne({ where: { code: 'CONTADOR' } });
 
   // Crear usuarios demo para el tenant "Grupo Empresarial Demo"
   const demoUsers = [
@@ -255,7 +218,7 @@ export async function seedDatabase(dataSource: DataSource) {
         email: userData.email,
         password: hashedPassword,
         name: userData.name,
-        roleId: userData.role.id,
+        roleId: userData.role!.id,
         roleCode: userData.roleCode,
         tenantId: demoTenant.id,
         isActive: true,
@@ -271,28 +234,6 @@ export async function seedDatabase(dataSource: DataSource) {
     }
   }
 
-  // Sembrar 14 permisos por rol si aún no los tienen (idempotente)
-  const SEED_MODULES = [
-    'DASHBOARD', 'COMPANIES', 'BRANCHES', 'USERS', 'ROLES',
-    'BANKS', 'MOVEMENTS', 'TRANSFERS', 'REPORTS', 'POS',
-    'TREASURY', 'RECONCILIATION', 'ADMINISTRATION', 'SETTINGS',
-  ];
-  const allRolesForPerms = await rolesRepository.find();
-  for (const role of allRolesForPerms) {
-    const existingCount = await permissionsRepository.count({ where: { roleId: role.id } });
-    if (existingCount === 0) {
-      const perms = SEED_MODULES.map(module => ({
-        module,
-        canView: true,
-        canCreate: false,
-        canEdit: false,
-        canDelete: false,
-        roleId: role.id,
-      }));
-      await permissionsRepository.save(perms);
-      console.log(`✅ 14 permisos creados para rol ${role.code}`);
-    }
-  }
 
   // Buscar o crear empresa El Sazón dinámicamente para usarla en usuarios y HR
   const sazonCompany = await companiesRepository.findOne({
@@ -343,7 +284,7 @@ export async function seedDatabase(dataSource: DataSource) {
         email: userData.email,
         password: hashedPassword,
         name: userData.name,
-        roleId: userData.role.id,
+        roleId: userData.role!.id,
         roleCode: userData.roleCode,
         tenantId: demoTenant.id,
         companyId: userData.companyId,
@@ -2473,50 +2414,12 @@ export async function seedDatabase(dataSource: DataSource) {
       }
       console.log('✅ Asistencias de los últimos 5 días hábiles creadas');
 
-      // ─── Solicitudes de vacaciones ─────────────────────────────────
+      // ─── Solicitudes de RH de ejemplo (una sola vez por tenant; ver seed-rh-solicitudes.ts) ───
       const juan   = savedEmps.find(e => e.nombre === 'Juan López');
       const carlos = savedEmps.find(e => e.nombre === 'Carlos Mendoza');
       const maria  = savedEmps.find(e => e.nombre === 'María García');
-
-      if (juan) {
-        const existsJuanVac = await vacationRepo.findOne({ where: { employeeId: juan.id, startDate: '2024-12-15' as any } });
-        if (!existsJuanVac) {
-          await vacationRepo.save({
-            tenantId: demoTenant.id, employeeId: juan.id,
-            startDate: '2024-12-15' as any, endDate: '2024-12-19' as any,
-            daysRequested: 5, reason: 'Vacaciones de fin de año', status: 'PENDIENTE',
-          });
-          console.log('✅ Solicitud de vacaciones Juan López creada');
-        }
-      }
-
-      if (carlos) {
-        const existsCarlosVac = await vacationRepo.findOne({ where: { employeeId: carlos.id, startDate: '2025-01-20' as any } });
-        if (!existsCarlosVac) {
-          await vacationRepo.save({
-            tenantId: demoTenant.id, employeeId: carlos.id,
-            startDate: '2025-01-20' as any, endDate: '2025-01-24' as any,
-            daysRequested: 5, reason: 'Vacaciones enero', status: 'APROBADA',
-          });
-          console.log('✅ Solicitud de vacaciones Carlos Mendoza creada');
-        }
-      }
-
-      // ─── Solicitud de permiso María ─────────────────────────────────
-      if (maria) {
-        const tomorrow = new Date();
-        tomorrow.setDate(tomorrow.getDate() + 1);
-        const tomorrowStr = tomorrow.toISOString().split('T')[0];
-        const existsMariaPerm = await permissionRepo.findOne({ where: { employeeId: maria.id, date: tomorrowStr as any } });
-        if (!existsMariaPerm) {
-          await permissionRepo.save({
-            tenantId: demoTenant.id, employeeId: maria.id,
-            date: tomorrowStr as any, hours: 4, type: 'MEDICO',
-            reason: 'Cita médica', status: 'PENDIENTE',
-          });
-          console.log('✅ Solicitud de permiso María García creada');
-        }
-      }
+      const solicitudesCreadas = await sembrarSolicitudesRHDemo(vacationRepo, permissionRepo, { tenantId: demoTenant.id, juan, carlos, maria });
+      if (solicitudesCreadas > 0) console.log(`✅ ${solicitudesCreadas} solicitud(es) de RH de ejemplo creadas`);
 
       console.log('✅ HR DEMO DATA completado: 6 empleados, 18 docs, 3 turnos, asistencias y solicitudes');
     }
@@ -2842,6 +2745,96 @@ export async function seedDatabase(dataSource: DataSource) {
     console.log('⚠️ Error en P5-04 ventas POS:', p504Err.message);
   }
 
+
+  // Resumen final del seed
+  const totalCompanies = await companiesRepository.count({ where: { tenantId: demoTenant.id } });
+  const totalBranches = await branchesRepository.count();
+  const totalBanks = await banksRepository.count();
+  const totalMovements = await movementsRepository.count();
+  const totalSuppliers = await suppliersRepository.count({ where: { tenantId: demoTenant.id } });
+  const totalFamilias = await familiasRepository.count();
+  const totalInsumos = await insumosRepository.count();
+  const totalRecipes = await recipesRepository.count();
+  const totalProducts = await productsRepository.count();
+  const totalPurchaseOrders = await purchaseOrdersRepository.count();
+  const totalInvoices = await purchaseInvoicesRepository.count();
+  const totalInventoryRecords = await inventoryRecordsRepository.count();
+  const totalAlmacenes = await dataSource.getRepository('Almacen').count({ where: { tenantId: demoTenant.id } });
+  const totalPaymentSchedules = await dataSource.getRepository('PaymentSchedule').count({ where: { tenantId: demoTenant.id } });
+  const totalSales = await dataSource.getRepository('Sale').count({ where: { tenantId: demoTenant.id } });
+
+
+  console.log('═══════════════════════════════════════');
+  console.log('✅ SEED COMPLETADO');
+  console.log('═══════════════════════════════════════');
+  console.log(`📊 Resumen de datos creados:`);
+  console.log(`   - Tenant Demo: Grupo Empresarial Demo (BUSINESS)`);
+  console.log(`   - Usuarios Demo: 4 (admin, gerente, cajero, contador)`);
+  console.log(`   - Empresas: ${totalCompanies}`);
+  console.log(`   - Sucursales: ${totalBranches}`);
+  console.log(`   - Cuentas bancarias: ${totalBanks}`);
+  console.log(`   - Movimientos: ${totalMovements}`);
+  console.log(`   - Proveedores (demoTenant): ${totalSuppliers}`);
+  console.log(`   - Almacenes: ${totalAlmacenes}`);
+  console.log(`   - Pagos programados: ${totalPaymentSchedules}`);
+  console.log(`   - Ventas POS: ${totalSales}`);
+  console.log(`   - Familias de insumos: ${totalFamilias}`);
+  console.log(`   - Insumos: ${totalInsumos}`);
+  console.log(`   - Recetas: ${totalRecipes}`);
+  console.log(`   - Productos POS: ${totalProducts}`);
+  console.log(`   - Órdenes de compra: ${totalPurchaseOrders}`);
+  console.log(`   - Facturas de compra: ${totalInvoices}`);
+  console.log(`   - Registros de inventario: ${totalInventoryRecords}`);
+  console.log('═══════════════════════════════════════');
+}
+
+/**
+ * Datos ESTRUCTURALES que el sistema necesita en cualquier entorno (también producción): roles base,
+ * permisos por rol, catálogo de módulos, plan_modules y conceptos globales de nómina. Todo es
+ * idempotente (solo inserta lo que falta) y no crea usuarios, tenants ni datos de ejemplo.
+ * Se separó de seedDatabase() para que producción pueda arrancar sin sembrar la demo.
+ */
+export async function seedCatalogos(dataSource: DataSource) {
+  const rolesRepository = dataSource.getRepository('Role');
+  const permissionsRepository = dataSource.getRepository('Permission');
+  const moduleRepo = dataSource.getRepository('Module');
+  const planModuleRepo = dataSource.getRepository('PlanModule');
+
+  const ROLES_BASE = [
+    { code: 'SOPORTE', name: 'Soporte', description: 'Acceso total al sistema (proveedor del sistema)' },
+    { code: 'ADMIN', name: 'Administrador', description: 'Administrador del cliente (tenant)' },
+    { code: 'GERENTE', name: 'Gerente', description: 'Gerente de sucursal' },
+    { code: 'CAJERO', name: 'Cajero', description: 'Cajero de POS' },
+    { code: 'CONTADOR', name: 'Contador', description: 'Contador/Finanzas' },
+  ];
+  for (const r of ROLES_BASE) {
+    const exists = await rolesRepository.findOne({ where: { code: r.code } });
+    if (!exists) await rolesRepository.save({ ...r, isActive: true });
+  }
+
+  // Sembrar 14 permisos por rol si aún no los tienen (idempotente)
+  const SEED_MODULES = [
+    'DASHBOARD', 'COMPANIES', 'BRANCHES', 'USERS', 'ROLES',
+    'BANKS', 'MOVEMENTS', 'TRANSFERS', 'REPORTS', 'POS',
+    'TREASURY', 'RECONCILIATION', 'ADMINISTRATION', 'SETTINGS',
+  ];
+  const allRolesForPerms = await rolesRepository.find();
+  for (const role of allRolesForPerms) {
+    const existingCount = await permissionsRepository.count({ where: { roleId: role.id } });
+    if (existingCount === 0) {
+      const perms = SEED_MODULES.map(module => ({
+        module,
+        canView: true,
+        canCreate: false,
+        canEdit: false,
+        canDelete: false,
+        roleId: role.id,
+      }));
+      await permissionsRepository.save(perms);
+      console.log(`✅ 14 permisos creados para rol ${role.code}`);
+    }
+  }
+
   // ── Conceptos globales de nómina ESTIA ──
   try {
     const conceptRepo = dataSource.getRepository('PayrollConceptTemplate');
@@ -2871,23 +2864,6 @@ export async function seedDatabase(dataSource: DataSource) {
   } catch (e: any) {
     console.log('⚠️ Error sembrando conceptos globales:', e.message);
   }
-
-  // Resumen final del seed
-  const totalCompanies = await companiesRepository.count({ where: { tenantId: demoTenant.id } });
-  const totalBranches = await branchesRepository.count();
-  const totalBanks = await banksRepository.count();
-  const totalMovements = await movementsRepository.count();
-  const totalSuppliers = await suppliersRepository.count({ where: { tenantId: demoTenant.id } });
-  const totalFamilias = await familiasRepository.count();
-  const totalInsumos = await insumosRepository.count();
-  const totalRecipes = await recipesRepository.count();
-  const totalProducts = await productsRepository.count();
-  const totalPurchaseOrders = await purchaseOrdersRepository.count();
-  const totalInvoices = await purchaseInvoicesRepository.count();
-  const totalInventoryRecords = await inventoryRecordsRepository.count();
-  const totalAlmacenes = await dataSource.getRepository('Almacen').count({ where: { tenantId: demoTenant.id } });
-  const totalPaymentSchedules = await dataSource.getRepository('PaymentSchedule').count({ where: { tenantId: demoTenant.id } });
-  const totalSales = await dataSource.getRepository('Sale').count({ where: { tenantId: demoTenant.id } });
 
   // ═══════════════════════════════════════════════════════════════
   // MÓDULOS: catálogo y plan_modules
@@ -2989,27 +2965,4 @@ export async function seedDatabase(dataSource: DataSource) {
   } catch (modErr) {
     console.log('⚠️ Seed de módulos omitido (tablas no creadas aún):', modErr.message);
   }
-
-  console.log('═══════════════════════════════════════');
-  console.log('✅ SEED COMPLETADO');
-  console.log('═══════════════════════════════════════');
-  console.log(`📊 Resumen de datos creados:`);
-  console.log(`   - Tenant Demo: Grupo Empresarial Demo (BUSINESS)`);
-  console.log(`   - Usuarios Demo: 4 (admin, gerente, cajero, contador)`);
-  console.log(`   - Empresas: ${totalCompanies}`);
-  console.log(`   - Sucursales: ${totalBranches}`);
-  console.log(`   - Cuentas bancarias: ${totalBanks}`);
-  console.log(`   - Movimientos: ${totalMovements}`);
-  console.log(`   - Proveedores (demoTenant): ${totalSuppliers}`);
-  console.log(`   - Almacenes: ${totalAlmacenes}`);
-  console.log(`   - Pagos programados: ${totalPaymentSchedules}`);
-  console.log(`   - Ventas POS: ${totalSales}`);
-  console.log(`   - Familias de insumos: ${totalFamilias}`);
-  console.log(`   - Insumos: ${totalInsumos}`);
-  console.log(`   - Recetas: ${totalRecipes}`);
-  console.log(`   - Productos POS: ${totalProducts}`);
-  console.log(`   - Órdenes de compra: ${totalPurchaseOrders}`);
-  console.log(`   - Facturas de compra: ${totalInvoices}`);
-  console.log(`   - Registros de inventario: ${totalInventoryRecords}`);
-  console.log('═══════════════════════════════════════');
 }

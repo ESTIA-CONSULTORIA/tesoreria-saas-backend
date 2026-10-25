@@ -12,6 +12,7 @@ import { AttendanceAudit } from './entities/attendance-audit.entity';
 import { Branch } from '../branches/entities/branch.entity';
 import { OcrService } from '../ocr/ocr.service';
 import { StorageService } from '../storage/storage.service';
+import { FiltrosSolicitudes, parseFiltrosSolicitudes } from './pending-requests.query';
 
 function haversineMeters(lat1: number, lon1: number, lat2: number, lon2: number): number {
   const R = 6371000;
@@ -407,11 +408,60 @@ export class HrService {
     return this.vacRepo.find({ where: { employeeId }, order: { createdAt: 'DESC' } });
   }
 
-  findPendingRequests(tenantId: string): Promise<{ vacaciones: VacationRequest[]; permisos: PermissionRequest[] }> {
-    return Promise.all([
-      this.vacRepo.find({ where: { tenantId, status: 'PENDIENTE' }, order: { createdAt: 'ASC' } }),
-      this.permRepo.find({ where: { tenantId, status: 'PENDIENTE' }, order: { createdAt: 'ASC' } }),
-    ]).then(([vacaciones, permisos]) => ({ vacaciones, permisos }));
+  // Solicitudes de vacaciones y permisos para la pantalla de RH. tenantId viene SIEMPRE del token (el controlador lo
+  // resuelve con tenantDeSesion; undefined = SOPORTE). Cada lista se pagina por separado con el mismo page/limit y
+  // trae nombre y puesto del empleado (antes solo el id). Orden: empleado y luego fecha, para que las de una misma
+  // persona queden contiguas y la pantalla pueda agruparlas.
+  async findPendingRequests(tenantId: string | undefined, filtros: FiltrosSolicitudes = parseFiltrosSolicitudes()) {
+    const { estado, desde, hasta, employeeId, page, limit } = filtros;
+    const base = (alias: string, repo: Repository<any>) => {
+      const qb = repo.createQueryBuilder(alias);
+      if (tenantId) qb.andWhere(`${alias}.tenantId = :tenantId`, { tenantId });
+      if (estado) qb.andWhere(`${alias}.status = :estado`, { estado });
+      if (employeeId) qb.andWhere(`${alias}.employeeId = :employeeId`, { employeeId });
+      return qb;
+    };
+
+    const vacQb = base('v', this.vacRepo);
+    // Vacaciones: cuenta si su rango se traslapa con [desde, hasta].
+    if (desde) vacQb.andWhere('v.endDate >= :desde', { desde });
+    if (hasta) vacQb.andWhere('v.startDate <= :hasta', { hasta });
+    vacQb.orderBy('v.employeeId', 'ASC').addOrderBy('v.startDate', 'ASC').addOrderBy('v.id', 'ASC');
+
+    const permQb = base('p', this.permRepo);
+    if (desde) permQb.andWhere('p.date >= :desde', { desde });
+    if (hasta) permQb.andWhere('p.date <= :hasta', { hasta });
+    permQb.orderBy('p.employeeId', 'ASC').addOrderBy('p.date', 'ASC').addOrderBy('p.id', 'ASC');
+
+    const skip = (page - 1) * limit;
+    const [[vacaciones, totalVacaciones], [permisos, totalPermisos]] = await Promise.all([
+      vacQb.skip(skip).take(limit).getManyAndCount(),
+      permQb.skip(skip).take(limit).getManyAndCount(),
+    ]);
+
+    const ids = [...new Set([...vacaciones, ...permisos].map((r) => r.employeeId).filter(Boolean))];
+    const empleados = ids.length
+      ? await this.empRepo.find({ where: { id: In(ids), ...(tenantId ? { tenantId } : {}) } })
+      : [];
+    const porId = new Map(empleados.map((e) => [e.id, e]));
+    const conEmpleado = <T extends { employeeId: string }>(r: T) => {
+      const e = porId.get(r.employeeId);
+      return {
+        ...r,
+        employeeNombre: e ? [e.nombre, e.apellidos].filter(Boolean).join(' ').trim() : null,
+        employeePuesto: e?.puesto ?? null,
+      };
+    };
+
+    return {
+      vacaciones: vacaciones.map(conEmpleado),
+      permisos: permisos.map(conEmpleado),
+      totalVacaciones,
+      totalPermisos,
+      total: totalVacaciones + totalPermisos,
+      page,
+      limit,
+    };
   }
 
   async approveVacation(id: string, approvedBy: string, responseNote?: string): Promise<VacationRequest> {
