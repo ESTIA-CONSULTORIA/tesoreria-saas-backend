@@ -1,4 +1,5 @@
 import { tenantDeSesion } from '../auth/tenant-access.util';
+import { parseFiltrosSolicitudes } from './pending-requests.query';
 import { Body, Controller, Delete, Get, Headers, Param, Patch, Post, Put, Query, Request } from '@nestjs/common';
 import { HrService } from './hr.service';
 import { Modulo } from '../auth/modulo.decorator';
@@ -122,9 +123,9 @@ export class HrController {
 
   // Pending requests (admin view)
   @Get('requests/pending')
-  getPending(@Request() req?: any) {
-    const tenantId = tenantDeSesion(req) as string; // undefined = SOPORTE (sin acotar)
-    return this.service.findPendingRequests(tenantId);
+  getPending(@Query() query: Record<string, string>, @Request() req?: any) {
+    const tenantId = tenantDeSesion(req); // del token; undefined = SOPORTE (sin acotar)
+    return this.service.findPendingRequests(tenantId, parseFiltrosSolicitudes(query));
   }
 
   // Vacation requests

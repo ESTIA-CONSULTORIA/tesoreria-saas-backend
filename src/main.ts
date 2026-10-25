@@ -1,7 +1,8 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { getDataSourceToken } from '@nestjs/typeorm';
-import { seedDatabase } from './seed/seed';
+import { seedDatabase, seedCatalogos } from './seed/seed';
+import { planDeSeed } from './seed/seed-guard';
 import { JwtMiddleware } from './auth/jwt.middleware';
 import * as bodyParser from 'body-parser';
 import cookieParser from 'cookie-parser';
@@ -59,8 +60,15 @@ async function bootstrap() {
 
   // Ejecutar seed — errores no deben bloquear el arranque del servidor
   const dataSource = app.get(getDataSourceToken());
+  // En producción solo se siembran los catálogos estructurales; la demo (usuarios con contraseñas conocidas,
+  // tenants y datos de ejemplo) requiere SEED_DEMO_EN_PRODUCCION=true.
   try {
-    await seedDatabase(dataSource);
+    if (planDeSeed() === 'demo-completo') {
+      await seedDatabase(dataSource);
+    } else {
+      console.log('ℹ️ Producción: seed de demo omitido (SEED_DEMO_EN_PRODUCCION != true); solo catálogos');
+      await seedCatalogos(dataSource);
+    }
   } catch (seedErr: any) {
     console.error('⚠️ Seed falló pero el servidor continuará:', seedErr?.message ?? seedErr);
   }
