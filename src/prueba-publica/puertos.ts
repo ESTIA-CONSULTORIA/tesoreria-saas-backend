@@ -1,4 +1,4 @@
-// Puertos de la prueba pública: lo externo (Turnstile y borrado físico; el correo vive en ./correo) entra por aquí y se prueba con dobles.
+// Puertos de la prueba pública: lo externo (Turnstile y borrado físico, que vive en purgador-sql.ts; el correo vive en ./correo) entra por aquí y se prueba con dobles.
 
 export const CAPTCHA_VERIFIER = Symbol('CAPTCHA_VERIFIER');
 export interface CaptchaVerifier {
@@ -6,9 +6,17 @@ export interface CaptchaVerifier {
 }
 
 export const TENANT_PURGER = Symbol('TENANT_PURGER');
+/** Bitácora de una purga: solo conteos por tabla, NUNCA datos personales. */
+export interface ResultadoPurgaTenant {
+  tablas: Record<string, number>;
+  filas: number;
+}
 export interface TenantPurger {
-  /** Borra TODOS los datos del tenant. Solo se invoca para pruebas VENCIDAS con plan PRUEBA y pasada la retención. */
-  purgarTenant(tenantId: string): Promise<void>;
+  /**
+   * Borra TODOS los datos del tenant (menos el registro de aceptación del aviso de privacidad, que vive en pruebas_publicas). Solo se invoca para
+   * pruebas VENCIDAS (o FALLIDAS) con plan PRUEBA y pasada la retención; el purgador lo vuelve a comprobar por su cuenta. Todo o nada.
+   */
+  purgarTenant(tenantId: string, ahora?: Date): Promise<ResultadoPurgaTenant | void>;
 }
 
 // ── Adaptadores de PP0 ──
@@ -32,9 +40,3 @@ export class TurnstileVerifier implements CaptchaVerifier {
   }
 }
 
-/** PP0: el borrado físico llega con PP3. Falla ruidosamente en lugar de fingir que borró. */
-export class PurgadorPendiente implements TenantPurger {
-  async purgarTenant(): Promise<void> {
-    throw new Error('La purga física de un tenant de prueba se implementa en PP3.');
-  }
-}

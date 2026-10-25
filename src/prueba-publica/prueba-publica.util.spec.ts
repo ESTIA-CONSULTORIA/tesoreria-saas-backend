@@ -156,7 +156,7 @@ describe('controlador público', () => {
   it('solicitar y activar son POST públicos; estado es GET y EXIGE sesión (no es público)', () => {
     const p = (m: string) => (PruebaPublicaController.prototype as any)[m];
     expect(Reflect.getMetadata(IS_PUBLIC_KEY, PruebaPublicaController)).toBeUndefined(); // ya no es público a nivel de clase
-    expect(metodos.sort()).toEqual(['activar', 'avisame', 'datosEjemplo', 'estado', 'progreso', 'solicitar']);
+    expect(metodos.sort()).toEqual(['activar', 'avisame', 'datosEjemplo', 'estado', 'progreso', 'purgaEnsayo', 'solicitar']);
     expect(Reflect.getMetadata(IS_PUBLIC_KEY, p('solicitar'))).toBe(true);
     expect(Reflect.getMetadata(IS_PUBLIC_KEY, p('activar'))).toBe(true);
     expect(Reflect.getMetadata(IS_PUBLIC_KEY, p('avisame'))).toBe(true);
@@ -166,12 +166,16 @@ describe('controlador público', () => {
       expect(Reflect.getMetadata(IS_PUBLIC_KEY, p(m))).toBeUndefined();
       expect(Reflect.getMetadata('roles', p(m))).toEqual(['ADMIN']);
     }
+    // el ensayo de la purga: con sesión y SOLO SOPORTE; nunca público
+    expect(Reflect.getMetadata(IS_PUBLIC_KEY, p('purgaEnsayo'))).toBeUndefined();
+    expect(Reflect.getMetadata('roles', p('purgaEnsayo'))).toEqual(['SOPORTE']);
+    expect(Reflect.getMetadata(METHOD_METADATA, p('purgaEnsayo'))).toBe(RequestMethod.GET);
     expect(Reflect.getMetadata(METHOD_METADATA, p('progreso'))).toBe(RequestMethod.GET);
     expect(Reflect.getMetadata(METHOD_METADATA, p('datosEjemplo'))).toBe(RequestMethod.POST);
     expect(Reflect.getMetadata(METHOD_METADATA, p('solicitar'))).toBe(RequestMethod.POST);
     expect(Reflect.getMetadata(METHOD_METADATA, p('activar'))).toBe(RequestMethod.POST);
     expect(Reflect.getMetadata(METHOD_METADATA, p('estado'))).toBe(RequestMethod.GET);
-    expect(metodos.map((m) => Reflect.getMetadata(PATH_METADATA, p(m))).sort()).toEqual(['activar', 'avisame', 'datos-ejemplo', 'estado', 'progreso', 'solicitar']);
+    expect(metodos.map((m) => Reflect.getMetadata(PATH_METADATA, p(m))).sort()).toEqual(['activar', 'avisame', 'datos-ejemplo', 'estado', 'progreso', 'purga/ensayo', 'solicitar']);
     expect(Reflect.getMetadata(PATH_METADATA, PruebaPublicaController)).toBe('prueba');
   });
 });

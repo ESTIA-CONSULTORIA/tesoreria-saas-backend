@@ -1,4 +1,4 @@
-import { Body, Controller, ForbiddenException, Get, Post, Request, UseGuards } from '@nestjs/common';
+import { Body, Controller, ForbiddenException, Get, NotFoundException, Post, Request, UseGuards } from '@nestjs/common';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 import { Throttle } from '@nestjs/throttler';
@@ -6,6 +6,7 @@ import { Public } from '../auth/public.decorator';
 import { PruebaPublicaService } from './prueba-publica.service';
 import { ListaEsperaService } from './lista-espera.service';
 import { ipDe } from './prueba-publica.util';
+import { pruebaPublicaActiva } from './prueba-publica.config';
 
 // Endpoints de la prueba. solicitar y activar son PÚBLICOS; estado exige sesión y solo ve la prueba de SU tenant (el del token).
 // Con PRUEBA_PUBLICA_ACTIVA apagado (por defecto) los tres responden 404 y no hacen nada. No hay ninguna lectura pública ni listados:
@@ -43,6 +44,15 @@ export class PruebaPublicaController {
     const tenantId = req?.user?.tenantId;
     if (!tenantId) throw new ForbiddenException('Se requiere un negocio (tenant) en la sesión.');
     return this.service.estado(tenantId);
+  }
+
+  // ENSAYO de la purga para SOPORTE: solo LISTA qué se purgaría (ids de prueba y de tenant, sin datos personales) y qué está en riesgo del plazo de 90 días. No borra nada.
+  @UseGuards(RolesGuard)
+  @Roles('SOPORTE')
+  @Get('purga/ensayo')
+  async purgaEnsayo() {
+    if (!pruebaPublicaActiva()) throw new NotFoundException();
+    return this.service.purgar(new Date(), { ensayo: true });
   }
 
   // Avance real de MI negocio de prueba (conteos) para que la guía marque sola los pasos. Solo ADMIN; el tenant es SIEMPRE el del token.

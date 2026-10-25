@@ -16,7 +16,7 @@ import { CategoriesService } from '../pos/categories.service';
 import { MembresiasService } from '../membresias/membresias.service';
 import { cifrarSecreto, descifrarSecreto } from '../facturacion/csd-crypto';
 import {
-  DIAS_PRUEBA, GIROS_PRUEBA, MAX_ACTIVAS, MAX_ALTAS_DIA, MAX_POR_IP_HORA, PLAN_PRUEBA, RETENCION_DIAS, TOKEN_MINUTOS, pruebaPublicaActiva, variablesFaltantes,
+  DIAS_ALERTA_PURGA, DIAS_PRUEBA, GIROS_PRUEBA, MAX_ACTIVAS, MAX_ALTAS_DIA, MAX_POR_IP_HORA, PLAN_PRUEBA, PURGA_LOTE, RETENCION_DIAS, TOKEN_MINUTOS, pruebaPublicaActiva, variablesFaltantes,
 } from './prueba-publica.config';
 import { dominioDe, esCorreoValido, esDesechable, generarToken, hashCorreo, hashToken, normalizarCorreo, slugPrueba, validarPassword } from './prueba-publica.util';
 import { CAPTCHA_VERIFIER, TENANT_PURGER, type CaptchaVerifier, type TenantPurger } from './puertos';
@@ -86,6 +86,10 @@ export interface ResultadoPurga {
   candidatas: Array<{ pruebaId: string; tenantId: string }>;
   omitidas: Array<{ pruebaId: string; motivo: string }>;
   purgadas: number;
+  /** Purgas que fallaron (se reintentan en la siguiente corrida; la prueba sigue sin marcarse PURGADA). Solo ids y el mensaje del error. */
+  fallidas: Array<{ pruebaId: string; error: string }>;
+  /** Pruebas aún sin purgar con DIAS_ALERTA_PURGA o más desde su vencimiento: en riesgo de incumplir el plazo del aviso de privacidad (90 días). */
+  enRiesgo: Array<{ pruebaId: string; dias: number }>;
 }
 
 @Injectable()
@@ -337,27 +341,56 @@ export class PruebaPublicaService {
   }
 
   /**
-   * Purga de pruebas vencidas. SOLO toca una prueba que cumpla TODO esto (doble seguro): fila VENCIDA + venció hace más de
-   * RETENCION_DIAS + el tenant existe y su plan sigue siendo PRUEBA (un tenant convertido a plan de pago nunca se purga).
-   * `ensayo` (por defecto) solo lista: no llama al purgador.
+   * Purga de pruebas vencidas. SOLO toca una prueba que cumpla TODO esto (doble seguro; el purgador lo vuelve a comprobar por su cuenta):
+   *  · fila VENCIDA y venció hace más de RETENCION_DIAS, o fila FALLIDA (alta a medias, tenant desactivado) creada hace más de RETENCION_DIAS;
+   *  · el tenant existe, su plan sigue siendo PRUEBA (un tenant convertido a plan de pago nunca se purga) y, si la fila es FALLIDA, está desactivado.
+   * `ensayo` (por defecto) solo lista: no llama al purgador. Un fallo en un negocio no detiene a los demás. Lo más viejo se purga primero.
+   * Compromiso del aviso de privacidad: máximo MAX_DIAS_PURGA días desde el vencimiento; las que se acercan quedan en `enRiesgo`.
    */
   async purgar(ahora = new Date(), opciones: { ensayo?: boolean } = {}): Promise<ResultadoPurga> {
     const ensayo = opciones.ensayo !== false;
-    const res: ResultadoPurga = { ensayo, candidatas: [], omitidas: [], purgadas: 0 };
+    const res: ResultadoPurga = { ensayo, candidatas: [], omitidas: [], purgadas: 0, fallidas: [], enRiesgo: [] };
     const vencidas = await this.pruebas.find({ where: { estado: 'VENCIDA' } as any });
+    const fallidas = (await this.pruebas.find({ where: { estado: 'FALLIDA' } as any })).filter((p) => !!p.tenantId);
+    const referencia = new Map<string, number>(); // cuándo empezó a correr su plazo (vencimiento; creación si la alta falló)
+    const cola: Array<{ p: PruebaPublica; desde: number }> = [];
     for (const p of vencidas) {
       if (!p.tenantId || !p.venceEn) { res.omitidas.push({ pruebaId: p.id, motivo: 'SIN_TENANT_O_FECHA' }); continue; }
-      if (new Date(p.venceEn).getTime() + RETENCION_DIAS * MS_DIA > ahora.getTime()) { res.omitidas.push({ pruebaId: p.id, motivo: 'EN_RETENCION' }); continue; }
+      cola.push({ p, desde: new Date(p.venceEn).getTime() });
+    }
+    for (const p of fallidas) cola.push({ p, desde: new Date(p.createdAt).getTime() });
+    cola.sort((x, y) => x.desde - y.desde); // la más vieja primero
+    for (const { p, desde } of cola) {
+      referencia.set(p.id, desde);
+      if (desde + RETENCION_DIAS * MS_DIA > ahora.getTime()) { res.omitidas.push({ pruebaId: p.id, motivo: 'EN_RETENCION' }); continue; }
       const tenant = await this.tenants.findOne({ where: { id: p.tenantId } as any });
       if (!tenant) { res.omitidas.push({ pruebaId: p.id, motivo: 'TENANT_NO_EXISTE' }); continue; }
       if (tenant.plan !== PLAN_PRUEBA) { res.omitidas.push({ pruebaId: p.id, motivo: 'PLAN_NO_PRUEBA' }); continue; }
-      res.candidatas.push({ pruebaId: p.id, tenantId: p.tenantId });
+      if (p.estado === 'FALLIDA' && tenant.isActive !== false) { res.omitidas.push({ pruebaId: p.id, motivo: 'FALLIDA_CON_TENANT_ACTIVO' }); continue; }
+      res.candidatas.push({ pruebaId: p.id, tenantId: p.tenantId as string });
     }
-    if (ensayo) return res;
-    for (const c of res.candidatas) {
-      await this.purger.purgarTenant(c.tenantId);
-      await this.pruebas.update({ id: c.pruebaId } as any, { estado: 'PURGADA', correoCifrado: null, tokenHash: null } as any);
-      res.purgadas++;
+    const hechas = new Set<string>();
+    if (!ensayo) {
+      // el negocio ya no existe (alguien lo borró a mano): no hay nada que purgar, solo se cierra la solicitud y se descarta lo cifrado
+      for (const o of res.omitidas.filter((x) => x.motivo === 'TENANT_NO_EXISTE')) {
+        await this.pruebas.update({ id: o.pruebaId } as any, { estado: 'PURGADA', correoCifrado: null, tokenHash: null } as any);
+        hechas.add(o.pruebaId);
+      }
+      for (const c of res.candidatas.slice(0, PURGA_LOTE)) {
+        try {
+          await this.purger.purgarTenant(c.tenantId, ahora);
+          // Se conservan avisoAceptadoEn / avisoVersion / avisoUrl (acreditan el consentimiento): solo se descarta lo cifrado y el token.
+          await this.pruebas.update({ id: c.pruebaId } as any, { estado: 'PURGADA', correoCifrado: null, tokenHash: null } as any);
+          res.purgadas++;
+          hechas.add(c.pruebaId);
+        } catch (e: any) {
+          res.fallidas.push({ pruebaId: c.pruebaId, error: String(e?.message ?? e).slice(0, 300) });
+        }
+      }
+    }
+    for (const [id, desde] of referencia) {
+      const dias = Math.floor((ahora.getTime() - desde) / MS_DIA);
+      if (!hechas.has(id) && dias >= DIAS_ALERTA_PURGA) res.enRiesgo.push({ pruebaId: id, dias });
     }
     return res;
   }
