@@ -76,11 +76,15 @@ export class ModulesService {
   // 'generico'). Se deja como parámetro explícito para que el alta de tenant
   // (tenants.service.ts) pueda pasar el giro elegido en el mismo formulario, sin depender
   // de que ya esté persistido en ese momento exacto del flujo.
-  async initFromPlan(tenantId: string, planCode: string, giro?: string) {
+  //
+  // limitarA (solo uso interno, p. ej. la prueba pública por giro): si viene, se activa plan_modules ∩ limitarA — el plan es el techo y
+  // limitarA solo puede restar. Nunca debe llegar de un DTO ni de la API.
+  async initFromPlan(tenantId: string, planCode: string, giro?: string, limitarA?: readonly string[]) {
     const resolvedGiro = giro || (await this.resolveGiro(tenantId));
     const planMods = await this.planModuleRepo.find({ where: { planCode, included: true } });
     for (const pm of planMods) {
       if (!moduleAllowedForGiro(pm.moduleCode, resolvedGiro)) continue; // el plan lo incluye, el giro no lo permite
+      if (limitarA && !limitarA.includes(pm.moduleCode)) continue; // fuera del conjunto pedido por el llamador interno
       const exists = await this.tenantModuleRepo.findOne({ where: { tenantId, moduleCode: pm.moduleCode } });
       if (!exists) {
         await this.tenantModuleRepo.save(

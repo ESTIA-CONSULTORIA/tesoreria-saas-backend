@@ -7,6 +7,42 @@ import { PlanModule } from './entities/plan-module.entity';
 import { TenantModule } from './entities/tenant-module.entity';
 import { Tenant } from '../tenants/entities/tenant.entity';
 
+// initFromPlan con limitarA (uso interno de la prueba pública): el plan es el techo, limitarA solo resta y el giro sigue filtrando.
+describe('initFromPlan — limitarA', () => {
+  const PLAN = ['dashboard', 'pos', 'costos', 'membresias', 'tesoreria'].map((moduleCode) => ({ planCode: 'PRUEBA', moduleCode, included: true }));
+  const montar = async (giro: string) => {
+    const guardados: any[] = [];
+    const m: TestingModule = await Test.createTestingModule({
+      providers: [
+        ModulesService,
+        { provide: getRepositoryToken(ModuleEntity), useValue: {} },
+        { provide: getRepositoryToken(PlanModule), useValue: { find: jest.fn(() => Promise.resolve(PLAN)) } },
+        { provide: getRepositoryToken(TenantModule), useValue: { findOne: jest.fn(() => Promise.resolve(null)), create: jest.fn((x: any) => x), save: jest.fn((x: any) => { guardados.push(x.moduleCode); return Promise.resolve(x); }) } },
+        { provide: getRepositoryToken(Tenant), useValue: { findOne: jest.fn(() => Promise.resolve({ id: 't', giro })) } },
+      ],
+    }).compile();
+    return { service: m.get(ModulesService), guardados };
+  };
+
+  it('sin limitarA activa todo lo del plan que el giro permite (comportamiento de siempre)', async () => {
+    const { service, guardados } = await montar('generico');
+    await service.initFromPlan('t', 'PRUEBA', 'generico');
+    expect(guardados).toEqual(['dashboard', 'pos', 'costos', 'tesoreria']);
+  });
+
+  it('con limitarA activa solo la intersección con el plan: lo que el plan no tiene no se activa aunque se pida', async () => {
+    const { service, guardados } = await montar('gimnasio');
+    await service.initFromPlan('t', 'PRUEBA', 'gimnasio', ['dashboard', 'membresias', 'compras', 'rh']);
+    expect(guardados).toEqual(['dashboard', 'membresias']);
+  });
+
+  it('limitarA no salta el filtro de giro: pedir membresías para un restaurante no la activa', async () => {
+    const { service, guardados } = await montar('restaurante');
+    await service.initFromPlan('t', 'PRUEBA', 'restaurante', ['pos', 'membresias']);
+    expect(guardados).toEqual(['pos']);
+  });
+});
+
 // El catálogo de módulos (Centro de Soluciones) solo muestra a cada negocio lo que su giro le permite activar.
 const CATALOGO = ['pos', 'costos', 'pacientes', 'membresias'].map((code) => ({ code, name: code, isActive: true }));
 const GIROS: Record<string, string> = { gym: 'gimnasio', resto: 'restaurante', clinica: 'medico_dental' };

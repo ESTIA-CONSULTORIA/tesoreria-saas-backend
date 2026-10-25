@@ -23,7 +23,7 @@ import { CAPTCHA_VERIFIER, TENANT_PURGER, type CaptchaVerifier, type TenantPurge
 import { CORREO_PROVIDER, type CorreoProvider } from './correo/correo-provider';
 import { enlaceActivacion, plantillaActivacion } from './correo/plantilla-activacion';
 import { sembrarGimnasio, type DepsPlantilla, type ResultadoPlantilla } from './plantilla-gimnasio';
-import { GIROS_OFRECIDOS, configEstructural, sembrarMinima } from './giros-prueba';
+import { GIROS_OFRECIDOS, configEstructural, modulosDeGiro, sembrarMinima } from './giros-prueba';
 
 // Prueba pública, PP0 (docs/DISENO-PRUEBA-PUBLICA.md). TODO está detrás de PRUEBA_PUBLICA_ACTIVA (apagado por defecto): apagado, los
 // endpoints responden 404 y no se crea, envía ni borra nada. Un tenant de prueba es un tenant normal (TenantsService.create) con plan PRUEBA.
@@ -223,7 +223,7 @@ export class PruebaPublicaService {
         ownerName: fila.nombrePersona,
         slug,
         billingCycle: 'monthly',
-      });
+      }, modulosDeGiro(fila.giro));
       tenantCreado = tenant.id;
       await this.pruebas.update({ id: fila.id } as any, { tenantId: tenant.id } as any);
       if (tenant.warning) throw new Error(`módulos sin inicializar: ${tenant.warning}`); // el plan PRUEBA no está sembrado en esta base
