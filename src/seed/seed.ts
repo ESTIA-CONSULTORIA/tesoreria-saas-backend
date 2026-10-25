@@ -203,8 +203,8 @@ export async function seedDatabase(dataSource: DataSource) {
 
   // Crear usuarios demo para el tenant "Grupo Empresarial Demo"
   const demoUsers = [
-    { email: 'admin@demo.com', password: 'Admin123', name: 'Administrador Demo', role: adminRole, roleCode: 'ADMIN', executivePin: '1234' },
-    { email: 'gerente@demo.com', password: 'Admin123', name: 'Gerente Demo', role: gerenteRole, roleCode: 'GERENTE', executivePin: '1234' },
+    { email: 'admin@demo.com', password: 'Admin123', name: 'Administrador Demo', role: adminRole, roleCode: 'ADMIN', executivePin: null },
+    { email: 'gerente@demo.com', password: 'Admin123', name: 'Gerente Demo', role: gerenteRole, roleCode: 'GERENTE', executivePin: null },
     { email: 'cajero@demo.com', password: '1234', name: 'Cajero Demo', role: cajeroRole, roleCode: 'CAJERO', executivePin: null },
     { email: 'contador@demo.com', password: 'Admin123', name: 'Contador Demo', role: contadorRole, roleCode: 'CONTADOR', executivePin: null },
   ];
@@ -261,7 +261,7 @@ export async function seedDatabase(dataSource: DataSource) {
       roleCode: 'GERENTE',
       companyId: sazonCompany.id,
       branchId: null,
-      executivePin: '1234',
+      executivePin: null, // sin PIN ejecutivo de ejemplo: se configura a mano (6+ dígitos, distinto por usuario)
     },
     {
       email: 'gerente.sucursal@demo.com',
@@ -271,7 +271,7 @@ export async function seedDatabase(dataSource: DataSource) {
       roleCode: 'GERENTE',
       companyId: null,
       branchId: null, // Will be set after branch is created
-      executivePin: '1234',
+      executivePin: null, // sin PIN ejecutivo de ejemplo: se configura a mano (6+ dígitos, distinto por usuario)
     },
   ];
 
@@ -2197,11 +2197,10 @@ export async function seedDatabase(dataSource: DataSource) {
       const cajero2Exists = await usersRepository.findOne({ where: { email: 'cajero2@demo.com' } });
       if (!cajero2Exists) {
         const hp = await bcrypt.hash('Admin123', 10);
-        const ep = await bcrypt.hash('1234', 10);
         await usersRepository.save({
           email: 'cajero2@demo.com', password: hp, name: 'Cajero 2 Demo',
           roleId: cajeroRole!.id, roleCode: 'CAJERO', tenantId: demoTenant.id,
-          isActive: true, executivePin: ep,
+          isActive: true,
         });
         console.log('✅ Usuario cajero2@demo.com creado');
       }
@@ -2209,11 +2208,10 @@ export async function seedDatabase(dataSource: DataSource) {
       const meseroUserExists = await usersRepository.findOne({ where: { email: 'mesero@demo.com' } });
       if (!meseroUserExists) {
         const hp = await bcrypt.hash('Admin123', 10);
-        const ep = await bcrypt.hash('1234', 10);
         await usersRepository.save({
           email: 'mesero@demo.com', password: hp, name: 'Mesero Demo',
           roleId: cajeroRole!.id, roleCode: 'CAJERO', tenantId: demoTenant.id,
-          isActive: true, executivePin: ep,
+          isActive: true,
         });
         console.log('✅ Usuario mesero@demo.com creado');
       }

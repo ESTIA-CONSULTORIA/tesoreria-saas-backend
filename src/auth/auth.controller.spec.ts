@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { JwtService } from '@nestjs/jwt';
 import { AuthController } from './auth.controller';
+import { NipThrottleService } from '../pos/nip-throttle.service';
 import { AuthService } from './auth.service';
 
 // Diagnóstico (ronda de seguimiento, auditoría BUSINESS): boilerplate de `nest generate` sin
@@ -15,6 +16,7 @@ describe('AuthController', () => {
       providers: [
         { provide: AuthService, useValue: {} },
         { provide: JwtService, useValue: {} },
+        NipThrottleService,
       ],
     }).compile();
 

@@ -3,6 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { UsersModule } from '../users/users.module';
+import { NipThrottleModule } from '../pos/nip-throttle.module';
 import { SubscriptionsModule } from '../subscriptions/subscriptions.module';
 import { HrModule } from '../hr/hr.module';
 import { TenantsModule } from '../tenants/tenants.module';
@@ -17,6 +18,7 @@ import { TenantModule } from '../modules/entities/tenant-module.entity';
   imports: [
     TypeOrmModule.forFeature([RefreshToken, User, TenantModule]),
     UsersModule,
+    NipThrottleModule,
     SubscriptionsModule,
     HrModule,
     TenantsModule,

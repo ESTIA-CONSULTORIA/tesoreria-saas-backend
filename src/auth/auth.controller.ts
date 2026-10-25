@@ -3,6 +3,7 @@ import type { Response } from 'express';
 import { Throttle } from '@nestjs/throttler';
 import { JwtService } from '@nestjs/jwt';
 import { AuthService } from './auth.service';
+import { NipThrottleService } from '../pos/nip-throttle.service';
 import { Public } from './public.decorator';
 import {
   setAuthCookies,
@@ -22,6 +23,7 @@ export class AuthController {
   constructor(
     private authService: AuthService,
     private jwtService: JwtService,
+    private nipThrottle: NipThrottleService,
   ) {}
 
   @Public()
@@ -91,9 +93,24 @@ export class AuthController {
   @Post('executive-login')
   async executiveLogin(
     @Body() body: { tenantId: string; pin: string },
+    @Request() req: any,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const { access_token, user } = await this.authService.executiveLogin(body.tenantId, body.pin);
+    // Límite de fallos por tenant (además del @Throttle por IP, que detrás del proxy de Railway puede ser una sola IP para todos).
+    // Llaves propias (prefijo exec:) para no mezclarse con el NIP del POS. Solo cuentan los 401; un acierto limpia la IP.
+    const forwarded = String(req?.headers?.['x-forwarded-for'] || '').split(',')[0].trim();
+    const ip = forwarded || req?.ip || 'desconocida';
+    const ns = `exec:${body?.tenantId ?? ''}`;
+    this.nipThrottle.assertAllowed(ns, undefined, ip);
+    let resultado;
+    try {
+      resultado = await this.authService.executiveLogin(body.tenantId, body.pin);
+    } catch (e) {
+      if (e instanceof UnauthorizedException) this.nipThrottle.registerFailure(ns, undefined, ip);
+      throw e;
+    }
+    this.nipThrottle.registerSuccess(ns, undefined, ip);
+    const { access_token, user } = resultado;
     setExecutiveCookie(res, access_token);
     return { user };
   }
