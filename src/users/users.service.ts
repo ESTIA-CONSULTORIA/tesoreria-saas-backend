@@ -4,6 +4,7 @@ import { User } from './entities/user.entity';
 import { Tenant } from '../tenants/entities/tenant.entity';
 import { In, Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
+import { assertPinEjecutivoValido } from './executive-pin.util';
 import { ROLES_CON_SUCURSAL, ROLES_NIP } from '../config/roles-pos.config';
 
 @Injectable()
@@ -50,6 +51,7 @@ export class UsersService {
     // otros roles porque no operan sobre datos scoped a una sucursal específica.
     this.assertCompanyBranchIfRequired(roleCode, companyId, branchId);
     await this.assertNipUnico(tenantId, roleCode, password);
+    if (executivePin) await this.assertPinEjecutivo(tenantId, executivePin);
 
     const hashedPassword = await bcrypt.hash(password, 10);
     const hashedPin = executivePin ? await bcrypt.hash(executivePin, 10) : undefined;
@@ -169,6 +171,7 @@ export class UsersService {
     const finalBranchId = data.branchId !== undefined ? data.branchId : existing.branchId;
     this.assertCompanyBranchIfRequired(finalRoleCode, finalCompanyId, finalBranchId);
     if (data.password) await this.assertNipUnico(existing.tenantId, finalRoleCode, data.password, id);
+    if (data.executivePin) await this.assertPinEjecutivo(existing.tenantId, data.executivePin, id);
 
     const toSave: Record<string, any> = { ...data };
     if (companyIdToBackfill) toSave.companyId = companyIdToBackfill;
@@ -215,6 +218,14 @@ export class UsersService {
   // El NIP del POS Lite identifica al usuario (loginWithNip busca el NIP entre los usuarios de NIP del tenant): si
   // dos usuarios comparten NIP, el primero que coincida inicia sesión por el otro y el efectivo cobrado quedaría
   // atribuido a la persona equivocada. Por eso un NIP de 4 dígitos no puede repetirse dentro del tenant.
+  // PIN ejecutivo: 6 a 12 dígitos y distinto al de cualquier otro usuario del tenant (activo o no: un cambio de rol no debe crear una colisión).
+  private async assertPinEjecutivo(tenantId: string | undefined, pin: string, excluirUserId?: string) {
+    const delTenant = tenantId
+      ? await this.usersRepository.createQueryBuilder('user').addSelect('user.executivePin').where('user.tenantId = :tenantId', { tenantId }).getMany()
+      : null;
+    await assertPinEjecutivoValido(pin, delTenant, excluirUserId);
+  }
+
   private async assertNipUnico(tenantId: string | undefined, roleCode: string | undefined, nip: string | undefined, excluirUserId?: string) {
     if (!tenantId || !roleCode || !ROLES_NIP.includes(roleCode) || !nip || !/^\d{4}$/.test(nip)) return;
     const candidatos = await this.usersRepository.find({
