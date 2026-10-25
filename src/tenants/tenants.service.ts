@@ -39,7 +39,8 @@ export class TenantsService {
     state?: string;
     slug?: string;
     billingCycle?: string;
-  }) {
+  }, limitarModulos?: readonly string[]) {
+    // limitarModulos NO es campo del DTO a propósito: solo lo pasan servicios internos (prueba pública); el plan sigue siendo el techo.
     const { legalName, tradeName, taxId, plan, email, password, ownerName,
             rfc, industry, phone, city, state, slug, billingCycle } = dto;
 
@@ -118,7 +119,7 @@ export class TenantsService {
     // respuesta para que quede visible, no en silencio.
     let modulesWarning: string | undefined;
     try {
-      await this.modulesService.initFromPlan(tenant.id, dto.plan || 'BASIC', giro);
+      await this.modulesService.initFromPlan(tenant.id, dto.plan || 'BASIC', giro, limitarModulos);
     } catch (err) {
       this.logger.error(
         `initFromPlan() falló para tenant ${tenant.id} (${legalName}), plan ${dto.plan || 'BASIC'}`,

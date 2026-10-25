@@ -2,7 +2,7 @@ import { BadRequestException, ConflictException, HttpException, NotFoundExceptio
 import { PruebaPublicaService } from './prueba-publica.service';
 import { MockCorreoProvider } from './correo/mock-correo.provider';
 import { hashToken } from './prueba-publica.util';
-import { configEstructural } from './giros-prueba';
+import { configEstructural, modulosDeGiro } from './giros-prueba';
 import { DIAS_PRUEBA, MAX_ACTIVAS, MAX_ALTAS_DIA, MAX_POR_IP_HORA, RETENCION_DIAS } from './prueba-publica.config';
 
 const MS_DIA = 86_400_000;
@@ -39,7 +39,7 @@ function montar(opts: { captcha?: boolean; crearFalla?: boolean; crearConWarning
   const branches = repo([]);
   let nTenant = 0;
   const tenantsService = {
-    create: jest.fn(async (dto: any) => {
+    create: jest.fn(async (dto: any, _limitarModulos?: readonly string[]) => {
       if (opts.crearFalla) throw new Error('boom con detalle interno');
       const id = `t-${++nTenant}`;
       tenants.filas.push({ id, plan: dto.plan, slug: dto.slug, giro: dto.giro, isActive: true });
@@ -287,6 +287,18 @@ describe('Prueba pública PP0', () => {
       const cuenta = (op: string) => m.llamadas.filter(([o]) => o === op).length;
       expect([cuenta('settings'), cuenta('categoria'), cuenta('producto'), cuenta('plan'), cuenta('socio')]).toEqual([1, 0, 0, 0, 0]);
       expect(Object.keys(r).sort()).toEqual(['slug', 'venceEn']);
+    });
+
+    it('pasa a TenantsService.create los módulos de SU giro (segundo argumento interno), no los del plan completo', async () => {
+      const m = montar();
+      const token = await pedirYObtenerToken(m);
+      await m.svc.activar({ token, password: 'MiClaveSegura1' }, AHORA);
+      const dto = m.tenantsService.create.mock.calls[0][0];
+      const limitar = [...((m.tenantsService.create.mock.calls[0][1] as readonly string[] | undefined) ?? [])];
+      expect([...limitar].sort()).toEqual(modulosDeGiro('gimnasio').sort());
+      expect(limitar).toContain('membresias');
+      expect(limitar).not.toContain('costos');
+      expect(Object.keys(dto)).not.toContain('modulos'); // el DTO no lleva módulos: no hay vía pública para pedirlos
     });
 
     it('un solo uso: el mismo enlace dos veces → la segunda falla y NO crea un segundo tenant', async () => {

@@ -26,14 +26,42 @@ describe('giros de la prueba pública', () => {
     expect(GIRO_LABELS.generico).toBeTruthy();
   });
 
-  it('módulos por giro: todos reciben caja, usuarios, reportes y configuración; la membresía solo el gimnasio; ninguno recibe pacientes', () => {
+  it('módulos por giro: todos reciben caja, usuarios, reportes, configuración y el núcleo financiero (tesorería); la membresía solo el gimnasio; ninguno recibe pacientes', () => {
     for (const g of GIROS_OFRECIDOS) {
       const m = modulosDeGiro(g);
-      for (const base of ['dashboard', 'usuarios', 'empresas', 'sucursales', 'configuracion', 'pos', 'configuracion_pos', 'reportes']) expect(m).toContain(base);
+      for (const base of ['dashboard', 'usuarios', 'empresas', 'sucursales', 'configuracion', 'pos', 'configuracion_pos', 'reportes', 'tesoreria']) expect(m).toContain(base);
       expect(m.includes('membresias')).toBe(g === 'gimnasio');
       expect(m).not.toContain('pacientes');
     }
     expect(MODULOS_PLAN_PRUEBA).not.toContain('pacientes');
+  });
+
+  // Tabla definitiva giro → módulos. El frontend la espeja en frontend-core/src/pages/prueba/modulosPrueba.ts con el MISMO literal en su spec.
+  it('tabla definitiva giro → módulos (aislamiento por giro)', () => {
+    const nucleo = ['dashboard', 'usuarios', 'empresas', 'sucursales', 'configuracion', 'pos', 'configuracion_pos', 'reportes', 'tesoreria'];
+    expect(modulosDeGiro('restaurante').sort()).toEqual([...nucleo, 'costos', 'compras', 'proveedores'].sort());
+    expect(modulosDeGiro('retail').sort()).toEqual([...nucleo, 'costos', 'compras', 'proveedores'].sort());
+    expect(modulosDeGiro('gimnasio').sort()).toEqual([...nucleo, 'membresias'].sort());
+    expect(modulosDeGiro('generico').sort()).toEqual([...nucleo].sort());
+  });
+
+  it('aislamiento: el gimnasio no recibe costos/compras/proveedores; restaurante y tienda no reciben membresías; el genérico no recibe inventario ni compras', () => {
+    for (const x of ['costos', 'compras', 'proveedores']) {
+      expect(modulosDeGiro('gimnasio')).not.toContain(x);
+      expect(modulosDeGiro('generico')).not.toContain(x);
+    }
+    for (const g of ['restaurante', 'retail', 'generico']) expect(modulosDeGiro(g)).not.toContain('membresias');
+  });
+
+  it('el plan PRUEBA es el techo: lo que recibe cualquier giro está dentro de MODULOS_PLAN_PRUEBA, y el techo no trae módulos de pago extra (rh, integraciones, white_label, sat_cfdi…)', () => {
+    for (const g of GIROS_OFRECIDOS) for (const m of modulosDeGiro(g)) expect(MODULOS_PLAN_PRUEBA as readonly string[]).toContain(m);
+    for (const prohibido of ['rh', 'integraciones', 'white_label', 'sat_cfdi', 'ocr', 'pacientes', 'delivery', 'corte_retroactivo']) expect(MODULOS_PLAN_PRUEBA as readonly string[]).not.toContain(prohibido);
+    expect(MODULOS_PLAN_PRUEBA).toHaveLength(13);
+  });
+
+  it('un giro no ofrecido (médicos, desconocidos) no recibe ningún módulo', () => {
+    expect(modulosDeGiro('medico_dental')).toEqual([]);
+    expect(modulosDeGiro('inventado')).toEqual([]);
   });
 
   it('estructura de cada giro: IVA 16 % sin incluir, existencias permisivas y capacidades propias (sin datos)', () => {

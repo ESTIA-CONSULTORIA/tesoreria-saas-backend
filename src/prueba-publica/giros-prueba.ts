@@ -14,11 +14,44 @@ export const GIROS_EXCLUIDOS: Readonly<Partial<Record<Giro, string>>> = {
   medico_general: 'Su módulo vertical (pacientes) no está en el plan PRUEBA: el negocio nacería sin lo que define al giro, y además manejaría datos de salud, que exigen un aviso de privacidad propio.',
 };
 
-/** Módulos que incluye el plan PRUEBA (plan_modules del SQL PP0). Sirve para comprobar, por giro, qué módulos recibe el negocio al nacer. */
-export const MODULOS_PLAN_PRUEBA = ['dashboard', 'usuarios', 'empresas', 'sucursales', 'configuracion', 'pos', 'configuracion_pos', 'reportes', 'membresias'] as const;
+/**
+ * TECHO de la prueba: los módulos del plan PRUEBA (plan_modules: PP0 + prueba-publica-modulos-por-giro.sql). Ningún giro puede recibir
+ * más que esto; `initFromPlan` lo hace valer intersectando con la tabla real.
+ */
+export const MODULOS_PLAN_PRUEBA = [
+  'dashboard', 'usuarios', 'empresas', 'sucursales', 'configuracion', 'pos', 'configuracion_pos', 'reportes', 'membresias',
+  'tesoreria', 'costos', 'compras', 'proveedores',
+] as const;
 
-/** Módulos que recibe un negocio de prueba de ese giro: los del plan que el giro permite (membresías solo para gimnasio). */
-export const modulosDeGiro = (giro: string): string[] => MODULOS_PLAN_PRUEBA.filter((m) => moduleAllowedForGiro(m, giro));
+/**
+ * Núcleo común de todo negocio de prueba: caja (pos + configuracion_pos, que es el que protege los endpoints del POS), reportes y el núcleo
+ * financiero. `tesoreria` es el único código que protege bancos, movimientos, transferencias, conciliación y cuentas por pagar/cobrar
+ * (bancos/movimientos/transferencias/conciliacion del catálogo no los exige ningún endpoint ni pantalla). Un negocio vacío los usa sin
+ * configuración externa: las cuentas bancarias se dan de alta a mano.
+ */
+export const MODULOS_NUCLEO = ['dashboard', 'usuarios', 'empresas', 'sucursales', 'configuracion', 'pos', 'configuracion_pos', 'reportes', 'tesoreria'] as const;
+
+/**
+ * Módulos que, ADEMÁS del núcleo, recibe cada giro. DEUDA TÉCNICA: la tienda recibe `costos` solo como vehículo del inventario (los endpoints de
+ * existencias viven en el controlador de Costos y el código `inventario` del catálogo no lo exige nada); trae también recetas y producción.
+ * Se retira cuando el inventario tenga su propio guard.
+ */
+export const MODULOS_POR_GIRO: Readonly<Record<GiroOfrecido, readonly string[]>> = {
+  restaurante: ['costos', 'compras', 'proveedores'],
+  retail: ['costos', 'compras', 'proveedores'],
+  gimnasio: ['membresias'],
+  generico: [],
+};
+
+/**
+ * Módulos que recibe un negocio de prueba de ese giro: núcleo + los del giro, siempre dentro del techo y de lo que el giro permite
+ * (membresías solo para gimnasio). Un giro sin entrada (no ofrecido) no recibe nada.
+ */
+export const modulosDeGiro = (giro: string): string[] => {
+  const propios = (MODULOS_POR_GIRO as Record<string, readonly string[] | undefined>)[giro];
+  if (!propios) return [];
+  return [...MODULOS_NUCLEO, ...propios].filter((m) => (MODULOS_PLAN_PRUEBA as readonly string[]).includes(m) && moduleAllowedForGiro(m, giro));
+};
 
 /** Configuración estructural que recibe TODO negocio de prueba al activarse (TenantSettingsService.upsert). Sin datos de ejemplo. */
 export interface ConfigEstructural {
