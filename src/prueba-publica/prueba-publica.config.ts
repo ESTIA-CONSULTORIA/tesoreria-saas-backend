@@ -10,6 +10,21 @@ export const DIAS_PRUEBA = 30;
 /** Días (desde la activación) en que se avisa del vencimiento: 5 días antes, 2 días antes y el último día (25, 28 y 30 con 30 días). Los correos llegan en PP3. */
 export const DIAS_AVISO = [DIAS_PRUEBA - 5, DIAS_PRUEBA - 2, DIAS_PRUEBA] as const;
 export const RETENCION_DIAS = 30; // tras vencer, antes de poder purgar
+/**
+ * Compromiso del aviso de privacidad (v2): el negocio de prueba y sus datos se eliminan a más tardar 90 días después del vencimiento. La purga corre a
+ * diario, así que lo normal es borrar a los ~31 días; los 60 de margen son para reintentos. Un spec fija RETENCION_DIAS + margen < MAX_DIAS_PURGA.
+ */
+export const MAX_DIAS_PURGA = 90;
+/** Desde cuántos días vencida una prueba aún sin purgar se reporta como EN RIESGO de incumplir el plazo (alerta en el log). */
+export const DIAS_ALERTA_PURGA = 80;
+/** Tope de negocios purgados por ejecución (las altas están topadas a 20 al día: sobra, y acota el tiempo de una corrida). */
+export const PURGA_LOTE = 50;
+/**
+ * Interruptor propio de la PURGA REAL (apagado por defecto: solo con PRUEBA_PURGA_ACTIVA=true borra). Apagado, la tarea programada hace ENSAYO: lista y
+ * registra qué purgaría, sin borrar. Es irreversible, por eso se enciende a propósito, antes de que exista la primera prueba purgable (30 días tras
+ * el primer vencimiento).
+ */
+export const purgaRealActiva = (): boolean => process.env.PRUEBA_PURGA_ACTIVA === 'true';
 export const TOKEN_MINUTOS = 30;
 export const MAX_ACTIVAS = 50;
 export const MAX_ALTAS_DIA = 20;

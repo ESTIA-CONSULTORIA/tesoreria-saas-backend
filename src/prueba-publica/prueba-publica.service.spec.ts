@@ -3,7 +3,7 @@ import { PruebaPublicaService } from './prueba-publica.service';
 import { MockCorreoProvider } from './correo/mock-correo.provider';
 import { hashToken } from './prueba-publica.util';
 import { configEstructural, modulosDeGiro } from './giros-prueba';
-import { DIAS_PRUEBA, MAX_ACTIVAS, MAX_ALTAS_DIA, MAX_POR_IP_HORA, RETENCION_DIAS } from './prueba-publica.config';
+import { DIAS_ALERTA_PURGA, DIAS_PRUEBA, MAX_ACTIVAS, MAX_ALTAS_DIA, MAX_DIAS_PURGA, MAX_POR_IP_HORA, PURGA_LOTE, RETENCION_DIAS } from './prueba-publica.config';
 
 const MS_DIA = 86_400_000;
 const AHORA = new Date('2026-10-18T12:00:00Z');
@@ -70,7 +70,7 @@ function montar(opts: { captcha?: boolean; crearFalla?: boolean; crearConWarning
   };
   const captcha = { verificar: jest.fn<Promise<boolean>, [string | undefined, string]>(async () => opts.captcha !== false) };
   const correo = new MockCorreoProvider(opts.correoFalla ? { fallar: opts.correoFalla } : {});
-  const purger = { purgarTenant: jest.fn<Promise<void>, [string]>(async () => undefined) };
+  const purger = { purgarTenant: jest.fn<Promise<void>, [string, Date?]>(async () => undefined) };
   const svc = new PruebaPublicaService(pruebas as any, tenants as any, companies as any, branches as any, users as any, shifts as any, sales as any, tenantsService as any, subscriptions as any, settings as any, products as any, categories as any, membresias as any, captcha, correo, purger);
   return { svc, pruebas, tenants, tenantsService, subscriptions, llamadas, socios, captcha, correo, purger, users, shifts, sales, catalogo, categories, products, settings };
 }
@@ -612,25 +612,107 @@ describe('Prueba pública PP0', () => {
       const real = await m.svc.purgar(AHORA, { ensayo: false });
       expect(real.purgadas).toBe(1);
       expect(m.purger.purgarTenant).toHaveBeenCalledTimes(1);
-      expect(m.purger.purgarTenant).toHaveBeenCalledWith('t-vieja');
+      expect(m.purger.purgarTenant).toHaveBeenCalledWith('t-vieja', AHORA);
       expect(m.pruebas.filas.find((f) => f.id === 'vieja')).toMatchObject({ estado: 'PURGADA', correoCifrado: null });
       for (const id of ['reciente', 'convertida-plan', 'convertida', 'activa']) expect(m.pruebas.filas.find((f) => f.id === id)!.estado).not.toBe('PURGADA');
     });
 
-    it('un tenant que ya no existe se omite, no se purga', async () => {
+    it('un tenant que ya no existe se omite, no se purga (en ensayo no se toca; en real solo se cierra la solicitud)', async () => {
       const m = montar();
-      m.pruebas.filas.push({ id: 'huerfana', tenantId: 't-no-existe', estado: 'VENCIDA', venceEn: new Date(AHORA.getTime() - 200 * MS_DIA) });
+      m.pruebas.filas.push({ id: 'huerfana', tenantId: 't-no-existe', estado: 'VENCIDA', venceEn: new Date(AHORA.getTime() - 200 * MS_DIA), correoCifrado: 'x' });
+      const ensayo = await m.svc.purgar(AHORA);
+      expect(ensayo.omitidas).toEqual([{ pruebaId: 'huerfana', motivo: 'TENANT_NO_EXISTE' }]);
+      expect(m.pruebas.filas[0].estado).toBe('VENCIDA');
       const r = await m.svc.purgar(AHORA, { ensayo: false });
       expect(r.omitidas).toEqual([{ pruebaId: 'huerfana', motivo: 'TENANT_NO_EXISTE' }]);
       expect(m.purger.purgarTenant).not.toHaveBeenCalled();
+      expect(m.pruebas.filas[0]).toMatchObject({ estado: 'PURGADA', correoCifrado: null });
     });
 
-    it('si el purgador falla, la prueba NO se marca PURGADA', async () => {
+    it('si el purgador falla, la prueba NO se marca PURGADA, el error queda registrado y las demás SÍ se purgan', async () => {
       const m = montar();
       activa(m, 'vieja', new Date(AHORA.getTime() - 60 * MS_DIA), 'PRUEBA', 'VENCIDA');
+      activa(m, 'otra', new Date(AHORA.getTime() - 50 * MS_DIA), 'PRUEBA', 'VENCIDA');
       m.purger.purgarTenant.mockRejectedValueOnce(new Error('falló'));
-      await expect(m.svc.purgar(AHORA, { ensayo: false })).rejects.toThrow('falló');
-      expect(m.pruebas.filas[0].estado).toBe('VENCIDA');
+      const r = await m.svc.purgar(AHORA, { ensayo: false });
+      expect(r.fallidas).toEqual([{ pruebaId: 'vieja', error: 'falló' }]);
+      expect(r.purgadas).toBe(1);
+      expect(m.pruebas.filas.map((f) => [f.id, f.estado])).toEqual([['vieja', 'VENCIDA'], ['otra', 'PURGADA']]);
+    });
+
+    describe('PP3: plazo de privacidad, FALLIDAS, aislamiento y registro de aceptación', () => {
+      const hace = (d: number) => new Date(AHORA.getTime() - d * MS_DIA);
+      const ACEPTACION = { avisoAceptadoEn: new Date('2026-08-01T10:00:00Z'), avisoVersion: '2026-10-01', avisoUrl: 'https://aviso.ejemplo.mx/privacidad', correoHash: 'h', correoDominio: 'neg.mx' };
+      const alta = (m: ReturnType<typeof montar>, id: string, venceEn: Date | null, extra: Record<string, any> = {}, plan = 'PRUEBA', tenantExtra: Record<string, any> = {}) => {
+        m.tenants.filas.push({ id: `t-${id}`, plan, isActive: true, ...tenantExtra });
+        m.pruebas.filas.push({ id, tenantId: `t-${id}`, estado: 'VENCIDA', venceEn, createdAt: hace(200), correoCifrado: 'x', tokenHash: null, ...ACEPTACION, ...extra });
+      };
+
+      it('la purga NO borra el registro de aceptación del aviso: fecha, versión, URL y hash de correo se conservan; solo se descarta lo cifrado', async () => {
+        const m = montar();
+        alta(m, 'vieja', hace(RETENCION_DIAS + 2));
+        await m.svc.purgar(AHORA, { ensayo: false });
+        expect(m.pruebas.filas[0]).toMatchObject({ estado: 'PURGADA', correoCifrado: null, tokenHash: null, ...ACEPTACION });
+        expect(m.pruebas.filas[0].tenantId).toBe('t-vieja'); // la fila sigue ligada a su id para acreditar el consentimiento
+      });
+
+      it('se purga lo más viejo primero y el lote acota cuántas por corrida', async () => {
+        const m = montar();
+        for (let i = 0; i < PURGA_LOTE + 5; i++) alta(m, `p${i}`, hace(RETENCION_DIAS + 1 + i));
+        const r = await m.svc.purgar(AHORA, { ensayo: false });
+        expect(r.candidatas).toHaveLength(PURGA_LOTE + 5);
+        expect(r.purgadas).toBe(PURGA_LOTE);
+        expect(m.purger.purgarTenant.mock.calls[0][0]).toBe(`t-p${PURGA_LOTE + 4}`); // la más vieja primero
+        expect(m.pruebas.filas.filter((f) => f.estado === 'VENCIDA').map((f) => f.id)).toEqual(['p0', 'p1', 'p2', 'p3', 'p4']); // las más recientes esperan al día siguiente
+      });
+
+      it('plazo de 90 días: lo que se acerca y no se pudo purgar queda EN RIESGO; lo purgado no', async () => {
+        const m = montar();
+        alta(m, 'bien', hace(RETENCION_DIAS + 5));
+        alta(m, 'atorada', hace(DIAS_ALERTA_PURGA + 2));
+        m.purger.purgarTenant.mockImplementation(async (t: string) => { if (t === 't-atorada') throw new Error('falló'); });
+        const r = await m.svc.purgar(AHORA, { ensayo: false });
+        expect(r.enRiesgo).toEqual([{ pruebaId: 'atorada', dias: DIAS_ALERTA_PURGA + 2 }]);
+        expect(r.fallidas).toHaveLength(1);
+        expect(r.purgadas).toBe(1);
+      });
+
+      it('en ensayo también avisa del riesgo (la purga real apagada no esconde un incumplimiento)', async () => {
+        const m = montar();
+        alta(m, 'vieja', hace(MAX_DIAS_PURGA - 3));
+        const r = await m.svc.purgar(AHORA);
+        expect(r.ensayo).toBe(true);
+        expect(r.enRiesgo.map((x) => x.pruebaId)).toEqual(['vieja']);
+        expect(m.purger.purgarTenant).not.toHaveBeenCalled();
+      });
+
+      it('FALLIDA (alta a medias) con el tenant desactivado y pasada la retención SÍ se purga; con el tenant activo o reciente, no', async () => {
+        const m = montar();
+        alta(m, 'rota', null, { estado: 'FALLIDA', createdAt: hace(RETENCION_DIAS + 3) }, 'PRUEBA', { isActive: false });
+        alta(m, 'rota-activa', null, { estado: 'FALLIDA', createdAt: hace(RETENCION_DIAS + 3) }, 'PRUEBA', { isActive: true });
+        alta(m, 'rota-reciente', null, { estado: 'FALLIDA', createdAt: hace(2) }, 'PRUEBA', { isActive: false });
+        m.pruebas.filas.push({ id: 'sin-tenant', tenantId: null, estado: 'FALLIDA', createdAt: hace(200) });
+        const r = await m.svc.purgar(AHORA, { ensayo: false });
+        expect(r.candidatas).toEqual([{ pruebaId: 'rota', tenantId: 't-rota' }]);
+        expect(Object.fromEntries(r.omitidas.map((o) => [o.pruebaId, o.motivo]))).toEqual({ 'rota-activa': 'FALLIDA_CON_TENANT_ACTIVO', 'rota-reciente': 'EN_RETENCION' });
+        expect(m.purger.purgarTenant).toHaveBeenCalledTimes(1);
+      });
+
+      it('AISLAMIENTO: nunca llega al purgador un tenant convertido, de cliente, activo, pendiente o ya purgado — aunque sean muy viejos', async () => {
+        const m = montar();
+        alta(m, 'convertida-estado', hace(300), { estado: 'CONVERTIDA' });
+        alta(m, 'convertida-plan', hace(300), {}, 'BUSINESS');
+        alta(m, 'cliente-pro', hace(300), {}, 'PRO');
+        alta(m, 'activa', hace(300), { estado: 'ACTIVA' });
+        alta(m, 'solicitada', hace(300), { estado: 'SOLICITADA' });
+        alta(m, 'purgada', hace(300), { estado: 'PURGADA' });
+        alta(m, 'extendida-vigente', new Date(AHORA.getTime() + 10 * MS_DIA), { extendida: true });
+        m.tenants.filas.push({ id: 't-cliente-real', plan: 'ENTERPRISE', isActive: true }); // un cliente sin ninguna fila de prueba
+        const r = await m.svc.purgar(AHORA, { ensayo: false });
+        expect(r.candidatas).toEqual([]);
+        expect(m.purger.purgarTenant).not.toHaveBeenCalled();
+        expect(m.pruebas.filas.filter((x) => x.estado === 'PURGADA').map((x) => x.id)).toEqual(['purgada']);
+      });
     });
   });
 });
