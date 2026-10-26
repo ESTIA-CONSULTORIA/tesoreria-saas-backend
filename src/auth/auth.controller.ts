@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, Headers, Request, Res, UnauthorizedException } from '@nestjs/common';
+import { Body, Controller, Get, Post, Put, Headers, Request, Res, UnauthorizedException } from '@nestjs/common';
 import type { Response } from 'express';
 import { Throttle } from '@nestjs/throttler';
 import { JwtService } from '@nestjs/jwt';
@@ -88,6 +88,12 @@ export class AuthController {
     return req.user;
   }
 
+  // Preferencia de interfaz propia (skin). Cualquier usuario con sesión; el id es el de la sesión, así que nadie toca la de otro.
+  @Put('me/ui-prefs')
+  guardarUiPrefs(@Request() req, @Body() body: unknown) {
+    return this.authService.guardarUiPrefs(req.user.id, req.user.roleCode, body);
+  }
+
   @Public()
   @Throttle(LOGIN_THROTTLE)
   @Post('executive-login')
@@ -160,9 +166,9 @@ export class AuthController {
     if (!refreshToken) {
       throw new UnauthorizedException('Refresh token inválido o expirado');
     }
-    const { access_token, refresh_token } = await this.authService.refreshAccessToken(refreshToken);
+    const { access_token, refresh_token, uiPrefs } = await this.authService.refreshAccessToken(refreshToken);
     setAuthCookies(res, access_token, refresh_token);
-    return { success: true };
+    return { success: true, uiPrefs };
   }
 
   // Contraparte de service-login: renueva el access_token de una cuenta de servicio

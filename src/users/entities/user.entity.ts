@@ -1,4 +1,5 @@
 import { Entity, PrimaryGeneratedColumn, Column } from 'typeorm';
+import type { UiPrefs } from '../ui-prefs.util';
 
 @Entity()
 export class User {
@@ -34,4 +35,8 @@ export class User {
 
   @Column({ nullable: true, select: false })
   executivePin: string;
+
+  // Preferencias de interfaz del propio usuario (hoy: skin). Se valida en ui-prefs.util.ts antes de guardar.
+  @Column({ type: 'jsonb', default: () => "'{}'" })
+  uiPrefs: UiPrefs;
 }

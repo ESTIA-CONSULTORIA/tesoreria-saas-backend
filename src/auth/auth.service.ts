@@ -10,6 +10,7 @@ import { ALL_MODULES } from '../config/all-modules.config';
 import { RefreshToken } from './entities/refresh-token.entity';
 import { User } from '../users/entities/user.entity';
 import { TenantModule } from '../modules/entities/tenant-module.entity';
+import { uiPrefsVisibles, validarUiPrefs } from '../users/ui-prefs.util';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 
@@ -94,6 +95,7 @@ export class AuthService {
         tenantId: user.tenantId,
         companyId: user.companyId || null,
         branchId: user.branchId || null,
+        uiPrefs: uiPrefsVisibles(user.uiPrefs, user.roleCode),
       },
     };
   }
@@ -271,7 +273,15 @@ export class AuthService {
     if (!user) throw new UnauthorizedException('Usuario no encontrado');
 
     const modulosActivos = await this.getModulosActivos(stored.tenantId, user.roleCode || '');
-    return this.generateTokens(user, modulosActivos);
+    const tokens = await this.generateTokens(user, modulosActivos);
+    return { ...tokens, uiPrefs: uiPrefsVisibles(user.uiPrefs, user.roleCode) };
+  }
+
+  /** Guarda la preferencia de interfaz del PROPIO usuario (el id sale de la sesión, nunca del cuerpo). */
+  async guardarUiPrefs(userId: string, roleCode: string | null | undefined, body: unknown) {
+    const uiPrefs = validarUiPrefs(body, roleCode);
+    await this.usersRepo.update({ id: userId }, { uiPrefs });
+    return { uiPrefs };
   }
 
   // Variante de refreshAccessToken() para cuentas de servicio: lee el refresh_token del
