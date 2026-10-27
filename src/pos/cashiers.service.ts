@@ -1,4 +1,4 @@
-import { Injectable, HttpException, HttpStatus } from '@nestjs/common';
+import { BadRequestException, Injectable, HttpException, HttpStatus } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { JwtService } from '@nestjs/jwt';
@@ -26,18 +26,33 @@ export class CashiersService {
     return users.map((u) => ({ id: u.id, nombre: u.name?.trim() ? u.name.trim() : null, email: u.email }));
   }
 
+  // Cajeros, meseros y capitanes ACTIVOS del propio tenant (y de la sucursal del usuario, si la tiene) para elegir en el login del POS.
+  // El tenant sale SIEMPRE del token; sin tenant devuelve vacío (nunca todos). Solo id, nombre y rol: jamás correo, NIP ni hash.
+  async lista(tenantId?: string, branchId?: string | null): Promise<Array<{ id: string; nombre: string | null; rol: string }>> {
+    if (!tenantId) return [];
+    const users = await this.usersRepo.find({
+      where: { tenantId, roleCode: In(ROLES_NIP), isActive: true },
+      select: ['id', 'name', 'roleCode', 'branchId'],
+    });
+    return users
+      .filter((u) => !branchId || !u.branchId || u.branchId === branchId)
+      .map((u) => ({ id: u.id, nombre: u.name?.trim() ? u.name.trim() : null, rol: u.roleCode }))
+      .sort((a, b) => (a.nombre ?? '').localeCompare(b.nombre ?? '', 'es'));
+  }
+
   // userId opcional: si el cliente indica quién es, el NIP se verifica SOLO contra ese usuario (y el límite
   // de intentos va por tenant + usuario + IP). Sin él, se busca el NIP entre los usuarios de NIP del tenant.
   async loginWithNip(nip: string, tenantId?: string, userId?: string) {
+    // Sin negocio no hay a quién comparar: antes se buscaba el NIP entre los usuarios de TODOS los tenants.
+    if (!tenantId) {
+      throw new BadRequestException('No se pudo determinar el negocio de este dispositivo. Vuelve a entrar o contacta a soporte.');
+    }
     // Auditoría de seguridad (GoodsHabits): antes no filtraba isActive — un cajero
     // desactivado seguía siendo candidato válido en el loop de bcrypt.compare de abajo,
     // autenticando con normalidad si el NIP seguía siendo el correcto. Se filtra en el
     // where, no después del loop — ni siquiera entra a la comparación.
     // CAJERO, MESERO y CAPITAN (ROLES_NIP). GERENTE y ADMIN no entran por NIP: usan sesión ERP.
-    const where: any = { roleCode: In(ROLES_NIP), isActive: true };
-    if (tenantId) {
-      where.tenantId = tenantId;
-    }
+    const where: any = { roleCode: In(ROLES_NIP), isActive: true, tenantId };
     if (userId) {
       where.id = userId;
     }

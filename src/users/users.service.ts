@@ -49,6 +49,7 @@ export class UsersService {
     // no filtran si branchId llega vacío (devuelven TODAS las sucursales del tenant), y
     // sales.service.ts exige sucursalId para registrar una venta. No aplica a SOPORTE ni
     // otros roles porque no operan sobre datos scoped a una sucursal específica.
+    this.assertTenantIfRequired(roleCode, tenantId);
     this.assertCompanyBranchIfRequired(roleCode, companyId, branchId);
     await this.assertNipUnico(tenantId, roleCode, password);
     if (executivePin) await this.assertPinEjecutivo(tenantId, executivePin);
@@ -68,6 +69,14 @@ export class UsersService {
       executivePin: hashedPin,
     });
     return this.usersRepository.save(user);
+  }
+
+  // Un usuario que opera una sucursal (cajero, gerente, mesero, capitán, recepción) siempre pertenece a un negocio: sin tenant no podría entrar
+  // por NIP ni se aislaría de los demás. La sesión que lo crea sin negocio (p. ej. soporte) debe indicar el tenant.
+  private assertTenantIfRequired(roleCode: string | undefined, tenantId?: string) {
+    if (roleCode && ROLES_CON_SUCURSAL.includes(roleCode) && !tenantId) {
+      throw new BadRequestException('Este usuario debe pertenecer a un negocio (tenant). Indica el negocio al crearlo.');
+    }
   }
 
   findByEmail(email: string) {
