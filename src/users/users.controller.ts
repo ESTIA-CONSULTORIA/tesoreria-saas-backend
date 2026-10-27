@@ -2,6 +2,7 @@ import { Body, Controller, Delete, Get, Param, Post, Put, Query, Request, UseGua
 import { UsersService } from './users.service';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
+import { esSoporte } from '../auth/tenant-access.util';
 
 @Controller('users')
 export class UsersController {
@@ -47,8 +48,11 @@ export class UsersController {
 
   @Get()
   findAll(@Query('tenantId') queryTenantId?: string, @Request() req?: any) {
-    const tenantId = req?.user?.tenantId || queryTenantId;
-    return this.usersService.findAll(tenantId);
+    // El ?tenantId= solo lo respeta SOPORTE (para elegir negocio; sin él ve todos). Para cualquier otro rol se ignora y manda el token;
+    // un rol que no es SOPORTE y no trae tenant en el token no ve a nadie (antes un token sin tenant listaba a todos los tenants).
+    if (esSoporte(req?.user)) return this.usersService.listarConNombres(queryTenantId || undefined);
+    if (!req?.user?.tenantId) return [];
+    return this.usersService.listarConNombres(req.user.tenantId);
   }
 
   // Auditoría de seguridad (GoodsHabits, hallazgo #0 BUSINESS): existía como

@@ -2,6 +2,8 @@ import { Injectable, BadRequestException, NotFoundException } from '@nestjs/comm
 import { InjectRepository } from '@nestjs/typeorm';
 import { User } from './entities/user.entity';
 import { Tenant } from '../tenants/entities/tenant.entity';
+import { Company } from '../companies/entities/company.entity';
+import { Branch } from '../branches/entities/branch.entity';
 import { In, Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 import { assertPinEjecutivoValido } from './executive-pin.util';
@@ -85,6 +87,29 @@ export class UsersService {
       .addSelect(['user.password'])
       .where('user.email = :email', { email })
       .getOne();
+  }
+
+  // Listado de la pantalla Usuarios: lo mismo que findAll() más los nombres de negocio, empresa y sucursal (nunca solo el UUID).
+  // Sin tenantId no acota: solo lo puede pedir el controller para SOPORTE.
+  async listarConNombres(tenantId?: string) {
+    const qb = this.usersRepository
+      .createQueryBuilder('user')
+      .leftJoin(Tenant, 't', 't.id::text = user.tenantId::text')
+      .leftJoin(Company, 'co', 'co.id::text = user.companyId::text')
+      .leftJoin(Branch, 'b', 'b.id::text = user.branchId::text')
+      .select(['user.id', 'user.email', 'user.name', 'user.roleId', 'user.roleCode', 'user.tenantId', 'user.companyId', 'user.branchId', 'user.isActive'])
+      .addSelect('t.tradeName', 'tenantNombre')
+      .addSelect('co.tradeName', 'empresaNombre')
+      .addSelect('b.name', 'sucursalNombre')
+      .orderBy('user.email', 'ASC');
+    if (tenantId) qb.where('user.tenantId = :tenantId', { tenantId });
+    const { entities, raw } = await qb.getRawAndEntities();
+    return entities.map((u, i) => ({
+      ...u,
+      tenantNombre: raw[i]?.tenantNombre ?? null,
+      empresaNombre: raw[i]?.empresaNombre ?? null,
+      sucursalNombre: raw[i]?.sucursalNombre ?? null,
+    }));
   }
 
   findAll(tenantId?: string) {
