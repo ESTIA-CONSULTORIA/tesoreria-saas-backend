@@ -29,6 +29,8 @@ import { AppointmentsService } from '../appointments/appointments.service';
 import { CostsService } from '../costs/costs.service';
 import { JustifiableCategory } from '../costs/entities/justifiable.entity';
 import { esFormaTarjeta, exigirUltimos4 } from './tarjeta.util';
+import { AutorizacionesService } from './autorizaciones.service';
+import { AutorizacionUsable, cubreCortesia, cubreDescuento, hashCuenta, hashLineas, motivoValido } from './autorizaciones.util';
 
 interface LowStockInsumo {
   id: string;
@@ -66,6 +68,9 @@ export class SalesService {
     // Gimnasio, capacidad membresias: cobro y renovación de membresías, beneficio de socio y cancelación por devolución.
     // Opcional: sin el módulo de membresías el POS funciona exactamente igual.
     @Optional() private membresiasCore?: MembresiasCoreService,
+    // Cortesías y descuentos sobre el tope autorizados por un gerente/admin (token de un solo uso) y su bitácora. Opcional: sin él solo
+    // pueden dar una cortesía o un descuento sin tope el gerente y el administrador con su propia sesión.
+    @Optional() private autorizaciones?: AutorizacionesService,
   ) {}
 
   // POS flexible, capacidad ligar_venta_a_cita: devuelve el citaId a persistir en la venta, o
@@ -160,7 +165,7 @@ export class SalesService {
   private async calcularImportes(
     items: any[],
     tenantId: string,
-    opts: { actor?: Actor; permitirDescuento: boolean },
+    opts: { actor?: Actor; permitirDescuento: boolean; autorizacion?: AutorizacionUsable | null },
   ): Promise<{ items: SaleItem[]; subtotal: number; descuento: number; impuestos: number; total: number }> {
     if (!Array.isArray(items) || items.length === 0) {
       throw new BadRequestException('Se requiere al menos un ítem.');
@@ -185,7 +190,7 @@ export class SalesService {
         }
         if (opts.actor) {
           const tope = topeDescuentoPct(opts.actor.roleCode);
-          if (pct > tope) {
+          if (pct > tope && !cubreDescuento(opts.autorizacion, pct)) {
             throw new ForbiddenException(this.mensajeTopeDescuento(opts.actor.roleCode, tope, pct));
           }
         }
@@ -219,8 +224,45 @@ export class SalesService {
     return actor?.email ?? actor?.id;
   }
 
-  private sanearPagos(pagos: any[], total: number, actor?: Actor): NonNullable<Sale['formasPago']> {
+  // Una cortesía siempre lleva un motivo de la lista (cortesia_ejecutiva, error_pedido…): sin él, 400.
+  private assertMotivoCortesia(motivos: unknown[]): void {
+    if (!motivos.length || motivos.some((m) => !motivoValido('CORTESIA', m))) {
+      throw new BadRequestException('La cortesía requiere un motivo de la lista (cortesía ejecutiva, error en pedido, cliente VIP, cumpleaños, compensación por queja u otro).');
+    }
+  }
+
+  // Gasta el token de autorización SOLO si hace falta: una cortesía de alguien que no es gerente/admin, o un descuento por encima del tope del
+  // rol. Con el token ausente (o sin necesidad) no hace nada y rigen las reglas de siempre (403).
+  private async resolverAutorizacion(token: unknown, items: any[], formasPago: any[] | undefined, tenantId: string, actor?: Actor): Promise<AutorizacionUsable | null> {
+    if (typeof token !== 'string' || !token || !this.autorizaciones || !actor?.id || !ROLES_DESCUENTO.includes(actor.roleCode ?? '')) return null;
+    const tope = topeDescuentoPct(actor.roleCode);
+    const pideCortesia = !ROLES_CORTESIA.includes(actor.roleCode ?? '') && (formasPago ?? []).some((p) => p?.forma === 'CORTESIA');
+    const sobreTope = (items ?? []).some((i) => Number(i?.descuento ?? 0) > tope);
+    if (!pideCortesia && !sobreTope) return null;
+    return this.autorizaciones.consumir({ token, tenantId, hash: hashLineas(items), actor });
+  }
+
+  // Bitácora de una cortesía o de un descuento autorizado, ya con la venta hecha (sin contraseñas ni token).
+  private async bitacoraAutorizada(venta: { id?: string; folio?: string; descuento?: number }, formas: Array<any>, aut: AutorizacionUsable | null, actor: Actor | undefined, tenantId: string, ctx?: { ip?: string; userAgent?: string }): Promise<void> {
+    if (!this.autorizaciones) return;
+    const cortesias = formas.filter((p) => p.forma === 'CORTESIA');
+    if (cortesias.length > 0) {
+      await this.autorizaciones.registrarUso('POS_CORTESIA', actor ?? {}, tenantId, {
+        ventaId: venta.id, folio: venta.folio, tipo: 'CORTESIA', motivo: cortesias[0].motivo, autorizadoPor: String(cortesias[0].autorizadoPor ?? ''),
+        autorizadoPorRol: aut?.autorizadoPorRol, via: aut ? 'TOKEN' : 'SESION', monto: this.round2(cortesias.reduce((s, p) => s + Number(p.monto), 0)),
+      }, ctx);
+    } else if (aut) {
+      await this.autorizaciones.registrarUso(aut.tipo === 'CORTESIA' ? 'POS_CORTESIA' : 'POS_DESCUENTO_AUTORIZADO', actor ?? {}, tenantId, {
+        ventaId: venta.id, folio: venta.folio, tipo: aut.tipo, motivo: aut.motivo, autorizadoPor: aut.autorizadoPorEmail,
+        autorizadoPorRol: aut.autorizadoPorRol, via: 'TOKEN', monto: this.round2(Number(venta.descuento ?? 0)),
+      }, ctx);
+    }
+  }
+
+  private sanearPagos(pagos: any[], total: number, actor?: Actor, aut?: AutorizacionUsable | null): NonNullable<Sale['formasPago']> {
     const FORMAS = ['EFECTIVO', 'TARJETA', 'DEBITO', 'CREDITO', 'TRANSFERENCIA', 'CORTESIA'];
+    // Quien no es gerente/admin solo da una cortesía con la autorización (de un solo uso) de uno: ahí autorizadoPor y motivo salen de ella.
+    const cortesiaPorToken = !!aut && cubreCortesia(aut) && !ROLES_CORTESIA.includes(actor?.roleCode ?? '');
     const limpios = pagos.map((p, i) => {
       const monto = this.round2(Number(p?.monto));
       if (!p || !FORMAS.includes(p.forma) || !Number.isFinite(monto) || monto < 0) {
@@ -238,11 +280,14 @@ export class SalesService {
         ...(p.claveRastreo ? { claveRastreo: p.claveRastreo } : {}),
         ...(p.bancoOrigen ? { bancoOrigen: p.bancoOrigen } : {}),
         ...(p.motivo ? { motivo: p.motivo } : {}),
-        ...(p.forma === 'CORTESIA' ? { autorizadoPor: this.autorizadoPorDe(actor) } : {}),
+        ...(p.forma === 'CORTESIA' ? { autorizadoPor: cortesiaPorToken ? aut!.autorizadoPorEmail : this.autorizadoPorDe(actor), ...(cortesiaPorToken ? { motivo: aut!.motivo } : {}) } : {}),
         ...(actor ? { cobradoPorId: actor.id, cobradoPorEmail: actor.email, cobradoPorRol: actor.roleCode, origen: contextoCobro(actor) } : {}),
       };
     });
-    if (limpios.some((p) => p.forma === 'CORTESIA')) this.assertCortesiaPermitida(actor);
+    if (limpios.some((p) => p.forma === 'CORTESIA')) {
+      if (!cortesiaPorToken) this.assertCortesiaPermitida(actor);
+      this.assertMotivoCortesia(limpios.filter((p) => p.forma === 'CORTESIA').map((p) => (p as any).motivo));
+    }
     const pagado = this.round2(limpios.reduce((s, p) => s + p.monto, 0));
     if (pagado < this.round2(total - 0.01)) {
       throw new BadRequestException(`Las formas de pago (${pagado}) no cubren el total de la venta (${total}). Actualiza el catálogo e intenta de nuevo.`);
@@ -321,10 +366,13 @@ export class SalesService {
     socioId?: string; // Gimnasio, capacidad membresias: socio al que se cobra la membresía o se le aplica su beneficio
     folio?: string; // generado en el cliente (Fase A1, modo offline). Si no viene,
                      // se genera server-side como siempre — retrocompatible.
-  }, actor?: Actor) {
+    autorizacion?: { token?: string }; // cortesía o descuento sobre el tope autorizado por un gerente/admin (POST /pos/autorizaciones)
+  }, actor?: Actor, ctx?: { ip?: string; userAgent?: string }) {
     // notaCocinaId/anulado son marcas del servidor (cancelación de cuentas abiertas): lo que
     // venga del cliente se descarta para que nadie pueda simular "ya salió a cocina".
     data = { ...data, items: (data.items || []).map(({ notaCocinaId: _n, anulado: _a, ...resto }: any) => resto) };
+    // Las líneas con que se pidió la autorización (antes de que un beneficio de socio agregue descuentos propios).
+    const itemsAutorizados = data.items;
     const folio = data.folio || await this.generateFolio();
     // Fuera del try (más abajo): un clientTimestamp inválido debe llegar al cliente como
     // 400 (BadRequestException), no enmascararse como 500 por el catch genérico de la venta.
@@ -366,7 +414,8 @@ export class SalesService {
       if (prep.nota) data = { ...data, notas: [data.notas, prep.nota].filter(Boolean).join(' ') };
       if (prep.plan && prep.socio) membresia = { socioId: prep.socio.id, plan: prep.plan, nota: prep.nota };
     }
-    const calculado = await this.calcularImportes(data.items, data.tenantId, { actor, permitirDescuento: !abreCuentaEnMesa });
+    const aut = await this.resolverAutorizacion(data.autorizacion?.token, itemsAutorizados, data.formasPago, data.tenantId, actor);
+    const calculado = await this.calcularImportes(data.items, data.tenantId, { actor, permitirDescuento: !abreCuentaEnMesa, autorizacion: aut });
     if (Math.abs(this.round2(Number(data.total)) - calculado.total) > Math.max(0.02, 0.01 * calculado.items.length)) {
       console.warn(`SalesService.create: el total del cliente (${data.total}) no coincide con el del servidor (${calculado.total}), folio ${folio}; se usa el del servidor.`);
     }
@@ -377,7 +426,7 @@ export class SalesService {
         throw new ForbiddenException('Con la política de cobro de este negocio las cuentas solo se cobran en caja. Pasa la cuenta a caja.');
       }
     }
-    const formasPagoFinal = nacePagada ? this.sanearPagos(data.formasPago as any[], calculado.total, actor) : [];
+    const formasPagoFinal = nacePagada ? this.sanearPagos(data.formasPago as any[], calculado.total, actor, aut) : [];
     data = {
       ...data,
       items: calculado.items,
@@ -555,6 +604,7 @@ export class SalesService {
       await this.reportLowStockAlerts(lowStockInsumos, data, folio);
     }
 
+    await this.bitacoraAutorizada(savedSale, formasPagoFinal as any[], aut, actor, data.tenantId, ctx);
     return savedSale;
   }
 
@@ -1223,6 +1273,7 @@ export class SalesService {
     },
     tenantId?: string,
     actor?: Actor,
+    ctx?: { ip?: string; userAgent?: string },
   ) {
     const t = await this.assertCuentasAbiertasHabilitada(tenantId);
     // Reglas de rol (el controller siempre pasa el usuario). Cobro completo: según politicaCobro y desde dónde
@@ -1246,13 +1297,16 @@ export class SalesService {
     if (!data || !FORMAS.includes(data.formaPago)) {
       throw new BadRequestException('formaPago inválida.');
     }
-    if (data.formaPago === 'CORTESIA') this.assertCortesiaPermitida(actor);
+    if (data.formaPago === 'CORTESIA') {
+      this.assertCortesiaPermitida(actor);
+      this.assertMotivoCortesia([data.motivo]);
+    }
     const ultimos4 = esFormaTarjeta(data.formaPago) ? exigirUltimos4(data.formaPago, data.ultimos4Digitos, 'El cobro de la cuenta') : undefined;
     if (data.monto !== undefined && data.itemIndexes !== undefined) {
       throw new BadRequestException('Manda monto o itemIndexes, no ambos.');
     }
 
-    return this.dataSource.transaction(async (manager) => {
+    const resultado = await this.dataSource.transaction(async (manager) => {
       const sale = await manager.findOne(Sale, { where: { id, tenantId: t }, lock: { mode: 'pessimistic_write' } });
       if (!sale) throw new NotFoundException('Venta no encontrada');
       if (sale.status !== 'ABIERTA') {
@@ -1356,8 +1410,11 @@ export class SalesService {
       }
 
       const actualizada = await manager.findOne(Sale, { where: { id } });
-      return { sale: actualizada, pagado: this.sumPagos(pagos), saldoPendiente: Math.max(nuevoSaldo, 0), cerrada };
+      return { sale: actualizada, pagado: this.sumPagos(pagos), saldoPendiente: Math.max(nuevoSaldo, 0), cerrada, entrada };
     });
+    const { entrada: cobrada, ...respuesta } = resultado;
+    if (data.formaPago === 'CORTESIA') await this.bitacoraAutorizada({ id, folio: (respuesta.sale as any)?.folio }, [cobrada], null, actor, t, ctx);
+    return respuesta;
   }
 
   async pay(id: string, data: {
@@ -1365,12 +1422,16 @@ export class SalesService {
     montoRecibido: number;
     cambio: number;
     ultimos4Digitos?: string;
-  }, tenantId?: string, actor?: Actor) {
+    motivo?: string;
+  }, tenantId?: string, actor?: Actor, ctx?: { ip?: string; userAgent?: string }) {
     const FORMAS_PAY = ['EFECTIVO', 'TARJETA', 'DEBITO', 'CREDITO', 'TRANSFERENCIA', 'CORTESIA'];
     if (!data || !FORMAS_PAY.includes(data.formaPago)) {
       throw new BadRequestException('formaPago inválida.');
     }
-    if (data.formaPago === 'CORTESIA') this.assertCortesiaPermitida(actor);
+    if (data.formaPago === 'CORTESIA') {
+      this.assertCortesiaPermitida(actor);
+      this.assertMotivoCortesia([data.motivo]);
+    }
     const ultimos4 = esFormaTarjeta(data.formaPago) ? exigirUltimos4(data.formaPago, data.ultimos4Digitos, 'El cobro de la venta') : undefined;
     try {
       const sale = await this.salesRepo.findOne({ where: tenantId ? { id, tenantId } : { id } });
@@ -1420,7 +1481,7 @@ export class SalesService {
           cobradoPorRol: actor.roleCode,
           origen: contextoCobro(actor),
           ...(ultimos4 ? { ultimos4Digitos: ultimos4 } : {}),
-          ...(data.formaPago === 'CORTESIA' ? { autorizadoPor: this.autorizadoPorDe(actor) } : {}),
+          ...(data.formaPago === 'CORTESIA' ? { autorizadoPor: this.autorizadoPorDe(actor), motivo: data.motivo } : {}),
           ...(data.montoRecibido !== undefined ? { montoRecibido: Number(data.montoRecibido) } : {}),
           ...(data.cambio !== undefined ? { cambio: Number(data.cambio) } : {}),
         }];
@@ -1430,6 +1491,7 @@ export class SalesService {
           forma: 'CORTESIA' as const,
           monto: this.round2(Number(sale.total)),
           autorizadoPor: this.autorizadoPorDe(actor),
+          motivo: data.motivo,
           ...(actor ? { cobradoPorId: actor.id, cobradoPorEmail: actor.email, cobradoPorRol: actor.roleCode, origen: contextoCobro(actor) } : {}),
         }];
       } else if (ultimos4) {
@@ -1457,7 +1519,9 @@ export class SalesService {
         await this.salesRepo.update(id, cambiosPago);
       }
 
-      return this.salesRepo.findOne({ where: { id } });
+      const pagada = await this.salesRepo.findOne({ where: { id } });
+      if (data.formaPago === 'CORTESIA' && pagada) await this.bitacoraAutorizada(pagada, (cambiosPago.formasPago as any[]) ?? [], null, actor, String(sale.tenantId ?? tenantId ?? ''), ctx);
+      return pagada;
     } catch (error) {
       console.error('SalesService.pay error:', error);
       if (error instanceof HttpException) throw error;
@@ -1519,7 +1583,8 @@ export class SalesService {
     }
   }
 
-  async applyDiscount(id: string, descuento: number, nuevoTotal: number, tenantId?: string, actor?: Actor) {
+  async applyDiscount(id: string, descuento: number, nuevoTotal: number, tenantId?: string, actor?: Actor, autorizacion?: { token?: string }, ctx?: { ip?: string; userAgent?: string }) {
+    let autGastada: AutorizacionUsable | null = null;
     // El mesero no aplica descuentos (el controller siempre pasa el usuario; sin rol reconocido también es 403).
     if (actor && !ROLES_DESCUENTO.includes(actor.roleCode ?? '')) {
       throw new ForbiddenException('Tu rol no puede aplicar descuentos. Pide a un capitán o gerente.');
@@ -1561,7 +1626,15 @@ export class SalesService {
         }
         const tope = topeDescuentoPct(actor?.roleCode);
         if (actor && desc > this.round2((base * tope) / 100)) {
-          throw new ForbiddenException(this.mensajeTopeDescuento(actor.roleCode, tope, base > 0 ? (desc / base) * 100 : 100));
+          const pct = base > 0 ? (desc / base) * 100 : 100;
+          // Sobre el tope del rol: solo con la autorización de un gerente/admin para ESTA cuenta y ESTE descuento.
+          if (typeof autorizacion?.token === 'string' && autorizacion.token && this.autorizaciones && actor.id) {
+            const aut = await this.autorizaciones.consumir({ token: autorizacion.token, tenantId: String(sale.tenantId ?? tenantId), hash: hashCuenta(id, desc), actor });
+            if (!cubreDescuento(aut, pct)) throw new ForbiddenException(this.mensajeTopeDescuento(actor.roleCode, tope, pct));
+            autGastada = aut;
+          } else {
+            throw new ForbiddenException(this.mensajeTopeDescuento(actor.roleCode, tope, pct));
+          }
         }
 
         // El descuento de cuenta es sobre el total con IVA: el IVA baja en la misma proporción (igual que si cada ítem
@@ -1576,7 +1649,14 @@ export class SalesService {
           total: esperado,
         });
 
-        return manager.findOne(Sale, { where: { id } });
+        const actualizada = await manager.findOne(Sale, { where: { id } });
+        if (autGastada) {
+          await this.autorizaciones!.registrarUso(autGastada.tipo === 'CORTESIA' ? 'POS_CORTESIA' : 'POS_DESCUENTO_AUTORIZADO', actor ?? {}, String(sale.tenantId ?? tenantId), {
+            ventaId: id, folio: sale.folio, tipo: autGastada.tipo, motivo: autGastada.motivo, autorizadoPor: autGastada.autorizadoPorEmail,
+            autorizadoPorRol: autGastada.autorizadoPorRol, via: 'TOKEN', monto: desc,
+          }, ctx);
+        }
+        return actualizada;
       });
     } catch (error) {
       console.error('SalesService.applyDiscount error:', error);

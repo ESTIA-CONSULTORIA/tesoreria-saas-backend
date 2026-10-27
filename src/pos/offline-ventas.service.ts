@@ -130,7 +130,7 @@ export class OfflineVentasService {
       pagos.push({
         forma: 'CORTESIA',
         monto: diferencia,
-        motivo: 'Diferencia por cambio de precio (venta offline)',
+        motivo: 'otro', // la explicación (cambio de precio, venta offline) queda en las notas de la venta
         autorizadoPor: actor.email ?? actor.id,
       });
     }

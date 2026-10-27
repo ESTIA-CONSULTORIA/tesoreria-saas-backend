@@ -19,7 +19,7 @@ export class SalesController {
       ...data,
       ...(sucursalId ? { sucursalId } : {}),
       tenantId,
-    }, req.user ?? {}).catch((e) => {
+    }, req.user ?? {}, { ip: req.ip, userAgent: req.headers?.['user-agent'] }).catch((e) => {
       registrarRechazo('POST /pos/sales', e, req, data);
       throw e;
     });
@@ -111,7 +111,7 @@ export class SalesController {
   @Post(':id/pagos')
   cobrarCuenta(@Param('id') id: string, @Body() data: any, @Request() req?: any) {
     const tenantId = req?.user?.tenantId;
-    return this.salesService.cobrarCuenta(id, data, tenantId, req?.user ?? {}).catch((e) => {
+    return this.salesService.cobrarCuenta(id, data, tenantId, req?.user ?? {}, { ip: req?.ip, userAgent: req?.headers?.['user-agent'] }).catch((e) => {
       registrarRechazo('POST /pos/sales/:id/pagos', e, req, data);
       throw e;
     });
@@ -120,7 +120,7 @@ export class SalesController {
   @Put(':id/pay')
   paySale(@Param('id') id: string, @Body() data: any, @Request() req?: any) {
     const tenantId = req?.user?.tenantId;
-    return this.salesService.pay(id, data, tenantId, req?.user ?? {}).catch((e) => {
+    return this.salesService.pay(id, data, tenantId, req?.user ?? {}, { ip: req?.ip, userAgent: req?.headers?.['user-agent'] }).catch((e) => {
       registrarRechazo('PUT /pos/sales/:id/pay', e, req, data);
       throw e;
     });
@@ -135,11 +135,11 @@ export class SalesController {
   @Put(':id/discount')
   applyDiscount(
     @Param('id') id: string,
-    @Body() data: { descuento: number; nuevoTotal: number },
+    @Body() data: { descuento: number; nuevoTotal: number; autorizacion?: { token?: string } },
     @Request() req?: any,
   ) {
     const tenantId = req?.user?.tenantId;
-    return this.salesService.applyDiscount(id, data.descuento, data.nuevoTotal, tenantId, req?.user ?? {});
+    return this.salesService.applyDiscount(id, data.descuento, data.nuevoTotal, tenantId, req?.user ?? {}, data.autorizacion, { ip: req?.ip, userAgent: req?.headers?.['user-agent'] });
   }
 
   // El servicio decide según la política del tenant (SOLO_GERENTE | CAJERO_LIBRE) y el rol de quien llama.

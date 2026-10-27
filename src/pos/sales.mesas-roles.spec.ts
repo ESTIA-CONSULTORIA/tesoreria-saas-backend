@@ -739,7 +739,7 @@ const ITEM_SIN_COCINA = { productoId: 'p-simple', nombre: 'Taco', cantidad: 2, p
       });
 
       it('un pago mixto con una parte en CORTESIA también exige GERENTE o ADMIN (cajero: 403; gerente: 100 efectivo + 16 cortesía)', async () => {
-        const mixto = [{ forma: 'EFECTIVO', monto: 100 }, { forma: 'CORTESIA', monto: 16 }];
+        const mixto = [{ forma: 'EFECTIVO', monto: 100 }, { forma: 'CORTESIA', monto: 16, motivo: 'cortesia_ejecutiva' }];
         await expect(ventaDirecta(erp('CAJERO'), mixto)).rejects.toBeInstanceOf(ForbiddenException);
         expect(ventas.size).toBe(0);
         const v = await ventaDirecta(erp('GERENTE'), mixto);
@@ -766,7 +766,7 @@ const ITEM_SIN_COCINA = { productoId: 'p-simple', nombre: 'Taco', cantidad: 2, p
         '%s recibe 403 al cobrar como cortesía y la cuenta queda intacta', async (_r, actor) => {
           politicaCobro = 'MESERO_EN_MESA'; // para que la política de cobro deje pasar y lo que falle sea la cortesía
           const c = await abrirCuenta(lite('MESERO'));
-          const err: any = await cobrar(c.id, { formaPago: 'CORTESIA' }, actor).catch((e) => e);
+          const err: any = await cobrar(c.id, { formaPago: 'CORTESIA', motivo: 'cortesia_ejecutiva' }, actor).catch((e) => e);
           expect(err).toBeInstanceOf(ForbiddenException);
           expect(err.message).toContain('cortesía');
           expect(venta(c.id)).toMatchObject({ status: 'ABIERTA', total: 116 });
@@ -776,8 +776,8 @@ const ITEM_SIN_COCINA = { productoId: 'p-simple', nombre: 'Taco', cantidad: 2, p
 
       it('un cobro dividido con una parte en cortesía también pasa por la regla (cajero 403; gerente sí)', async () => {
         const c = await abrirCuenta(lite('MESERO'));
-        await expect(cobrar(c.id, { formaPago: 'CORTESIA', monto: 16 }, erp('CAJERO'))).rejects.toBeInstanceOf(ForbiddenException);
-        await cobrar(c.id, { formaPago: 'CORTESIA', monto: 16 }, erp('GERENTE'));
+        await expect(cobrar(c.id, { formaPago: 'CORTESIA', motivo: 'cortesia_ejecutiva', monto: 16 }, erp('CAJERO'))).rejects.toBeInstanceOf(ForbiddenException);
+        await cobrar(c.id, { formaPago: 'CORTESIA', motivo: 'cortesia_ejecutiva', monto: 16 }, erp('GERENTE'));
         await cobrar(c.id, { formaPago: 'EFECTIVO' }, erp('CAJERO'));
         expect(venta(c.id).formasPago.map((p: any) => [p.forma, p.monto])).toEqual([['CORTESIA', 16], ['EFECTIVO', 100]]);
         expect(venta(c.id).formasPago[0].autorizadoPor).toBe('gerente@erp');
@@ -786,10 +786,10 @@ const ITEM_SIN_COCINA = { productoId: 'p-simple', nombre: 'Taco', cantidad: 2, p
       it('PUT /pay: gerente cobra como cortesía (queda autorizadoPor y formasPago); cajero 403; forma desconocida 400', async () => {
         const c = await abrirCuenta(lite('MESERO'));
         const pagar = (data: any, actor: any, tenant = TENANT_A) => sales.pay(c.id, data, tenant, actor);
-        await expect(pagar({ formaPago: 'CORTESIA', montoRecibido: 0, cambio: 0 }, erp('CAJERO'))).rejects.toBeInstanceOf(ForbiddenException);
+        await expect(pagar({ formaPago: 'CORTESIA', motivo: 'cortesia_ejecutiva', montoRecibido: 0, cambio: 0 }, erp('CAJERO'))).rejects.toBeInstanceOf(ForbiddenException);
         await expect(pagar({ formaPago: 'REGALO', montoRecibido: 0, cambio: 0 }, erp('GERENTE'))).rejects.toBeInstanceOf(BadRequestException);
         expect(venta(c.id).status).toBe('ABIERTA');
-        await pagar({ formaPago: 'CORTESIA', montoRecibido: 0, cambio: 0 }, erp('GERENTE'));
+        await pagar({ formaPago: 'CORTESIA', motivo: 'cortesia_ejecutiva', montoRecibido: 0, cambio: 0 }, erp('GERENTE'));
         expect(venta(c.id).status).toBe('PAGADA');
         expect(venta(c.id).formasPago[0]).toMatchObject({ forma: 'CORTESIA', monto: 116, autorizadoPor: 'gerente@erp' });
       });
@@ -801,8 +801,8 @@ const ITEM_SIN_COCINA = { productoId: 'p-simple', nombre: 'Taco', cantidad: 2, p
           sucursalId: SUC, tenantId: TENANT_A, folio: `V-${++nextId}`,
         } as any, erp('CAJERO'));
         expect(venta(c.id).status).toBe('ABIERTA');
-        await expect(sales.pay(c.id, { formaPago: 'CORTESIA', montoRecibido: 0, cambio: 0 }, TENANT_A, erp('CAJERO'))).rejects.toBeInstanceOf(ForbiddenException);
-        await sales.pay(c.id, { formaPago: 'CORTESIA', montoRecibido: 0, cambio: 0 }, TENANT_A, erp('ADMIN'));
+        await expect(sales.pay(c.id, { formaPago: 'CORTESIA', motivo: 'cortesia_ejecutiva', montoRecibido: 0, cambio: 0 }, TENANT_A, erp('CAJERO'))).rejects.toBeInstanceOf(ForbiddenException);
+        await sales.pay(c.id, { formaPago: 'CORTESIA', motivo: 'cortesia_ejecutiva', montoRecibido: 0, cambio: 0 }, TENANT_A, erp('ADMIN'));
         expect(venta(c.id).formasPago[0]).toMatchObject({ forma: 'CORTESIA', monto: 116, autorizadoPor: 'admin@erp' });
       });
     });
@@ -810,8 +810,8 @@ const ITEM_SIN_COCINA = { productoId: 'p-simple', nombre: 'Taco', cantidad: 2, p
     describe('aislamiento de tenant', () => {
       it('un GERENTE de otro tenant no puede dar cortesía a una cuenta ajena (ni por cobro ni por /pay): nada cambia', async () => {
         const c = await abrirCuenta(lite('MESERO'));
-        await expect(cobrar(c.id, { formaPago: 'CORTESIA' }, erp('GERENTE'), TENANT_B)).rejects.toThrow('Venta no encontrada');
-        await expect(sales.pay(c.id, { formaPago: 'CORTESIA', montoRecibido: 0, cambio: 0 }, TENANT_B, erp('GERENTE'))).rejects.toThrow('Venta no encontrada');
+        await expect(cobrar(c.id, { formaPago: 'CORTESIA', motivo: 'cortesia_ejecutiva' }, erp('GERENTE'), TENANT_B)).rejects.toThrow('Venta no encontrada');
+        await expect(sales.pay(c.id, { formaPago: 'CORTESIA', motivo: 'cortesia_ejecutiva', montoRecibido: 0, cambio: 0 }, TENANT_B, erp('GERENTE'))).rejects.toThrow('Venta no encontrada');
         expect(venta(c.id)).toMatchObject({ status: 'ABIERTA', total: 116 });
         expect(venta(c.id).formasPago ?? []).toHaveLength(0);
       });
@@ -881,7 +881,7 @@ const ITEM_SIN_COCINA = { productoId: 'p-simple', nombre: 'Taco', cantidad: 2, p
       const c = await abrirCuenta(beto, {}, [ITEM_SIN_COCINA], 'mesa-1');
       await cobrar(c.id, { formaPago: 'EFECTIVO', monto: 60 }, beto);
       await cobrar(c.id, { formaPago: 'TARJETA', ultimos4Digitos: '1234' }, beto);
-      await directa(erp('GERENTE'), [{ forma: 'CORTESIA', monto: 116 }]);
+      await directa(erp('GERENTE'), [{ forma: 'CORTESIA', monto: 116, motivo: 'cortesia_ejecutiva' }]);
       await directa(erp('CAJERO'), [{ forma: 'EFECTIVO', monto: 200, montoRecibido: 200 }]);
       await shiftsService.withdrawal('turno-1', { monto: 100, motivo: 'pago a proveedor', autorizadoPor: 'gerente' }, TENANT_A);
       await shiftsService.deposit('turno-1', { monto: 50, origen: 'cambio', autorizadoPor: 'gerente' }, TENANT_A);

@@ -328,7 +328,7 @@ const ITEM_SIN_COCINA = { productoId: 'p-simple', nombre: 'Taco', cantidad: 2, p
       expect(v.total).toBe(139.2);
       expect(v.formasPago.map((p: any) => [p.forma, p.monto])).toEqual([['EFECTIVO', 116], ['CORTESIA', 23.2]]);
       expect(v.formasPago[1]).toMatchObject({ autorizadoPor: 'gerente@erp' });
-      expect(v.formasPago[1].motivo).toMatch(/cambio de precio/);
+      expect(v.formasPago[1].motivo).toBe('otro'); // motivo de la lista; la explicación (cambio de precio) va en las notas de la venta
       expect(audits[0].details).toMatchObject({ cobrado: 116, totalNuevo: 139.2, diferenciaAbsorbida: 23.2 });
     });
 
