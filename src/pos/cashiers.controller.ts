@@ -94,6 +94,12 @@ export class CashiersController {
     return this.cashiersService.directorio(req.user?.tenantId);
   }
 
+  // Cajeros activos del propio tenant para el selector del login del POS. Exige sesión; tenant y sucursal salen del token.
+  @Get('lista')
+  lista(@Request() req) {
+    return this.cashiersService.lista(req.user?.tenantId, req.user?.branchId);
+  }
+
   // Bootstrap de sesión para CorteCajaLite.tsx — mismo motivo que GET /auth/executive-me:
   // lee la cookie de POS Lite directo, no pasa por el chain genérico del middleware, para
   // no depender de cuál otra cookie de sesión pueda haber en el mismo navegador.
