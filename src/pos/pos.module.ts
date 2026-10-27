@@ -15,6 +15,9 @@ import { TablesService } from './tables.service';
 import { SalesController } from './sales.controller';
 import { SalesService } from './sales.service';
 import { OfflineVentasService } from './offline-ventas.service';
+import { AutorizacionesController } from './autorizaciones.controller';
+import { AutorizacionesService } from './autorizaciones.service';
+import { PosAutorizacion } from './entities/pos-autorizacion.entity';
 import { AuditModule } from '../audit/audit.module';
 import { ShiftsController } from './shifts.controller';
 import { ShiftsService } from './shifts.service';
@@ -55,7 +58,7 @@ import { CostsModule } from '../costs/costs.module';
     // Branch/Company agregados para el hallazgo transversal #6 (auditoría BUSINESS):
     // categories.service.ts y areas.service.ts resuelven tenant vía branchId → Branch →
     // Company.tenantId, porque PosCategory/Area no tienen tenantId propio.
-    TypeOrmModule.forFeature([PosConfig, Product, PosCategory, Area, Table, Sale, Shift, Recipe, Insumo, User, CorteField, InsumoAlert, NotaCocina, Tenant, TenantSetting, Branch, Company, PlanMembresia]),
+    TypeOrmModule.forFeature([PosConfig, Product, PosCategory, Area, Table, Sale, Shift, Recipe, Insumo, User, CorteField, InsumoAlert, NotaCocina, Tenant, TenantSetting, Branch, Company, PlanMembresia, PosAutorizacion]),
     // Mismo secret que AuthModule (JWT_SECRET) — cashiers.service.ts firma/verifica con
     // JwtService en vez del jsonwebtoken crudo que usaba antes de la migración a cookies.
     JwtModule.registerAsync({
@@ -93,6 +96,7 @@ import { CostsModule } from '../costs/costs.module';
     CorteFieldsController,
     InsumoAlertsController,
     NotasCocinaController,
+    AutorizacionesController,
   ],
   providers: [
     PosService,
@@ -102,6 +106,7 @@ import { CostsModule } from '../costs/costs.module';
     TablesService,
     SalesService,
     OfflineVentasService,
+    AutorizacionesService,
     ShiftsService,
     CashiersService,
     CorteFieldsService,

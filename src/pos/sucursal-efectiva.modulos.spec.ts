@@ -222,7 +222,7 @@ describe('ventas', () => {
 
   it('crear venta: la sucursal es la del usuario; mandar otra es 403 y no se crea nada', () => {
     c.createSale({ sucursalId: 'suc-A1', items: [] }, { user: CAJERO_A1 });
-    expect(sales.create).toHaveBeenCalledWith(expect.objectContaining({ sucursalId: 'suc-A1', tenantId: TA }), CAJERO_A1);
+    expect(sales.create).toHaveBeenCalledWith(expect.objectContaining({ sucursalId: 'suc-A1', tenantId: TA }), CAJERO_A1, expect.anything());
     expect(() => c.createSale({ sucursalId: 'suc-A2', items: [] }, { user: CAJERO_A1 })).toThrow(ForbiddenException);
     expect(sales.create).toHaveBeenCalledTimes(1);
   });
