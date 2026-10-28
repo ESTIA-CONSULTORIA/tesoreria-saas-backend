@@ -68,6 +68,18 @@ export class Shift {
   @Column({ type: 'boolean', default: false })
   esRetroactivo: boolean;
 
+  // Instantes reales (timestamptz). horaApertura/horaCierre son `time` sin fecha y en UTC: un turno que cruza la medianoche UTC queda con
+  // cierre < apertura. Para mostrar y calcular duraciones usa estos dos.
+  @Column({ type: 'timestamptz', nullable: true })
+  abiertoEn: Date | null;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  cerradoEn: Date | null;
+
+  // Folio corto por negocio (T-0001), consecutivo y único por tenant.
+  @Column({ type: 'varchar', length: 16, nullable: true })
+  folio: string | null;
+
   @CreateDateColumn()
   createdAt: Date;
 }

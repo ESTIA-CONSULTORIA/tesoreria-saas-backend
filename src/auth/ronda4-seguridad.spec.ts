@@ -12,7 +12,9 @@ const req = (roleCode: string, tenantId: string | null, extra: any = {}) => ({ u
 describe('turno único por cajero: el error de unicidad se traduce a 400', () => {
   const datos = { cajero: 'c1', sucursalId: 's1', tenantId: MIO, fondoInicial: 0 };
   const servicio = (save: jest.Mock) => {
-    const shiftsRepo: any = { create: jest.fn(() => ({})), save };
+    // El turno se guarda con su folio en una transacción: el manager de prueba cuenta folios y reenvía el save al mock.
+    const manager: any = { transaction: (fn: any) => fn({ query: jest.fn().mockResolvedValue([{ ultimo: 1 }]), save: (_c: any, s: any) => save(s) }) };
+    const shiftsRepo: any = { create: jest.fn(() => ({})), save, manager };
     return new ShiftsService(shiftsRepo, {} as any);
   };
   const violacion = (extra: any = {}) => Object.assign(new Error('duplicate key value violates unique constraint'), { code: '23505', constraint: INDICE_TURNO_UNICO, ...extra });

@@ -1,11 +1,12 @@
 import { BadRequestException, HttpException, Injectable } from '@nestjs/common';
 import { TASAS_IVA, totalesDeItems, TasaIva } from '../config/iva.config';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, IsNull, Not, Repository } from 'typeorm';
+import { EntityManager, In, IsNull, Not, Repository } from 'typeorm';
 import { Shift } from './entities/shift.entity';
 import { Sale } from './entities/sale.entity';
 import { resolveEventTimestamp } from '../common/resolve-event-timestamp.util';
 import { assertSucursalDelTenant } from '../common/sucursal-efectiva';
+import { formatearFolioTurno } from './folio-turno.util';
 
 // Efectivo cobrado FUERA DE CAJA (origen MESA: POS Lite, o ERP con MESERO/CAPITAN), por persona. Sale de
 // formasPago[].cobradoPor* de las cuentas de mesa (JSON, sin migración). Es efectivo que físicamente tiene quien lo
@@ -64,6 +65,7 @@ export class ShiftsService {
       shift.tenantId = data.tenantId;
       shift.fecha = now;
       shift.horaApertura = now.toTimeString().slice(0, 8);
+      shift.abiertoEn = now;
       shift.fondoInicial = data.fondoInicial;
       shift.totalVentas = 0;
       shift.totalEfectivo = 0;
@@ -74,7 +76,7 @@ export class ShiftsService {
       shift.status = 'ABIERTO';
       shift.notas = data.notas || '';
       // await: sin él un rechazo del INSERT escapaba del catch y no se podía traducir.
-      return await this.shiftsRepo.save(shift);
+      return await this.guardarConFolio(shift);
     } catch (error) {
       // Índice único parcial UQ_shift_un_abierto_por_cajero: un cajero no puede tener dos turnos ABIERTOS (23505).
       if (esViolacionTurnoUnico(error)) {
@@ -84,6 +86,25 @@ export class ShiftsService {
       console.error('ShiftsService.openShift error:', error);
       throw new Error(`Error al abrir turno: ${error.message}`);
     }
+  }
+
+  // Siguiente folio del negocio. El UPSERT toma el candado de la fila del contador y lo mantiene hasta que termina la transacción del llamador:
+  // dos altas simultáneas del mismo tenant se turnan (sin repetir ni saltar números) y, si la transacción se revierte, el número no se gasta.
+  async siguienteFolio(manager: EntityManager, tenantId: string): Promise<string> {
+    const filas = await manager.query(
+      'INSERT INTO "shift_folio_contador" ("tenantId", "ultimo") VALUES ($1, 1) ON CONFLICT ("tenantId") DO UPDATE SET "ultimo" = "shift_folio_contador"."ultimo" + 1 RETURNING "ultimo"',
+      [tenantId],
+    );
+    return formatearFolioTurno(Number(filas[0].ultimo));
+  }
+
+  // Guarda el turno con su folio en UNA transacción. Sin tenant (dato viejo o SOPORTE sin negocio) no hay folio que asignar.
+  private async guardarConFolio(shift: Shift): Promise<Shift> {
+    if (!shift.tenantId) return this.shiftsRepo.save(shift);
+    return this.shiftsRepo.manager.transaction(async (m) => {
+      shift.folio = await this.siguienteFolio(m, shift.tenantId);
+      return m.save(Shift, shift);
+    });
   }
 
   // Auditoría BUSINESS (hallazgo transversal #6): withdrawal()/deposit()/precut()/
@@ -327,6 +348,7 @@ export class ShiftsService {
 
       await this.shiftsRepo.update(id, {
         horaCierre: now.toTimeString().slice(0, 8),
+        cerradoEn: now,
         totalVentas: calcTotalVentas,
         totalEfectivo: calcTotalEfectivo,
         totalTarjeta: calcTotalTarjeta,
@@ -555,6 +577,8 @@ export class ShiftsService {
       shift.fecha = new Date(data.fecha); // fecha de negocio elegida por el admin
       shift.horaApertura = now.toTimeString().slice(0, 8); // hora real de captura (servidor)
       shift.horaCierre = now.toTimeString().slice(0, 8);
+      shift.abiertoEn = now;
+      shift.cerradoEn = now;
       shift.fondoInicial = data.fondoInicial || 0;
       shift.totalVentas = data.totalVentas || 0;
       shift.totalEfectivo = data.totalEfectivo || 0;
@@ -569,7 +593,7 @@ export class ShiftsService {
       shift.status = 'CERRADO';
       shift.esRetroactivo = true;
       shift.notas = `[CAPTURA RETROACTIVA — registrada el ${now.toISOString()}] ${data.notas || ''}`.trim();
-      return this.shiftsRepo.save(shift);
+      return this.guardarConFolio(shift);
     } catch (error) {
       console.error('ShiftsService.createBackfillShift error:', error);
       throw new Error(`Error al capturar corte retroactivo: ${error.message}`);
