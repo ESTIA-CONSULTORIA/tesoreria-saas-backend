@@ -2,11 +2,11 @@ import { BadRequestException, ForbiddenException } from '@nestjs/common';
 
 // Preferencias de interfaz POR USUARIO (columna "uiPrefs" jsonb de "user"). Hoy solo la skin.
 // Los ids son los de frontend-core/src/core/theme/skins.ts (SKINS): si se agrega una skin allá, se agrega aquí.
-export const SKINS_VALIDAS = ['estia', 'oscuro', 'claro', 'contraste'] as const;
+export const SKINS_VALIDAS = ['estia', 'oscuro', 'claro', 'contraste', 'isotipo'] as const;
 export type SkinId = (typeof SKINS_VALIDAS)[number];
 
 /** Skins que todavía no están migradas en todas las pantallas: solo las ven estos roles hasta terminar las olas 2 a 4. */
-export const SKINS_EN_PREPARACION: readonly SkinId[] = ['claro', 'contraste'];
+export const SKINS_EN_PREPARACION: readonly SkinId[] = ['claro', 'contraste', 'isotipo'];
 export const ROLES_SKINS_EN_PREPARACION: readonly string[] = ['ADMIN', 'SOPORTE'];
 
 export interface UiPrefs {

@@ -8,7 +8,7 @@ describe('preferencias de interfaz por usuario', () => {
   });
 
   it('Claro y Alto contraste solo para ADMIN y SOPORTE mientras estén en preparación', () => {
-    for (const skin of ['claro', 'contraste']) {
+    for (const skin of ['claro', 'contraste', 'isotipo']) {
       expect(validarUiPrefs({ skin }, 'ADMIN')).toEqual({ skin });
       expect(validarUiPrefs({ skin }, 'SOPORTE')).toEqual({ skin });
       for (const rol of ['CAJERO', 'GERENTE', 'USER', null, undefined, ''])
