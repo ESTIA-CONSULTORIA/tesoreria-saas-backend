@@ -94,9 +94,11 @@ export class UsersService {
   async listarConNombres(tenantId?: string) {
     const qb = this.usersRepository
       .createQueryBuilder('user')
-      .leftJoin(Tenant, 't', 't.id::text = user.tenantId::text')
-      .leftJoin(Company, 'co', 'co.id::text = user.companyId::text')
-      .leftJoin(Branch, 'b', 'b.id::text = user.branchId::text')
+      // TypeORM no escapa los identificadores en un ON con ::text y "user" es palabra reservada de Postgres
+      // (user.tenantId => syntax error at or near "."), por eso van entrecomillados a mano.
+      .leftJoin(Tenant, 't', '"t"."id"::text = "user"."tenantId"::text')
+      .leftJoin(Company, 'co', '"co"."id"::text = "user"."companyId"::text')
+      .leftJoin(Branch, 'b', '"b"."id"::text = "user"."branchId"::text')
       .select(['user.id', 'user.email', 'user.name', 'user.roleId', 'user.roleCode', 'user.tenantId', 'user.companyId', 'user.branchId', 'user.isActive'])
       .addSelect('t.tradeName', 'tenantNombre')
       .addSelect('co.tradeName', 'empresaNombre')
