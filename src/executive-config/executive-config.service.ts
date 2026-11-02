@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ExecutiveConfig } from './entities/executive-config.entity';
@@ -10,11 +10,20 @@ export class ExecutiveConfigService {
     private repo: Repository<ExecutiveConfig>,
   ) {}
 
-  findByTenant(tenantId: string) {
+  // Con tenantId undefined, findOne({ where: { tenantId: undefined } }) NO filtra y devuelve la configuración de CUALQUIER negocio
+  // (y upsert la modificaba): sin tenant no hay configuración.
+  async findByTenant(tenantId: string) {
+    if (!tenantId) return null;
     return this.repo.findOne({ where: { tenantId } });
   }
 
   async upsert(tenantId: string, body: { theme?: string; modules?: Record<string, boolean> }) {
+    if (!tenantId) throw new BadRequestException('Falta el negocio');
+    // Solo estos campos: antes update(existing.id, body) aceptaba cualquiera (id, tenantId...)
+    const permitido: { theme?: string; modules?: Record<string, boolean> } = {};
+    if (body?.theme !== undefined) permitido.theme = body.theme;
+    if (body?.modules !== undefined) permitido.modules = body.modules;
+    body = permitido;
     const existing = await this.findByTenant(tenantId);
     if (!existing) {
       const created = this.repo.create({
