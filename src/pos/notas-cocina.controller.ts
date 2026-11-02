@@ -1,8 +1,9 @@
+import { tenantDeSesion, tenantParaListar, tenantParaEscribir } from '../auth/tenant-access.util';
 import { Controller, Get, Put, Param, Query, Request } from '@nestjs/common';
 import { NotasCocinaService } from './notas-cocina.service';
 
 // POS flexible, capacidad notas_cocina_barra. Sin @Modulo() de clase ni guard adicional a
-// propósito — mismo patrón que InsumoAlertsController: cada endpoint lee req.user.tenantId
+// propósito — mismo patrón que InsumoAlertsController: cada endpoint lee tenantDeSesion(req)
 // directo, lo que ya funciona transparente para sesiones POS Lite (pos_access_token +
 // x-session-scope: pos-lite, ver jwt.middleware.ts) sin necesitar un guard nuevo.
 @Controller('pos/notas-cocina')
@@ -18,11 +19,11 @@ export class NotasCocinaController {
     @Query('sucursalId') sucursalId?: string,
     @Query('estacion') estacion?: 'COCINA' | 'BARRA',
   ) {
-    return this.service.findPending(req.user.tenantId, sucursalId, estacion);
+    return this.service.findPending(tenantParaEscribir(req, req?.query?.tenantId), sucursalId, estacion);
   }
 
   @Put(':id/preparado')
   marcarPreparado(@Param('id') id: string, @Request() req: any) {
-    return this.service.marcarPreparado(id, req.user.tenantId);
+    return this.service.marcarPreparado(id, tenantParaEscribir(req, req?.query?.tenantId));
   }
 }

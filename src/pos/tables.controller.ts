@@ -1,3 +1,4 @@
+import { tenantDeSesion, tenantParaListar, tenantParaEscribir } from '../auth/tenant-access.util';
 import { Controller, Get, Post, Put, Delete, Body, Param, Query, Req, Headers } from '@nestjs/common';
 import { TablesService } from './tables.service';
 import { Modulo } from '../auth/modulo.decorator';
@@ -17,12 +18,12 @@ export class TablesController {
     @Query('areaId') areaId?: string,
     @Headers('x-branch-id') headerBranchId?: string,
   ) {
-    return this.tablesService.findAll(sucursalEfectiva(req?.user, branchId || headerBranchId).branchId, areaId, req?.user?.tenantId);
+    return this.tablesService.findAll(sucursalEfectiva(req?.user, branchId || headerBranchId).branchId, areaId, tenantParaListar(req, req?.query?.tenantId));
   }
 
   @Get(':id')
   findOne(@Param('id') id: string, @Req() req?: any) {
-    const tenantId = req?.user?.tenantId;
+    const tenantId = tenantDeSesion(req);
     return this.tablesService.findOne(id, tenantId);
   }
 
@@ -30,19 +31,19 @@ export class TablesController {
   create(@Body() data: any, @Req() req?: any) {
     // JWT primero; body.tenantId solo como fallback para SOPORTE — mismo criterio que
     // products/cashiers/users/companies.
-    const tenantId = req?.user?.tenantId || data?.tenantId;
+    const tenantId = tenantParaEscribir(req, req?.query?.tenantId);
     return this.tablesService.create(data, tenantId);
   }
 
   @Put(':id')
   update(@Param('id') id: string, @Body() data: any, @Req() req?: any) {
-    const tenantId = req?.user?.tenantId;
+    const tenantId = tenantDeSesion(req);
     return this.tablesService.update(id, data, tenantId);
   }
 
   @Delete(':id')
   delete(@Param('id') id: string, @Req() req?: any) {
-    const tenantId = req?.user?.tenantId;
+    const tenantId = tenantDeSesion(req);
     return this.tablesService.delete(id, tenantId);
   }
 }

@@ -45,13 +45,7 @@ export class AreasService {
   // los tenants. Una sucursal pedida que no es del tenant devuelve vacío, no la ajena. Sin tenantId
   // (SOPORTE) conserva el comportamiento anterior.
   async findAll(branchId?: string, tenantId?: string) {
-    if (!tenantId) {
-      return this.areasRepo.find({
-        where: branchId ? { branchId } : undefined,
-        relations: ['tables'],
-        order: { name: 'ASC' },
-      });
-    }
+    if (!tenantId) return []; // sin tenant (SOPORTE sin ?tenantId=) nunca se listan las áreas de todos los tenants
     const propias = await this.branchIdsDelTenant(tenantId);
     const ids = branchId ? propias.filter((b) => b === branchId) : propias;
     if (!ids.length) return [];

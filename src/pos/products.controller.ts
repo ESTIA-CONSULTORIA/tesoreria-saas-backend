@@ -1,3 +1,4 @@
+import { tenantDeSesion, tenantParaListar, tenantParaEscribir } from '../auth/tenant-access.util';
 import { Controller, Get, Post, Put, Delete, Body, Headers, Param, Req } from '@nestjs/common';
 import { ProductsService } from './products.service';
 import { Modulo } from '../auth/modulo.decorator';
@@ -10,7 +11,7 @@ export class ProductsController {
 
   @Get()
   findAll(@Req() req: any, @Headers('x-branch-id') headerBranchId?: string, @Param('branchId') paramBranchId?: string) {
-    const tenantId = req.user?.tenantId;
+    const tenantId = tenantParaListar(req, req?.query?.tenantId);
     // La sucursal sale del usuario (token); el header solo filtra para quien no tiene sucursal (ADMIN/dueño).
     const { branchId } = sucursalEfectiva(req.user, headerBranchId || paramBranchId);
     return this.productsService.findAll(branchId, tenantId);
@@ -19,12 +20,12 @@ export class ProductsController {
   // Insumos y recetas reales del tenant para los selectores de la pantalla de Productos. Va antes de :id.
   @Get('opciones-stock')
   opcionesStock(@Req() req: any) {
-    return this.productsService.opcionesStock(req.user?.tenantId);
+    return this.productsService.opcionesStock(tenantParaListar(req, req?.query?.tenantId));
   }
 
   @Get(':id')
   findOne(@Param('id') id: string, @Req() req?: any) {
-    const tenantId = req?.user?.tenantId;
+    const tenantId = tenantDeSesion(req);
     return this.productsService.findOne(id, tenantId);
   }
 
@@ -32,7 +33,7 @@ export class ProductsController {
   create(@Body() data: any, @Req() req?: any, @Headers('x-branch-id') headerBranchId?: string) {
     // JWT primero; body.tenantId solo como fallback para SOPORTE (sin tenantId en su JWT) —
     // mismo criterio que cashiers/users/companies.
-    const tenantId = req?.user?.tenantId || data?.tenantId;
+    const tenantId = tenantParaEscribir(req, req?.query?.tenantId);
     // Sucursal: la del usuario; sin sucursal (ADMIN) la pedida en el cuerpo o la activa del header, validada contra el tenant
     // en el servicio. Sin ninguna, el producto queda sin sucursal = compartido por todas las del negocio.
     // El cuerpo es explícito (otra sucursal para quien tiene la suya = 403); el header, que el cliente manda siempre, solo
@@ -43,7 +44,7 @@ export class ProductsController {
 
   @Put(':id')
   update(@Param('id') id: string, @Body() data: any, @Req() req?: any) {
-    const tenantId = req?.user?.tenantId;
+    const tenantId = tenantDeSesion(req);
     // Mover un producto de sucursal solo hacia la propia (o una del tenant si no se tiene); el servicio valida el tenant.
     if (data && Object.prototype.hasOwnProperty.call(data, 'branchId') && data.branchId) {
       data = { ...data, branchId: sucursalParaEscribir(req?.user, data.branchId) };
@@ -53,7 +54,7 @@ export class ProductsController {
 
   @Delete(':id')
   delete(@Param('id') id: string, @Req() req?: any) {
-    const tenantId = req?.user?.tenantId;
+    const tenantId = tenantDeSesion(req);
     return this.productsService.delete(id, tenantId);
   }
 }

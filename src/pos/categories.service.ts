@@ -52,6 +52,7 @@ export class CategoriesService {
   //     propio, así que nunca se lista a un tenant que no la use (ver categoriasVisibles).
   // `branchId` (sucursal efectiva) acota las que tienen sucursal a esa; las compartidas que el tenant usa se agregan siempre.
   async findAll(branchId?: string, tenantId?: string) {
+    if (!tenantId) return []; // sin tenant nunca se listan las categorías de todos los tenants
     const query = this.categoriesRepo.createQueryBuilder('category');
 
     let ctx: { branchIdsTenant: Set<string>; usedIds: Set<string>; branchId?: string } | null = null;

@@ -377,17 +377,16 @@ export class ShiftsService {
 
   async findOpenShift(cajero: string, sucursalId: string, tenantId?: string) {
     try {
-      // Primero intentar con tenantId
-      if (tenantId) {
-        const shift = await this.shiftsRepo.findOne({
-          where: { status: 'ABIERTO', tenantId, cajero },
-          order: { createdAt: 'DESC' },
-        });
-        if (shift) return shift;
-      }
+      // Sin tenant no hay turno que buscar: el nombre del cajero NO es único entre negocios.
+      if (!tenantId) return null;
+      const shift = await this.shiftsRepo.findOne({
+        where: { status: 'ABIERTO', tenantId, cajero },
+        order: { createdAt: 'DESC' },
+      });
+      if (shift) return shift;
 
-      // Fallback: buscar turno abierto del mismo cajero, filtrando por sucursalId si se proporciona
-      const whereConditions: any = { status: 'ABIERTO', cajero };
+      // Fallback: mismo cajero en la sucursal indicada, siempre dentro del tenant (antes buscaba por nombre en TODOS los tenants)
+      const whereConditions: any = { status: 'ABIERTO', cajero, tenantId };
       if (sucursalId) {
         whereConditions.sucursalId = sucursalId;
       }
@@ -411,6 +410,7 @@ export class ShiftsService {
     fechaFin?: Date;
   }) {
     try {
+      if (!filters?.tenantId) return []; // sin tenant nunca se listan los turnos de todos los tenants
       const query = this.shiftsRepo.createQueryBuilder('shift');
 
       if (filters?.cajero) {

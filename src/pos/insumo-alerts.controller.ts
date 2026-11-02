@@ -1,4 +1,4 @@
-import { tenantDeSesion } from '../auth/tenant-access.util';
+import { tenantDeSesion, tenantParaListar, tenantParaEscribir } from '../auth/tenant-access.util';
 import { Controller, Get, Post, Put, Param, Body, Request } from '@nestjs/common';
 import { InsumoAlertsService } from './insumo-alerts.service';
 
@@ -8,12 +8,12 @@ export class InsumoAlertsController {
 
   @Get()
   getAlerts(@Request() req: any) {
-    return this.service.getAlerts(req.user.tenantId);
+    return this.service.getAlerts(tenantParaEscribir(req, req?.query?.tenantId));
   }
 
   @Get('all')
   getAllAlerts(@Request() req: any) {
-    return this.service.getAllAlerts(req.user.tenantId);
+    return this.service.getAllAlerts(tenantParaEscribir(req, req?.query?.tenantId));
   }
 
   // Catálogo ligero (solo id/nombre) para el selector de insumo real de CorteCajaLite.tsx.
@@ -22,16 +22,16 @@ export class InsumoAlertsController {
   // insumos reales que un cajero necesita elegir al reportar un aviso.
   @Get('insumos-lista')
   listInsumos(@Request() req: any) {
-    return this.service.listInsumosLigero(req.user.tenantId);
+    return this.service.listInsumosLigero(tenantParaEscribir(req, req?.query?.tenantId));
   }
 
   @Post()
   create(@Request() req: any, @Body() body: any) {
-    return this.service.upsert(req.user.tenantId, body.companyId, req.user.id, body);
+    return this.service.upsert(tenantParaEscribir(req, req?.query?.tenantId), body.companyId, req.user.id, body);
   }
 
   @Put(':id')
   update(@Param('id') id: string, @Body() body: { estado: string; notas?: string }, @Request() req?: any) {
-    return this.service.updateEstado(id, body.estado, body.notas, tenantDeSesion(req));
+    return this.service.updateEstado(id, body.estado, body.notas, tenantParaEscribir(req, req?.query?.tenantId));
   }
 }
