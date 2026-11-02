@@ -8,6 +8,7 @@ import { Observable } from 'rxjs';
 import { tap } from 'rxjs/operators';
 import { AuditService } from './audit.service';
 import { redactar, redactarUrl } from './redactar';
+import { entidadDeLaUrl, negocioDeLaBitacora } from './tenant-objetivo';
 
 @Injectable()
 export class AuditInterceptor implements NestInterceptor {
@@ -21,7 +22,7 @@ export class AuditInterceptor implements NestInterceptor {
       const method = request.method;
       const url = request.url;
       const user = request.user;
-      const tenantId = request.tenantId || user?.tenantId;
+      const tenantIdToken = request.tenantId || user?.tenantId;
       const roleCode = user?.roleCode || null;
 
       // Solo auditar POST, PUT, PATCH, DELETE
@@ -30,7 +31,7 @@ export class AuditInterceptor implements NestInterceptor {
       }
 
       // Extraer la entidad de la URL
-      const entity = this.extractEntityFromUrl(url);
+      const entity = entidadDeLaUrl(url);
 
       // Determinar la acción
       let action: string;
@@ -54,15 +55,17 @@ export class AuditInterceptor implements NestInterceptor {
       const userAgent = request.headers['user-agent'] || '';
 
       return next.handle().pipe(
-        tap(async () => {
+        tap(async (respuesta) => {
           // Solo registrar si la respuesta fue exitosa (2xx)
           if (response.statusCode >= 200 && response.statusCode < 300) {
             try {
+              // Si actúa SOPORTE, la entrada lleva el negocio OBJETIVO (ver tenant-objetivo.ts); si no, el del token
+              const negocio = negocioDeLaBitacora({ roleCode, tenantIdToken, query: request.query, body: request.body, respuesta });
               await this.auditService.createLog({
                 userId: user?.id || 'system',
                 userEmail: user?.email || 'system',
                 roleCode,
-                tenantId: tenantId || 'system',
+                tenantId: negocio.tenantId,
                 action,
                 entity: entity || 'SYSTEM',
                 details: {
@@ -70,6 +73,8 @@ export class AuditInterceptor implements NestInterceptor {
                   url: redactarUrl(url),
                   // Nunca se guardan contraseñas, NIP, tokens, llaves ni certificados (ver redactar.ts).
                   body: redactar(request.body),
+                  // de dónde salió el negocio cuando quien actúa es SOPORTE (query, body o respuesta)
+                  ...(roleCode === 'SOPORTE' ? { negocioObjetivo: negocio.origen } : {}),
                 },
                 ipAddress,
                 userAgent,
@@ -85,35 +90,5 @@ export class AuditInterceptor implements NestInterceptor {
       // Si falla el interceptor, continuar con la petición
       return next.handle();
     }
-  }
-
-  private extractEntityFromUrl(url: string): string {
-    // Extraer la entidad de la URL
-    // Ej: /users -> User, /companies -> Company
-    const parts = url.split('/').filter(Boolean);
-    if (parts.length > 0) {
-      const entity = parts[0];
-      // Convertir a singular y capitalizar
-      return this.singularize(this.capitalize(entity));
-    }
-    return 'Unknown';
-  }
-
-  private capitalize(str: string): string {
-    return str.charAt(0).toUpperCase() + str.slice(1);
-  }
-
-  private singularize(str: string): string {
-    // Reglas simples de singularización
-    if (str.endsWith('ies')) {
-      return str.slice(0, -3) + 'y';
-    }
-    if (str.endsWith('es')) {
-      return str.slice(0, -2);
-    }
-    if (str.endsWith('s')) {
-      return str.slice(0, -1);
-    }
-    return str;
   }
 }
