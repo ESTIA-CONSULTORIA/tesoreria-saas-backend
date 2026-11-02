@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, HttpException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
 import { Invoice, InvoiceStatus, ReconciliationStatus, InvoiceType } from './entities/invoice.entity';
@@ -22,15 +22,28 @@ export class ReconciliationService {
     private companiesRepo: Repository<Company>,
   ) {}
 
+  // Cuentas (banks) del tenant: Bank -> Branch -> Company -> Tenant. Sin tenant -> []. (bank.tenantId es nullable en datos viejos.)
+  private async cuentasDelTenant(tenantId?: string): Promise<string[]> {
+    if (!tenantId) return [];
+    const rows = await this.banksRepo
+      .createQueryBuilder('bank')
+      .select('bank.id', 'id')
+      .innerJoin(Branch, 'branch', 'branch.id::text = bank."branchId"::text')
+      .innerJoin(Company, 'company', 'company.id::text = branch."companyId"::text')
+      .where('company."tenantId"::text = :tenantId', { tenantId })
+      .getRawMany();
+    return rows.map((r) => r.id);
+  }
+
   async getAllInvoices(tenantId?: string) {
-    const where: any = {};
-    if (tenantId) where.tenantId = tenantId;
+    if (!tenantId) return []; // sin tenant (SOPORTE sin ?tenantId=) nunca se listan todos
+    const where: any = { tenantId };
     return this.invoicesRepo.find({ where, order: { createdAt: 'DESC' } });
   }
 
   async getInvoicesByStatus(status: ReconciliationStatus, tenantId?: string) {
-    const where: any = { reconciliationStatus: status };
-    if (tenantId) where.tenantId = tenantId;
+    if (!tenantId) return [];
+    const where: any = { reconciliationStatus: status, tenantId };
     return this.invoicesRepo.find({ where, order: { createdAt: 'DESC' } });
   }
 
@@ -45,6 +58,10 @@ export class ReconciliationService {
     concept?: string;
     tenantId?: string;
   }) {
+    const tenantId = data.tenantId;
+    if (!tenantId) throw new BadRequestException('Falta el negocio de la factura');
+    delete (data as any).id; // con id en el body save() pisaría la factura de otro tenant
+    await this.validarCuentas(tenantId, [data.accountId, data.bankAccountId]);
     const invoice = this.invoicesRepo.create({
       ...data,
       reconciliationStatus: ReconciliationStatus.PENDIENTE,
@@ -56,6 +73,14 @@ export class ReconciliationService {
   // Auditoría BUSINESS (hallazgo transversal #6): Invoice sí tiene tenantId propio (a
   // diferencia de Movement) — mismo mensaje que "no encontrada" a propósito para no revelar
   // si el id existe en otro tenant. Opcional para no romper a SOPORTE.
+  // La cuenta bancaria que llega en el body debe ser del tenant
+  private async validarCuentas(tenantId: string, cuentas: Array<string | undefined>) {
+    const pedidas = cuentas.filter(Boolean) as string[];
+    if (!pedidas.length) return;
+    const propias = await this.cuentasDelTenant(tenantId);
+    if (pedidas.some((c) => !propias.includes(c))) throw new NotFoundException('Cuenta no encontrada');
+  }
+
   private async assertOwnedInvoice(id: string, tenantId?: string): Promise<Invoice> {
     const invoice = await this.invoicesRepo.findOne({ where: { id } });
     if (!invoice) throw new NotFoundException('Factura no encontrada');
@@ -66,6 +91,7 @@ export class ReconciliationService {
   }
 
   async updateInvoiceStatus(id: string, status: ReconciliationStatus, tenantId?: string) {
+    if (!Object.values(ReconciliationStatus).includes(status)) throw new BadRequestException('Estado de conciliación inválido');
     await this.assertOwnedInvoice(id, tenantId);
     await this.invoicesRepo.update(id, { reconciliationStatus: status });
     return this.invoicesRepo.findOne({ where: { id } });
@@ -78,8 +104,8 @@ export class ReconciliationService {
   }
 
   async getReconciliationSummary(tenantId?: string) {
-    const where: any = {};
-    if (tenantId) where.tenantId = tenantId;
+    const where: any = { tenantId: tenantId ?? '__sin_tenant__' }; // sin tenant: cero filas, nunca todos
+    if (!tenantId) return { total: 0, conciliadas: 0, pendientes: 0, noConciliadas: 0, emitidas: 0, recibidas: 0 };
     const all = await this.invoicesRepo.find({ where });
     return {
       total: all.length,
@@ -99,28 +125,13 @@ export class ReconciliationService {
     tenantId?: string;
   }) {
     // Obtener movimientos bancarios
+    const vacio = { reconciled: [], pending: [], notReconciled: [] };
+    if (!filters?.tenantId) return vacio; // sin tenant nunca se concilia contra todos los movimientos
+    const tenantAccountIds = await this.cuentasDelTenant(filters.tenantId);
+    if (!tenantAccountIds.length) return vacio;
+    if (filters.bankAccountId && !tenantAccountIds.includes(filters.bankAccountId)) return vacio;
     const movementsQuery = this.movementsRepo.createQueryBuilder('movement');
-    if (filters?.tenantId) {
-      const companies = await this.companiesRepo.find({ where: { tenantId: filters.tenantId }, select: ['id'] });
-      const companyIds = companies.map((c) => c.id);
-      if (companyIds.length > 0) {
-        const branches = await this.branchesRepo.find({ where: { companyId: In(companyIds) }, select: ['id'] });
-        const branchIds = branches.map((b) => b.id);
-        if (branchIds.length > 0) {
-          const tenantBanks = await this.banksRepo.find({ where: { branchId: In(branchIds) }, select: ['id'] });
-          const tenantAccountIds = tenantBanks.map((b) => b.id);
-          if (tenantAccountIds.length > 0) {
-            movementsQuery.andWhere('movement.accountId IN (:...tenantAccountIds)', { tenantAccountIds });
-          } else {
-            movementsQuery.andWhere('1=0');
-          }
-        } else {
-          movementsQuery.andWhere('1=0');
-        }
-      } else {
-        movementsQuery.andWhere('1=0');
-      }
-    }
+    movementsQuery.andWhere('movement.accountId IN (:...tenantAccountIds)', { tenantAccountIds });
     if (filters?.bankAccountId) {
       movementsQuery.andWhere('movement.accountId = :accountId', { accountId: filters.bankAccountId });
     }
@@ -134,9 +145,7 @@ export class ReconciliationService {
 
     // Obtener facturas
     const invoicesQuery = this.invoicesRepo.createQueryBuilder('invoice');
-    if (filters?.tenantId) {
-      invoicesQuery.andWhere('invoice.tenantId = :tenantId', { tenantId: filters.tenantId });
-    }
+    invoicesQuery.andWhere('invoice.tenantId = :tenantId', { tenantId: filters.tenantId });
     if (filters?.bankAccountId) {
       invoicesQuery.andWhere('invoice.bankAccountId = :bankAccountId', { bankAccountId: filters.bankAccountId });
     }
@@ -157,13 +166,14 @@ export class ReconciliationService {
     const notReconciled = movements.filter((movement) => !invoices.find((invoice) => invoice.movementId === movement.id));
 
     // Obtener nombres de cuentas
-    const banks = await this.banksRepo.find();
+    const banks = await this.banksRepo.find({ where: { id: In(tenantAccountIds) } }); // nombres solo de cuentas del tenant
     const getBankName = (accountId: string) => banks.find((b) => b.id === accountId)?.name || accountId;
 
     return {
       reconciled: await Promise.all(
         reconciled.map(async (invoice) => {
-          const movement = await this.movementsRepo.findOne({ where: { id: invoice.movementId } });
+          const found = await this.movementsRepo.findOne({ where: { id: invoice.movementId } });
+          const movement = found && tenantAccountIds.includes(found.accountId) ? found : null; // nunca un movimiento de otro tenant
           return {
             invoice: {
               ...invoice,
@@ -201,8 +211,8 @@ export class ReconciliationService {
     if (tenantId) {
       const movement = await this.movementsRepo.findOne({ where: { id: movementId } });
       if (!movement) throw new NotFoundException('Movimiento no encontrado');
-      const account = await this.banksRepo.findOne({ where: { id: movement.accountId, tenantId } });
-      if (!account) throw new NotFoundException('Movimiento no encontrado');
+      // la cuenta del movimiento debe ser del tenant por la cadena banco -> sucursal -> empresa -> tenant
+      if (!(await this.cuentasDelTenant(tenantId)).includes(movement.accountId)) throw new NotFoundException('Movimiento no encontrado');
     }
 
     await this.invoicesRepo.update(invoiceId, {
@@ -216,11 +226,13 @@ export class ReconciliationService {
   // movements.service.ts::findByAccount() antes de su fix — no verificaba que bankAccountId
   // fuera una cuenta del tenant que consulta.
   async getAvailableMovements(bankAccountId?: string, tenantId?: string) {
-    if (bankAccountId && tenantId) {
-      const account = await this.banksRepo.findOne({ where: { id: bankAccountId, tenantId } });
-      if (!account) throw new NotFoundException('Cuenta no encontrada');
-    }
+    if (!tenantId) return [];
+    // Antes, sin bankAccountId la consulta no tenía ningún filtro de tenant: devolvía los movimientos de TODOS los tenants.
+    const tenantAccountIds = await this.cuentasDelTenant(tenantId);
+    if (bankAccountId && !tenantAccountIds.includes(bankAccountId)) throw new NotFoundException('Cuenta no encontrada');
+    if (!tenantAccountIds.length) return [];
     const query = this.movementsRepo.createQueryBuilder('movement');
+    query.andWhere('movement.accountId IN (:...tenantAccountIds)', { tenantAccountIds });
     if (bankAccountId) {
       query.andWhere('movement.accountId = :accountId', { accountId: bankAccountId });
     }
@@ -228,6 +240,8 @@ export class ReconciliationService {
   }
 
   async importInvoices(invoices: any[], tenantId?: string) {
+    if (!tenantId) throw new BadRequestException('Falta el negocio de las facturas');
+    await this.validarCuentas(tenantId, (invoices || []).map((i) => i?.bankAccountId));
     try {
       const results: Invoice[] = [];
       for (const invoiceData of invoices) {
@@ -248,6 +262,7 @@ export class ReconciliationService {
       }
       return { imported: results.length, invoices: results };
     } catch (error) {
+      if (error instanceof HttpException) throw error;
       throw new Error(`Error al importar facturas: ${error.message}`);
     }
   }

@@ -2,6 +2,7 @@ import { Controller, Get, Post, Put, Delete, Body, Param, Query, Request } from 
 import { ReconciliationService } from './reconciliation.service';
 import { Invoice, InvoiceType, InvoiceStatus, ReconciliationStatus } from './entities/invoice.entity';
 import { Modulo } from '../auth/modulo.decorator';
+import { tenantDeSesion, tenantParaListar, tenantParaEscribir } from '../auth/tenant-access.util';
 
 // Auditoría de seguridad (GoodsHabits, P1): 'tesoreria', mismo criterio que
 // banks.controller.ts — ver esa nota.
@@ -12,19 +13,19 @@ export class ReconciliationController {
 
   @Get()
   getAllInvoices(@Request() req?: any) {
-    const tenantId = req?.user?.tenantId;
+    const tenantId = tenantParaListar(req, req?.query?.tenantId); // token; SOPORTE con ?tenantId= explícito
     return this.reconciliationService.getAllInvoices(tenantId);
   }
 
   @Get('summary')
   getSummary(@Request() req?: any) {
-    const tenantId = req?.user?.tenantId;
+    const tenantId = tenantParaListar(req, req?.query?.tenantId); // token; SOPORTE con ?tenantId= explícito
     return this.reconciliationService.getReconciliationSummary(tenantId);
   }
 
   @Get('status/:status')
   getInvoicesByStatus(@Param('status') status: ReconciliationStatus, @Request() req?: any) {
-    const tenantId = req?.user?.tenantId;
+    const tenantId = tenantParaListar(req, req?.query?.tenantId); // token; SOPORTE con ?tenantId= explícito
     return this.reconciliationService.getInvoicesByStatus(status, tenantId);
   }
 
@@ -36,7 +37,7 @@ export class ReconciliationController {
     @Query('type') type?: InvoiceType,
     @Request() req?: any,
   ) {
-    const tenantId = req?.user?.tenantId;
+    const tenantId = tenantParaListar(req, req?.query?.tenantId); // token; SOPORTE con ?tenantId= explícito
     return this.reconciliationService.getReconciliationData({
       bankAccountId,
       startDate,
@@ -48,7 +49,7 @@ export class ReconciliationController {
 
   @Get('movements')
   getAvailableMovements(@Query('bankAccountId') bankAccountId?: string, @Request() req?: any) {
-    const tenantId = req?.user?.tenantId;
+    const tenantId = tenantParaListar(req, req?.query?.tenantId); // token; SOPORTE con ?tenantId= explícito
     return this.reconciliationService.getAvailableMovements(bankAccountId, tenantId);
   }
 
@@ -66,13 +67,13 @@ export class ReconciliationController {
     },
     @Request() req?: any,
   ) {
-    const tenantId = req?.user?.tenantId;
+    const tenantId = tenantParaEscribir(req, req?.query?.tenantId);
     return this.reconciliationService.createInvoice({ ...data, tenantId });
   }
 
   @Delete(':id')
   deleteInvoice(@Param('id') id: string, @Request() req?: any) {
-    const tenantId = req?.user?.tenantId;
+    const tenantId = tenantDeSesion(req);
     return this.reconciliationService.deleteInvoice(id, tenantId);
   }
 
@@ -82,13 +83,13 @@ export class ReconciliationController {
     @Body('status') status: ReconciliationStatus,
     @Request() req?: any,
   ) {
-    const tenantId = req?.user?.tenantId;
+    const tenantId = tenantDeSesion(req);
     return this.reconciliationService.updateInvoiceStatus(id, status, tenantId);
   }
 
   @Put(':id/manual-review')
   markForManualReview(@Param('id') id: string, @Request() req?: any) {
-    const tenantId = req?.user?.tenantId;
+    const tenantId = tenantDeSesion(req);
     return this.reconciliationService.markForManualReview(id, tenantId);
   }
 
@@ -98,13 +99,13 @@ export class ReconciliationController {
     @Body('movementId') movementId: string,
     @Request() req?: any,
   ) {
-    const tenantId = req?.user?.tenantId;
+    const tenantId = tenantDeSesion(req);
     return this.reconciliationService.manualReconciliation(invoiceId, movementId, tenantId);
   }
 
   @Post('import')
   importInvoices(@Body() data: { invoices: any[] }, @Request() req?: any) {
-    const tenantId = req?.user?.tenantId;
+    const tenantId = tenantParaEscribir(req, req?.query?.tenantId);
     return this.reconciliationService.importInvoices(data.invoices, tenantId);
   }
 }
