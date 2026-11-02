@@ -1,6 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { ProductsService } from './products.service';
 import { ProductsController } from './products.controller';
 import { PosService } from './pos.service';
@@ -106,14 +106,16 @@ describe('ProductsController.create() — resolución del tenant', () => {
     expect(service.create).toHaveBeenCalledWith(expect.anything(), TENANT_A);
   });
 
-  it('SOPORTE (JWT sin tenantId): usa body.tenantId como fallback', () => {
-    controller.create({ name: 'X', tenantId: TENANT_B }, { user: {} });
+  it('SOPORTE: usa ?tenantId= explícito y el body.tenantId se ignora', () => {
+    controller.create({ name: 'X', tenantId: TENANT_A }, { user: { roleCode: 'SOPORTE' }, query: { tenantId: TENANT_B } });
     expect(service.create).toHaveBeenCalledWith(expect.anything(), TENANT_B);
   });
 
-  it('sin tenant en ninguno de los dos lados: pasa undefined (el servicio rechaza)', () => {
-    controller.create({ name: 'X' }, { user: {} });
-    expect(service.create).toHaveBeenCalledWith(expect.anything(), undefined);
+  it('SOPORTE sin ?tenantId= es 400 y un token sin tenant que no es SOPORTE es 403 (el body no sirve de fallback)', async () => {
+    service.create.mockClear();
+    await expect(Promise.resolve().then(() => controller.create({ name: 'X', tenantId: TENANT_B }, { user: { roleCode: 'SOPORTE' }, query: {} }))).rejects.toBeInstanceOf(BadRequestException);
+    await expect(Promise.resolve().then(() => controller.create({ name: 'X', tenantId: TENANT_B }, { user: {}, query: {} }))).rejects.toBeInstanceOf(ForbiddenException);
+    expect(service.create).not.toHaveBeenCalled();
   });
 });
 

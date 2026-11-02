@@ -1,3 +1,4 @@
+import { tenantDeSesion, tenantParaListar, tenantParaEscribir } from '../auth/tenant-access.util';
 import { Controller, Get, Post, Put, Delete, Body, Param, Req, Headers } from '@nestjs/common';
 import { AreasService } from './areas.service';
 import { Modulo } from '../auth/modulo.decorator';
@@ -11,29 +12,29 @@ export class AreasController {
   @Get()
   findAll(@Req() req: any, @Headers('x-branch-id') headerBranchId?: string) {
     const { branchId } = sucursalEfectiva(req.user, headerBranchId);
-    return this.areasService.findAll(branchId, req.user?.tenantId);
+    return this.areasService.findAll(branchId, tenantParaListar(req, req?.query?.tenantId));
   }
 
   @Get(':id')
   findOne(@Param('id') id: string, @Req() req?: any) {
-    const tenantId = req?.user?.tenantId;
+    const tenantId = tenantDeSesion(req);
     return this.areasService.findOne(id, tenantId);
   }
 
   @Post()
   create(@Body() data: any, @Req() req?: any) {
-    return this.areasService.create(data, req?.user?.tenantId);
+    return this.areasService.create(data, tenantDeSesion(req));
   }
 
   @Put(':id')
   update(@Param('id') id: string, @Body() data: any, @Req() req?: any) {
-    const tenantId = req?.user?.tenantId;
+    const tenantId = tenantDeSesion(req);
     return this.areasService.update(id, data, tenantId);
   }
 
   @Delete(':id')
   delete(@Param('id') id: string, @Req() req?: any) {
-    const tenantId = req?.user?.tenantId;
+    const tenantId = tenantDeSesion(req);
     return this.areasService.delete(id, tenantId);
   }
 }

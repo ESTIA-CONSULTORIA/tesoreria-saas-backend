@@ -99,9 +99,9 @@ describe('AreasService / TablesService — aislamiento por tenant', () => {
       expect(r[0].tables.map((t: any) => t.id)).toEqual(['m1']);
     });
 
-    it('SOPORTE (sin tenant) conserva el comportamiento anterior', async () => {
+    it('sin tenant (SOPORTE sin ?tenantId=) ya no lista las áreas de todos los tenants', async () => {
       const r = await areas.findAll(undefined, undefined);
-      expect(r).toHaveLength(3);
+      expect(r).toEqual([]);
     });
   });
 

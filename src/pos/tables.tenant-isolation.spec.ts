@@ -1,6 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { TablesService } from './tables.service';
 import { TablesController } from './tables.controller';
 import { Table } from './entities/table.entity';
@@ -50,9 +50,9 @@ describe('TablesService — aislamiento por tenant', () => {
       expect(tablesRepo.find).toHaveBeenCalledWith(expect.objectContaining({ where: { branchId: 'branch-1', areaId: 'area-1', tenantId: TENANT_A } }));
     });
 
-    it('SOPORTE (sin tenantId): conserva la vista completa', async () => {
-      await service.findAll();
-      expect(tablesRepo.find).toHaveBeenCalledWith(expect.objectContaining({ where: undefined }));
+    it('sin tenant (SOPORTE sin ?tenantId=): ya no lista las mesas de todos los tenants', async () => {
+      await expect(service.findAll()).resolves.toEqual([]);
+      expect(tablesRepo.find).not.toHaveBeenCalled();
     });
   });
 
@@ -106,13 +106,15 @@ describe('TablesController — resolución del tenant', () => {
     controller = module.get(TablesController);
   });
 
-  it('create: el tenantId del JWT gana sobre el del body; SOPORTE usa body.tenantId; sin ninguno pasa undefined', () => {
+  it('create: el tenantId del JWT gana sobre el del body; SOPORTE usa ?tenantId=; sin tenant: 400 (SOPORTE) o 403 (otro rol)', async () => {
     controller.create({ number: 1, tenantId: TENANT_B }, { user: { tenantId: TENANT_A } });
     expect(service.create).toHaveBeenLastCalledWith(expect.anything(), TENANT_A);
-    controller.create({ number: 1, tenantId: TENANT_B }, { user: {} });
+    controller.create({ number: 1, tenantId: TENANT_A }, { user: { roleCode: 'SOPORTE' }, query: { tenantId: TENANT_B } });
     expect(service.create).toHaveBeenLastCalledWith(expect.anything(), TENANT_B);
-    controller.create({ number: 1 }, { user: {} });
-    expect(service.create).toHaveBeenLastCalledWith(expect.anything(), undefined);
+    service.create.mockClear();
+    await expect(Promise.resolve().then(() => controller.create({ number: 1, tenantId: TENANT_B }, { user: { roleCode: 'SOPORTE' }, query: {} }))).rejects.toBeInstanceOf(BadRequestException);
+    await expect(Promise.resolve().then(() => controller.create({ number: 1 }, { user: {}, query: {} }))).rejects.toBeInstanceOf(ForbiddenException);
+    expect(service.create).not.toHaveBeenCalled();
   });
 
   it('findAll: pasa el tenant del JWT al servicio', () => {

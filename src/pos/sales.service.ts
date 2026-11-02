@@ -850,6 +850,7 @@ export class SalesService {
     fechaFin?: Date;
   }) {
     try {
+      if (!filters?.tenantId) return []; // sin tenant nunca se listan las ventas de todos los tenants
       const query = this.salesRepo.createQueryBuilder('sale');
 
       if (filters?.status) {

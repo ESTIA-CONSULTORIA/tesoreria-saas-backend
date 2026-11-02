@@ -75,8 +75,8 @@ export class ProductsService {
   // Con sucursal activa: los productos de esa sucursal Y los que no tienen sucursal (NULL = compartido por todo el negocio).
   // Antes la igualdad estricta ocultaba los NULL en cuanto el cliente mandaba X-Branch-Id. Siempre acotado al tenant.
   async findAll(branchId?: string, tenantId?: string) {
-    let where: any = {};
-    if (tenantId) where.tenantId = tenantId;
+    if (!tenantId) return []; // sin tenant nunca se listan los productos de todos los tenants
+    let where: any = { tenantId };
     if (branchId) {
       where = [
         { ...where, branchId },

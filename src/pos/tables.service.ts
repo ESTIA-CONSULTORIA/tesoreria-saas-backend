@@ -16,13 +16,13 @@ export class TablesService {
   // mesas de TODOS los tenants (nunca filtraba por tenant). tenantId opcional para no romper a
   // SOPORTE (sin tenantId en su JWT).
   findAll(branchId?: string, areaId?: string, tenantId?: string) {
-    const where: any = {};
+    if (!tenantId) return Promise.resolve([]); // sin tenant nunca se listan las mesas de todos los tenants
+    const where: any = { tenantId };
     if (branchId) where.branchId = branchId;
     if (areaId) where.areaId = areaId;
-    if (tenantId) where.tenantId = tenantId;
-    
+
     return this.tablesRepo.find({
-      where: Object.keys(where).length > 0 ? where : undefined,
+      where,
       order: { number: 'ASC' },
     });
   }
