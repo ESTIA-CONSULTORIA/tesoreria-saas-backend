@@ -1,4 +1,4 @@
-import { HttpException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, HttpException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
 import { PurchaseOrder } from './entities/purchase-order.entity';
@@ -9,6 +9,8 @@ import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
 import { Branch } from '../branches/entities/branch.entity';
 import { Insumo } from '../costs/entities/insumo.entity';
+import { Company } from '../companies/entities/company.entity';
+import { Supplier } from '../suppliers/entities/supplier.entity';
 
 @Injectable()
 export class PurchasesService {
@@ -24,12 +26,18 @@ export class PurchasesService {
   ) {}
 
   // Purchase Orders
+  // La empresa (cabecera X-Company-Id, la controla el cliente) debe ser del tenant; si no, no hay resultados.
+  private async empresaDelTenant(companyId: string, tenantId: string): Promise<boolean> {
+    return !!(await this.dataSource.getRepository(Company).findOne({ where: { id: companyId, tenantId } as any, select: ['id'] }));
+  }
+
   async findAllOrders(tenantId?: string, status?: string, branchId?: string, companyId?: string) {
-    const where: any = {};
-    if (tenantId) where.tenantId = tenantId;
+    if (!tenantId) return []; // sin tenant (SOPORTE sin ?tenantId=) nunca se listan todos los tenants
+    const where: any = { tenantId };
     if (status) where.status = status;
     if (branchId) where.branchId = branchId;
     if (companyId) {
+      if (!(await this.empresaDelTenant(companyId, tenantId))) return [];
       const branches = await this.dataSource.getRepository(Branch).find({
         where: { companyId },
         select: ['id'],
@@ -68,7 +76,13 @@ export class PurchasesService {
     return this.purchaseOrdersRepo.findOne({ where: { id } });
   }
 
-  createOrder(data: Partial<PurchaseOrder>) {
+  async createOrder(data: Partial<PurchaseOrder>) {
+    if (!data.tenantId) throw new BadRequestException('Falta el negocio de la orden');
+    delete (data as any).id; // con id en el body save() actualizaría (pisaría) la orden de otro tenant
+    if (data.supplierId) {
+      const prov = await this.dataSource.getRepository(Supplier).findOne({ where: { id: data.supplierId, tenantId: data.tenantId } as any, select: ['id'] });
+      if (!prov) throw new NotFoundException('Proveedor no encontrado');
+    }
     const order = this.purchaseOrdersRepo.create(data);
     return this.purchaseOrdersRepo.save(order);
   }
@@ -76,6 +90,7 @@ export class PurchasesService {
   async updateOrder(id: string, data: Partial<PurchaseOrder>, tenantId?: string) {
     await this.assertOrder(id, tenantId);
     delete (data as any).tenantId;
+    delete (data as any).id;
     await this.purchaseOrdersRepo.update(id, data);
     return this.purchaseOrdersRepo.findOne({ where: { id } });
   }
@@ -169,10 +184,13 @@ export class PurchasesService {
 
   // Purchases (Facturas)
   async findAllPurchases(tenantId?: string, status?: string, companyId?: string) {
-    const where: any = {};
-    if (tenantId) where.tenantId = tenantId;
+    if (!tenantId) return [];
+    const where: any = { tenantId };
     if (status) where.status = status;
-    if (companyId) where.companyId = companyId;
+    if (companyId) {
+      if (!(await this.empresaDelTenant(companyId, tenantId))) return [];
+      where.companyId = companyId;
+    }
 
     return this.purchasesRepo.find({
       where,
@@ -192,7 +210,20 @@ export class PurchasesService {
   // incremento es leer-sumar-escribir, y sin el lock dos facturas simultáneas del mismo insumo
   // se pisaban (una de las dos sumas se perdía).
   async createPurchase(data: Partial<Purchase>) {
+    const tenantId = data.tenantId;
+    if (!tenantId) throw new BadRequestException('Falta el negocio de la factura');
+    delete (data as any).id; // con id en el body save() actualizaría (pisaría) la factura de otro tenant
     return this.dataSource.transaction(async (manager) => {
+      // Proveedor, OC, empresa e insumos que llegan en el body deben ser del tenant del token
+      if (data.supplierId && !(await manager.findOne(Supplier, { where: { id: data.supplierId, tenantId } as any }))) {
+        throw new NotFoundException('Proveedor no encontrado');
+      }
+      if (data.ocId && !(await manager.findOne(PurchaseOrder, { where: { id: data.ocId, tenantId } as any }))) {
+        throw new NotFoundException('Orden de compra no encontrada');
+      }
+      if (data.companyId && !(await manager.findOne(Company, { where: { id: data.companyId, tenantId } as any }))) {
+        throw new NotFoundException('Empresa no encontrada');
+      }
       const purchase = manager.create(Purchase, data);
       const savedPurchase = await manager.save(purchase);
 
@@ -201,9 +232,10 @@ export class PurchasesService {
         for (const item of savedPurchase.items) {
           if (item.insumoId && item.cantidad) {
             const insumo = await manager.findOne(Insumo, {
-              where: { id: item.insumoId },
+              where: { id: item.insumoId, tenantId } as any,
               lock: { mode: 'pessimistic_write' },
             });
+            // Inexistente o de otro tenant: se ignora (como antes) y nunca se suma stock ajeno
             if (insumo) {
               // Auditoría de seguridad (GoodsHabits, portabilidad Costos standalone):
               // item.cantidad es la cantidad comprada en la PRESENTACIÓN DE COMPRA (ej. "1"
@@ -232,6 +264,7 @@ export class PurchasesService {
   async updatePurchase(id: string, data: Partial<Purchase>, tenantId?: string) {
     await this.assertPurchase(id, tenantId);
     delete (data as any).tenantId;
+    delete (data as any).id;
     await this.purchasesRepo.update(id, data);
     return this.purchasesRepo.findOne({ where: { id } });
   }
@@ -293,9 +326,12 @@ export class PurchasesService {
 
   // Cuentas por Pagar (agrupadas por proveedor)
   async getAccountsPayable(tenantId?: string, companyId?: string) {
-    const where: any = { status: In(['PENDIENTE', 'PARCIAL']) };
-    if (tenantId) where.tenantId = tenantId;
-    if (companyId) where.companyId = companyId;
+    if (!tenantId) return [];
+    const where: any = { status: In(['PENDIENTE', 'PARCIAL']), tenantId };
+    if (companyId) {
+      if (!(await this.empresaDelTenant(companyId, tenantId))) return [];
+      where.companyId = companyId;
+    }
 
     const purchases = await this.purchasesRepo.find({
       where,

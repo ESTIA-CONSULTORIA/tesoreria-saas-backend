@@ -1,4 +1,4 @@
-import { tenantDeSesion } from '../auth/tenant-access.util';
+import { tenantDeSesion, tenantParaListar, tenantParaEscribir } from '../auth/tenant-access.util';
 import { Controller, Get, Post, Put, Delete, Body, Param, Query, Headers, Request, UseGuards } from '@nestjs/common';
 import { PurchasesService } from './purchases.service';
 import { Modulo } from '../auth/modulo.decorator';
@@ -26,8 +26,8 @@ export class PurchasesController {
     const branchId = sucursalEfectiva(req?.user, headerBranchId).branchId;
     const companyId = headerCompanyId || userCompanyId;
 
-    // El tenant sale del token; el query solo vale para SOPORTE (sin tenant en su token). Antes cualquiera podía pedir otro.
-    return this.purchasesService.findAllOrders(req?.user?.tenantId || tenantId, status, branchId, companyId);
+    // El tenant sale del token; el query solo vale para SOPORTE. Un token sin tenant que no es SOPORTE recibe 403.
+    return this.purchasesService.findAllOrders(tenantParaListar(req, tenantId), status, branchId, companyId);
   }
 
   @Get('orders/:id')
@@ -36,8 +36,8 @@ export class PurchasesController {
   }
 
   @Post('orders')
-  createOrder(@Body() data: any, @Request() req?: any) {
-    const tenantId = req?.user?.tenantId;
+  createOrder(@Body() data: any, @Query('tenantId') tenantIdQuery?: string, @Request() req?: any) {
+    const tenantId = tenantParaEscribir(req, tenantIdQuery);
     const branchId = req?.user?.branchId;
     return this.purchasesService.createOrder({ ...data, tenantId, branchId });
   }
@@ -96,7 +96,7 @@ export class PurchasesController {
     const companyId = headerCompanyId || req?.user?.companyId;
 
     // El tenant sale del token; el query solo vale para SOPORTE. Antes, sin ?tenantId= devolvía las facturas de TODOS.
-    return this.purchasesService.findAllPurchases(tenantDeSesion(req) ?? tenantId, status, companyId);
+    return this.purchasesService.findAllPurchases(tenantParaListar(req, tenantId), status, companyId);
   }
 
   @Get('invoices/:id')
@@ -105,8 +105,8 @@ export class PurchasesController {
   }
 
   @Post('invoices')
-  createPurchase(@Body() data: any, @Request() req?: any) {
-    const tenantId = req?.user?.tenantId;
+  createPurchase(@Body() data: any, @Query('tenantId') tenantIdQuery?: string, @Request() req?: any) {
+    const tenantId = tenantParaEscribir(req, tenantIdQuery);
     return this.purchasesService.createPurchase({ ...data, tenantId });
   }
 
@@ -145,6 +145,6 @@ export class PurchasesController {
   ) {
     const companyId = headerCompanyId || req?.user?.companyId;
 
-    return this.purchasesService.getAccountsPayable(tenantDeSesion(req) ?? tenantId, companyId);
+    return this.purchasesService.getAccountsPayable(tenantParaListar(req, tenantId), companyId);
   }
 }
