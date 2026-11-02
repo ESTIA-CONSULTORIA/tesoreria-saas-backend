@@ -22,28 +22,20 @@ export class ReportsService {
     private reportsRepo: Repository<Report>,
   ) {}
 
+  // Cuentas del tenant del token (banco -> sucursal -> empresa -> tenant). La empresa (X-Company-Id, la controla el cliente)
+  // solo estrecha DENTRO del tenant: antes, con companyId se ignoraba el tenant (reportes de cualquier empresa) y sin tenant
+  // ni empresa los reportes sumaban los movimientos de TODOS los tenants. Sin tenant -> [] (y cada reporte devuelve vacío).
   private async resolveAccountIds(tenantId?: string, companyId?: string): Promise<string[]> {
-    let branchIds: string[] = [];
-
-    if (companyId) {
-      const branches = await this.branchesRepo
-        .createQueryBuilder('branch')
-        .where('branch.companyId::text = :companyId', { companyId })
-        .select('branch.id')
-        .getMany();
-      branchIds = branches.map(b => b.id);
-    } else if (tenantId) {
-      const companies = await this.companiesRepo.find({ where: { tenantId }, select: ['id'] });
-      const companyIds = companies.map(c => c.id);
-      if (companyIds.length === 0) return [];
-      const branches = await this.branchesRepo.find({ where: { companyId: In(companyIds) }, select: ['id'] });
-      branchIds = branches.map(b => b.id);
-    }
-
-    if (branchIds.length === 0) return [];
-
-    const banks = await this.banksRepo.find({ where: { branchId: In(branchIds) }, select: ['id'] });
-    return banks.map(b => b.id);
+    if (!tenantId) return [];
+    const qb = this.banksRepo
+      .createQueryBuilder('bank')
+      .select('bank.id', 'id')
+      .innerJoin(Branch, 'branch', 'branch.id::text = bank."branchId"::text')
+      .innerJoin(Company, 'company', 'company.id::text = branch."companyId"::text')
+      .where('company."tenantId"::text = :tenantId', { tenantId });
+    if (companyId) qb.andWhere('company.id::text = :companyId', { companyId });
+    const rows = await qb.getRawMany();
+    return rows.map((r) => r.id);
   }
 
   async cashFlow(startDate?: string, endDate?: string, tenantId?: string, companyId?: string) {
@@ -53,7 +45,7 @@ export class ReportsService {
 
       if (accountIds.length > 0) {
         query.andWhere('movement.accountId IN (:...accountIds)', { accountIds });
-      } else if (tenantId || companyId) {
+      } else { // sin cuentas del tenant: reporte vacío, nunca todos los movimientos
         return { weekly: [], totalIncome: 0, totalExpense: 0, totalNet: 0 };
       }
 
@@ -113,7 +105,7 @@ export class ReportsService {
 
       if (accountIds.length > 0) {
         query.andWhere('bank.id IN (:...accountIds)', { accountIds });
-      } else if (tenantId || companyId) {
+      } else { // sin cuentas del tenant: reporte vacío, nunca todos los movimientos
         return [];
       }
 
@@ -142,7 +134,7 @@ export class ReportsService {
 
       if (accountIds.length > 0) {
         query.andWhere('movement.accountId IN (:...accountIds)', { accountIds });
-      } else if (tenantId || companyId) {
+      } else { // sin cuentas del tenant: reporte vacío, nunca todos los movimientos
         return [];
       }
 
@@ -179,7 +171,7 @@ export class ReportsService {
 
       if (accountIds.length > 0) {
         query.andWhere('movement.accountId IN (:...accountIds)', { accountIds });
-      } else if (tenantId || companyId) {
+      } else { // sin cuentas del tenant: reporte vacío, nunca todos los movimientos
         return this._emptyIncomeStatement();
       }
 
@@ -233,7 +225,7 @@ export class ReportsService {
 
       if (accountIds.length > 0) {
         query.andWhere('movement.accountId IN (:...accountIds)', { accountIds });
-      } else if (tenantId || companyId) {
+      } else { // sin cuentas del tenant: reporte vacío, nunca todos los movimientos
         return this._emptyBreakEven();
       }
 
