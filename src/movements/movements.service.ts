@@ -91,6 +91,19 @@ export class MovementsService {
     });
   }
 
+  // Cuentas del tenant (banco -> sucursal -> empresa -> tenant). Sin tenant -> [].
+  private async cuentasDelTenant(tenantId?: string): Promise<string[]> {
+    if (!tenantId) return [];
+    const rows = await this.banksRepository
+      .createQueryBuilder('bank')
+      .select('bank.id', 'id')
+      .innerJoin('branch', 'branch', 'branch.id::text = bank."branchId"::text')
+      .innerJoin('company', 'company', 'company.id::text = branch."companyId"::text')
+      .where('company."tenantId"::text = :tenantId', { tenantId })
+      .getRawMany();
+    return rows.map((r) => r.id);
+  }
+
   async findWithFilters(
     accountId?: string,
     type?: string,
@@ -99,8 +112,15 @@ export class MovementsService {
     endDate?: string,
     page = 1,
     limit = 10,
+    tenantId?: string,
   ) {
+    // Antes la consulta no tenía NINGÚN filtro de tenant: con solo ?type= o ?category= devolvía los movimientos de todos los tenants.
+    const propias = await this.cuentasDelTenant(tenantId);
+    if (!propias.length || (accountId && !propias.includes(accountId))) {
+      return { data: [], page, limit, total: 0, totalPages: 0 };
+    }
     const query = this.movementsRepository.createQueryBuilder('movement');
+    query.andWhere('movement.accountId IN (:...propias)', { propias });
 
     if (accountId) {
       query.andWhere('movement.accountId = :accountId', { accountId });
@@ -225,7 +245,11 @@ export class MovementsService {
     });
   }
 
-  async findByCompany(companyId: string) {
+  async findByCompany(companyId: string, tenantId?: string) {
+    // La empresa (X-Company-Id) debe ser del tenant; sin tenant no se lista nada.
+    if (!tenantId) return [];
+    const empresa = await this.dataSource.getRepository('Company').findOne({ where: { id: companyId, tenantId } as any, select: ['id'] as any });
+    if (!empresa) return [];
     const branchIds = await this.dataSource
       .getRepository('Branch')
       .find({ where: { companyId }, select: ['id'] });

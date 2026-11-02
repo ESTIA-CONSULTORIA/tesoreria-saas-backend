@@ -1,5 +1,6 @@
 import { Body, Controller, ForbiddenException, Get, Headers, Param, Post, Put, Query, Request } from '@nestjs/common';
 import { MovementsService } from './movements.service';
+import { tenantDeSesion, tenantParaListar } from '../auth/tenant-access.util';
 import { Modulo } from '../auth/modulo.decorator';
 
 // Auditoría de seguridad (GoodsHabits, P1): 'tesoreria', mismo criterio que
@@ -24,7 +25,7 @@ export class MovementsController {
   ) {
     // Auditoría de seguridad (GoodsHabits, hallazgo #1 BUSINESS): tenantId siempre del JWT,
     // nunca del body — mismo criterio que users.controller.ts/suppliers.controller.ts.
-    const tenantId = req?.user?.tenantId;
+    const tenantId = tenantDeSesion(req);
     return this.movementsService.create(
       body.accountId,
       body.type,
@@ -53,23 +54,26 @@ export class MovementsController {
     const userBranchId = req?.user?.branchId;
     const userCompanyId = req?.user?.companyId;
 
+    // Tenant del token (403 si no es SOPORTE y no lo trae); SOPORTE solo con ?tenantId= explícito. Todo se acota a él.
+    const tenantId = tenantParaListar(req, req?.query?.tenantId);
+
     // If user has branchId in JWT, use it and ignore headers
     if (userBranchId) {
-      return this.movementsService.findByBranch(userBranchId);
+      return this.movementsService.findByBranch(userBranchId, tenantId);
     }
 
     // If user has companyId but no branchId in JWT, use it and ignore X-Branch-Id header
     if (userCompanyId) {
-      return this.movementsService.findByCompany(userCompanyId);
+      return this.movementsService.findByCompany(userCompanyId, tenantId);
     }
 
     // Otherwise, use headers (ADMIN/SOPORTE/DUEÑO case)
     if (headerBranchId) {
-      return this.movementsService.findByBranch(headerBranchId, req?.user?.tenantId);
+      return this.movementsService.findByBranch(headerBranchId, tenantId);
     }
     
     if (headerCompanyId) {
-      return this.movementsService.findByCompany(headerCompanyId);
+      return this.movementsService.findByCompany(headerCompanyId, tenantId);
     }
 
     if (accountId || type || category || startDate || endDate || page || limit) {
@@ -81,6 +85,7 @@ export class MovementsController {
         endDate,
         Number(page || 1),
         Number(limit || 10),
+        tenantId,
       );
     }
 
@@ -89,7 +94,7 @@ export class MovementsController {
 
   @Get('account/:accountId')
   findByAccount(@Param('accountId') accountId: string, @Request() req?: any) {
-    const tenantId = req?.user?.tenantId;
+    const tenantId = tenantDeSesion(req);
     return this.movementsService.findByAccount(accountId, tenantId);
   }
 
@@ -103,7 +108,7 @@ export class MovementsController {
       throw new ForbiddenException('No tienes permisos para aprobar movimientos');
     }
     const approvedBy = req?.user?.email ?? req?.user?.name ?? 'admin';
-    const tenantId = req?.user?.tenantId;
+    const tenantId = tenantDeSesion(req);
     return this.movementsService.approve(id, approvedBy, tenantId);
   }
 
@@ -118,7 +123,7 @@ export class MovementsController {
       throw new ForbiddenException('No tienes permisos para rechazar movimientos');
     }
     const approvedBy = req?.user?.email ?? req?.user?.name ?? 'admin';
-    const tenantId = req?.user?.tenantId;
+    const tenantId = tenantDeSesion(req);
     return this.movementsService.reject(id, approvedBy, body.reason ?? '', tenantId);
   }
 }

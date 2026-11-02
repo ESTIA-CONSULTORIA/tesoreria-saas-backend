@@ -66,16 +66,19 @@ export class BanksService {
     });
   }
 
-  async findByCompany(companyId: string) {
+  // La empresa (X-Company-Id, la controla el cliente) debe ser del tenant; sin tenant no se lista nada.
+  async findByCompany(companyId: string, tenantId?: string) {
+    if (!tenantId) return [];
     // Raw SQL avoids two bugs:
     // 1) TypeORM query builder lowercases 'companyId' → 'companyid' (column not found)
     // 2) In(uuid[]) vs bank."branchId" (character varying) type mismatch
     return this.dataSource.query(
       `SELECT bank.* FROM bank
        INNER JOIN branch ON branch.id::text = bank."branchId"
-       WHERE branch."companyId"::text = $1::text
+       INNER JOIN company ON company.id::text = branch."companyId"::text
+       WHERE branch."companyId"::text = $1::text AND company."tenantId"::text = $2::text
        ORDER BY bank."createdAt" DESC`,
-      [companyId],
+      [companyId, tenantId],
     );
   }
 
