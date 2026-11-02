@@ -36,10 +36,14 @@ describe('CompaniesController — prioridad tenantId JWT sobre body (create)', (
   it('usa el tenantId del body solo cuando el JWT no trae uno (SOPORTE dando de alta un tenant específico)', async () => {
     await controller.create(
       { tenantId: TENANT_B, legalName: 'Empresa nueva', tradeName: 'Nueva' } as any,
-      { user: { tenantId: undefined } } as any,
+      { user: { roleCode: 'SOPORTE', tenantId: undefined } } as any,
     );
 
     expect(service.create).toHaveBeenCalledWith(TENANT_B, 'Empresa nueva', 'Nueva', undefined, undefined);
+  });
+
+  it('un token sin tenant que NO es SOPORTE ya no puede dar de alta una empresa en el tenant del body (403)', () => {
+    expect(() => controller.create({ tenantId: TENANT_B, legalName: 'X', tradeName: 'X' } as any, { user: { roleCode: 'ADMIN' } } as any)).toThrow(/sin tenant/i);
   });
 });
 
