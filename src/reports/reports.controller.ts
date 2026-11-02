@@ -1,6 +1,7 @@
 import { Controller, Get, Query, Request, Headers } from '@nestjs/common';
 import { ReportsService } from './reports.service';
 import { Modulo } from '../auth/modulo.decorator';
+import { tenantParaListar } from '../auth/tenant-access.util';
 
 @Controller('reports')
 @Modulo('reportes')
@@ -15,7 +16,7 @@ export class ReportsController {
     @Headers('x-company-id') headerCompanyId?: string,
   ) {
     const user = req.user;
-    const tenantId = user?.tenantId;
+    const tenantId = tenantParaListar(req, req?.query?.tenantId); // token; SOPORTE con ?tenantId= explícito; sin tenant 403
     const companyId = headerCompanyId || user?.companyId;
     return this.reportsService.cashFlow(startDate, endDate, tenantId, companyId);
   }
@@ -26,7 +27,7 @@ export class ReportsController {
     @Headers('x-company-id') headerCompanyId?: string,
   ) {
     const user = req.user;
-    const tenantId = user?.tenantId;
+    const tenantId = tenantParaListar(req, req?.query?.tenantId); // token; SOPORTE con ?tenantId= explícito; sin tenant 403
     const companyId = headerCompanyId || user?.companyId;
     return this.reportsService.balanceByAccount(tenantId, companyId);
   }
@@ -39,7 +40,7 @@ export class ReportsController {
     @Headers('x-company-id') headerCompanyId?: string,
   ) {
     const user = req.user;
-    const tenantId = user?.tenantId;
+    const tenantId = tenantParaListar(req, req?.query?.tenantId); // token; SOPORTE con ?tenantId= explícito; sin tenant 403
     const companyId = headerCompanyId || user?.companyId;
     return this.reportsService.categorySummary(startDate, endDate, tenantId, companyId);
   }
@@ -52,7 +53,7 @@ export class ReportsController {
     @Headers('x-company-id') headerCompanyId?: string,
   ) {
     const user = req.user;
-    const tenantId = user?.tenantId;
+    const tenantId = tenantParaListar(req, req?.query?.tenantId); // token; SOPORTE con ?tenantId= explícito; sin tenant 403
     const companyId = headerCompanyId || user?.companyId;
     return this.reportsService.incomeStatement(startDate, endDate, tenantId, companyId);
   }
@@ -65,7 +66,7 @@ export class ReportsController {
     @Headers('x-company-id') headerCompanyId?: string,
   ) {
     const user = req.user;
-    const tenantId = user?.tenantId;
+    const tenantId = tenantParaListar(req, req?.query?.tenantId); // token; SOPORTE con ?tenantId= explícito; sin tenant 403
     const companyId = headerCompanyId || user?.companyId;
     return this.reportsService.breakEvenPoint(startDate, endDate, tenantId, companyId);
   }
