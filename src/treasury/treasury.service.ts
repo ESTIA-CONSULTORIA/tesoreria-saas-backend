@@ -27,66 +27,35 @@ export class TreasuryService {
     private transfersRepo: Repository<Transfer>,
   ) {}
 
-  private async getAccountIdsByTenant(tenantId?: string): Promise<string[]> {
+  /**
+   * Cuentas (banks) visibles para el token. SIEMPRE acotadas por tenant (Bank -> Branch -> Company -> Tenant);
+   * branchId/companyId (que pueden venir de cabeceras X-Branch-Id/X-Company-Id, controladas por el cliente)
+   * solo estrechan dentro del tenant, nunca lo reemplazan. Sin tenantId -> [] (nunca "sin filtro").
+   * Los ids de bank.branchId / branch.companyId son varchar y branch.id / company.id son uuid: ::text los iguala.
+   */
+  private async resolverCuentas(tenantId?: string, branchId?: string, companyId?: string): Promise<string[]> {
     if (!tenantId) return [];
-    
-    // Bank -> Branch -> Company -> Tenant
-    const companies = await this.banksRepo.manager.getRepository(Company).find({
-      where: { tenantId },
-      select: ['id'],
-    });
-    const companyIds = companies.map((c) => c.id);
-    
-    if (companyIds.length === 0) return [];
-    
-    const branches = await this.banksRepo.manager.getRepository(Branch).find({
-      where: { companyId: In(companyIds) },
-      select: ['id'],
-    });
-    const branchIds = branches.map((b) => b.id);
-    
-    if (branchIds.length === 0) return [];
-    
-    const banks = await this.banksRepo.find({
-      where: { branchId: In(branchIds) },
-      select: ['id'],
-    });
-    return banks.map((b) => b.id);
+    const qb = this.banksRepo
+      .createQueryBuilder('bank')
+      .select('bank.id', 'id')
+      .innerJoin(Branch, 'branch', 'branch.id::text = bank."branchId"::text')
+      .innerJoin(Company, 'company', 'company.id::text = branch."companyId"::text')
+      .where('company."tenantId"::text = :tenantId', { tenantId });
+    if (branchId) qb.andWhere('branch.id::text = :branchId', { branchId });
+    if (companyId) qb.andWhere('company.id::text = :companyId', { companyId });
+    const rows = await qb.getRawMany();
+    return rows.map((r) => r.id);
   }
 
   async getExecutiveSummary(tenantId?: string, branchId?: string, companyId?: string) {
     try {
-      let accountIds: string[];
+      const accountIds = await this.resolverCuentas(tenantId, branchId, companyId);
       
-      if (branchId) {
-        const banks = await this.banksRepo.find({
-          where: { branchId },
-          select: ['id'],
-        });
-        accountIds = banks.map((b) => b.id);
-      } else if (companyId) {
-        const branches = await this.banksRepo.manager.getRepository(Branch).find({
-          where: { companyId },
-          select: ['id'],
-        });
-        const branchIds = branches.map((b) => b.id);
-        
-        if (branchIds.length === 0) {
-          accountIds = [];
-        } else {
-          const banks = await this.banksRepo.find({
-            where: { branchId: In(branchIds) },
-            select: ['id'],
-          });
-          accountIds = banks.map((b) => b.id);
-        }
-      } else {
-        accountIds = await this.getAccountIdsByTenant(tenantId);
-      }
-      
-      const accountsQuery = this.banksRepo.createQueryBuilder('bank');
-      if (accountIds.length > 0) accountsQuery.andWhere('bank.id IN (:...accountIds)', { accountIds });
-      const accounts = await accountsQuery.where('bank.isActive = :isActive', { isActive: true }).getMany();
+      const accounts = accountIds.length === 0 ? [] : await this.banksRepo
+        .createQueryBuilder('bank')
+        .where('bank.id IN (:...accountIds)', { accountIds })
+        .andWhere('bank.isActive = :isActive', { isActive: true })
+        .getMany();
       const totalBalance = accounts.reduce((acc, accItem) => acc + Number(accItem.balance), 0);
 
       // Flujo del mes actual
@@ -98,8 +67,9 @@ export class TreasuryService {
         .createQueryBuilder('movement')
         .where('movement.createdAt >= :startDate', { startDate: firstDayOfMonth })
         .andWhere('movement.createdAt <= :endDate', { endDate: lastDayOfMonth });
-      if (accountIds.length > 0) monthlyMovementsQuery.andWhere('movement.accountId IN (:...accountIds)', { accountIds });
-      const monthlyMovements = await monthlyMovementsQuery.getMany();
+      const monthlyMovements = accountIds.length === 0 ? [] : await monthlyMovementsQuery
+        .andWhere('movement.accountId IN (:...accountIds)', { accountIds })
+        .getMany();
 
       const monthlyIncome = monthlyMovements
         .filter((m) => m.type === 'INCOME')
@@ -117,8 +87,9 @@ export class TreasuryService {
         .createQueryBuilder('movement')
         .where('movement.createdAt >= :startDate', { startDate: firstDayOfLastMonth })
         .andWhere('movement.createdAt <= :endDate', { endDate: lastDayOfLastMonth });
-      if (accountIds.length > 0) lastMonthMovementsQuery.andWhere('movement.accountId IN (:...accountIds)', { accountIds });
-      const lastMonthMovements = await lastMonthMovementsQuery.getMany();
+      const lastMonthMovements = accountIds.length === 0 ? [] : await lastMonthMovementsQuery
+        .andWhere('movement.accountId IN (:...accountIds)', { accountIds })
+        .getMany();
 
       const lastMonthIncome = lastMonthMovements
         .filter((m) => m.type === 'INCOME')
@@ -178,38 +149,15 @@ export class TreasuryService {
 
   async getCashFlowForecast(days: number = 30, tenantId?: string, branchId?: string, companyId?: string) {
     try {
-      let accountIds: string[];
-      if (branchId) {
-        const banks = await this.banksRepo.find({
-          where: { branchId },
-          select: ['id'],
-        });
-        accountIds = banks.map((b) => b.id);
-      } else if (companyId) {
-        const branches = await this.banksRepo.manager.getRepository(Branch).find({
-          where: { companyId },
-          select: ['id'],
-        });
-        const branchIds = branches.map((b) => b.id);
-        
-        if (branchIds.length === 0) {
-          accountIds = [];
-        } else {
-          const banks = await this.banksRepo.find({
-            where: { branchId: In(branchIds) },
-            select: ['id'],
-          });
-          accountIds = banks.map((b) => b.id);
-        }
-      } else {
-        accountIds = await this.getAccountIdsByTenant(tenantId);
-      }
+      const accountIds = await this.resolverCuentas(tenantId, branchId, companyId);
       const now = new Date();
       
       // Saldo actual total
-      const accountsQuery = this.banksRepo.createQueryBuilder('bank');
-      if (accountIds.length > 0) accountsQuery.andWhere('bank.id IN (:...accountIds)', { accountIds });
-      const accounts = await accountsQuery.where('bank.isActive = :isActive', { isActive: true }).getMany();
+      const accounts = accountIds.length === 0 ? [] : await this.banksRepo
+        .createQueryBuilder('bank')
+        .where('bank.id IN (:...accountIds)', { accountIds })
+        .andWhere('bank.isActive = :isActive', { isActive: true })
+        .getMany();
       const currentBalance = accounts.reduce((acc, accItem) => acc + Number(accItem.balance), 0);
 
       // Calcular promedios de los últimos 3 meses
@@ -221,8 +169,9 @@ export class TreasuryService {
         .createQueryBuilder('movement')
         .where('movement.createdAt >= :startDate', { startDate: threeMonthsAgo })
         .andWhere('movement.createdAt < :endDate', { endDate: currentMonthStart });
-      if (accountIds.length > 0) historicalMovementsQuery.andWhere('movement.accountId IN (:...accountIds)', { accountIds });
-      const historicalMovements = await historicalMovementsQuery.getMany();
+      const historicalMovements = accountIds.length === 0 ? [] : await historicalMovementsQuery
+        .andWhere('movement.accountId IN (:...accountIds)', { accountIds })
+        .getMany();
 
       const historicalIncome = historicalMovements
         .filter((m) => m.type === 'INCOME')
@@ -245,8 +194,9 @@ export class TreasuryService {
         .where('movement.type = :type', { type: 'EXPENSE' })
         .andWhere('movement.createdAt >= :now', { now })
         .andWhere('movement.createdAt <= :futureDate', { futureDate });
-      if (accountIds.length > 0) upcomingPaymentsQuery.andWhere('movement.accountId IN (:...accountIds)', { accountIds });
-      const upcomingPayments = await upcomingPaymentsQuery.getMany();
+      const upcomingPayments = accountIds.length === 0 ? [] : await upcomingPaymentsQuery
+        .andWhere('movement.accountId IN (:...accountIds)', { accountIds })
+        .getMany();
 
       // Calcular saldo proyectado por fecha
       const dailyForecast: Array<{ date: string; income: number; expense: number; balance: number; expectedMovements: number }> = [];
@@ -295,36 +245,13 @@ export class TreasuryService {
 
   async getBankPosition(tenantId?: string, branchId?: string, companyId?: string) {
     try {
-      let accountIds: string[];
-      if (branchId) {
-        const banks = await this.banksRepo.find({
-          where: { branchId },
-          select: ['id'],
-        });
-        accountIds = banks.map((b) => b.id);
-      } else if (companyId) {
-        const branches = await this.banksRepo.manager.getRepository(Branch).find({
-          where: { companyId },
-          select: ['id'],
-        });
-        const branchIds = branches.map((b) => b.id);
-        
-        if (branchIds.length === 0) {
-          accountIds = [];
-        } else {
-          const banks = await this.banksRepo.find({
-            where: { branchId: In(branchIds) },
-            select: ['id'],
-          });
-          accountIds = banks.map((b) => b.id);
-        }
-      } else {
-        accountIds = await this.getAccountIdsByTenant(tenantId);
-      }
+      const accountIds = await this.resolverCuentas(tenantId, branchId, companyId);
       
-      const accountsQuery = this.banksRepo.createQueryBuilder('bank');
-      if (accountIds.length > 0) accountsQuery.andWhere('bank.id IN (:...accountIds)', { accountIds });
-      const accounts = await accountsQuery.where('bank.isActive = :isActive', { isActive: true }).getMany();
+      const accounts = accountIds.length === 0 ? [] : await this.banksRepo
+        .createQueryBuilder('bank')
+        .where('bank.id IN (:...accountIds)', { accountIds })
+        .andWhere('bank.isActive = :isActive', { isActive: true })
+        .getMany();
 
       const today = new Date();
       const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
@@ -377,36 +304,13 @@ export class TreasuryService {
 
   async getAlerts(tenantId?: string, branchId?: string, companyId?: string) {
     try {
-      let accountIds: string[];
-      if (branchId) {
-        const banks = await this.banksRepo.find({
-          where: { branchId },
-          select: ['id'],
-        });
-        accountIds = banks.map((b) => b.id);
-      } else if (companyId) {
-        const branches = await this.banksRepo.manager.getRepository(Branch).find({
-          where: { companyId },
-          select: ['id'],
-        });
-        const branchIds = branches.map((b) => b.id);
-        
-        if (branchIds.length === 0) {
-          accountIds = [];
-        } else {
-          const banks = await this.banksRepo.find({
-            where: { branchId: In(branchIds) },
-            select: ['id'],
-          });
-          accountIds = banks.map((b) => b.id);
-        }
-      } else {
-        accountIds = await this.getAccountIdsByTenant(tenantId);
-      }
+      const accountIds = await this.resolverCuentas(tenantId, branchId, companyId);
       
-      const accountsQuery = this.banksRepo.createQueryBuilder('bank');
-      if (accountIds.length > 0) accountsQuery.andWhere('bank.id IN (:...accountIds)', { accountIds });
-      const accounts = await accountsQuery.where('bank.isActive = :isActive', { isActive: true }).getMany();
+      const accounts = accountIds.length === 0 ? [] : await this.banksRepo
+        .createQueryBuilder('bank')
+        .where('bank.id IN (:...accountIds)', { accountIds })
+        .andWhere('bank.isActive = :isActive', { isActive: true })
+        .getMany();
 
       // Cuentas con saldo bajo mínimo (usando 0 como mínimo)
       const lowBalanceAccounts = accounts
@@ -427,8 +331,9 @@ export class TreasuryService {
         .where('movement.type = :type', { type: 'EXPENSE' })
         .andWhere('movement.createdAt < :date', { date: now })
         .limit(10);
-      if (accountIds.length > 0) overdueInvoicesQuery.andWhere('movement.accountId IN (:...accountIds)', { accountIds });
-      const overdueInvoices = await overdueInvoicesQuery.getMany();
+      const overdueInvoices = accountIds.length === 0 ? [] : await overdueInvoicesQuery
+        .andWhere('movement.accountId IN (:...accountIds)', { accountIds })
+        .getMany();
 
       const overdueAlerts = overdueInvoices.map((m) => ({
         type: 'OVERDUE',
@@ -454,8 +359,9 @@ export class TreasuryService {
         .where('movement.type = :type', { type: 'EXPENSE' })
         .andWhere('movement.createdAt >= :now', { now })
         .andWhere('movement.createdAt <= :thirtyDays', { thirtyDays });
-      if (accountIds.length > 0) upcomingPaymentsQuery.andWhere('movement.accountId IN (:...accountIds)', { accountIds });
-      const upcomingPayments = await upcomingPaymentsQuery.getMany();
+      const upcomingPayments = accountIds.length === 0 ? [] : await upcomingPaymentsQuery
+        .andWhere('movement.accountId IN (:...accountIds)', { accountIds })
+        .getMany();
 
       const upcomingAlerts = upcomingPayments.map((m) => {
         const daysUntil = Math.ceil((m.createdAt.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
@@ -475,12 +381,17 @@ export class TreasuryService {
       });
 
       // Transferencias pendientes de autorización (Transfer entity con status PENDIENTE)
+      // Siempre por tenant del token; empresa (header) solo estrecha dentro del tenant. Sin tenant -> nada.
       const pendingTransfersQuery = this.transfersRepo
         .createQueryBuilder('transfer')
         .where('transfer.status = :status', { status: 'PENDIENTE' })
+        .andWhere('transfer.tenantId = :tenantId', { tenantId: tenantId ?? null })
         .orderBy('transfer.createdAt', 'DESC')
         .limit(10);
-      const pendingTransfersRaw = await pendingTransfersQuery.getMany();
+      if (companyId) {
+        pendingTransfersQuery.andWhere('(transfer.empresaOrigenId = :companyId OR transfer.empresaDestinoId = :companyId)', { companyId });
+      }
+      const pendingTransfersRaw = tenantId ? await pendingTransfersQuery.getMany() : [];
 
       const pendingAlerts = pendingTransfersRaw.map((t) => ({
         type: 'PENDING',
@@ -512,13 +423,16 @@ export class TreasuryService {
   async getScheduledPayments(tenantId?: string, branchId?: string, companyId?: string) {
     try {
       const query = this.paymentScheduleRepo.createQueryBuilder('payment');
-      if (tenantId) query.andWhere('payment.tenantId = :tenantId', { tenantId });
+      if (!tenantId) return [];
+      query.andWhere('payment.tenantId = :tenantId', { tenantId });
       if (branchId) query.andWhere('payment.branchId = :branchId', { branchId });
       if (companyId) {
-        const branches = await this.banksRepo.manager.getRepository(Branch).find({
-          where: { companyId },
-          select: ['id'],
-        });
+        // La empresa solo estrecha dentro del tenant del token
+        const branches = await this.banksRepo.manager.getRepository(Branch).createQueryBuilder('branch')
+          .innerJoin(Company, 'company', 'company.id::text = branch."companyId"::text')
+          .where('branch."companyId"::text = :companyId', { companyId })
+          .andWhere('company."tenantId"::text = :tenantId', { tenantId })
+          .getMany();
         const branchIds = branches.map((b) => b.id);
         if (branchIds.length > 0) {
           query.andWhere('payment.branchId IN (:...branchIds)', { branchIds });
@@ -576,16 +490,9 @@ export class TreasuryService {
   async getAccountsPayable(tenantId?: string, branchId?: string, companyId?: string) {
     try {
       // Purchase entity only has tenantId — no branchId column exists
-      const where: any = { status: In(['PENDIENTE', 'PARCIAL']) };
-      if (tenantId) where.tenantId = tenantId;
-      if (companyId) {
-        // Resolve company → tenant and filter by tenantId
-        const company = await this.banksRepo.manager
-          .getRepository(Company)
-          .findOne({ where: { id: companyId }, select: ['tenantId'] });
-        if (!company) return [];
-        where.tenantId = company.tenantId;
-      }
+      if (!tenantId) return [];
+      // La empresa (header) nunca reemplaza al tenant del token: el tenant manda siempre.
+      const where: any = { status: In(['PENDIENTE', 'PARCIAL']), tenantId };
       
       const purchases = await this.purchasesRepo.find({
         where,
@@ -635,39 +542,10 @@ export class TreasuryService {
         .andWhere('movement.createdAt <= :now', { now })
         .orderBy('movement.createdAt', 'DESC');
 
-      if (branchId) {
-        const banks = await this.banksRepo.find({
-          where: { branchId },
-          select: ['id'],
-        });
-        const accountIds = banks.map((b) => b.id);
-        if (accountIds.length > 0) {
-          query.andWhere('movement.accountId IN (:...accountIds)', { accountIds });
-        } else {
-          return [];
-        }
-      } else if (companyId) {
-        const branches = await this.banksRepo.manager.getRepository(Branch).find({
-          where: { companyId },
-          select: ['id'],
-        });
-        const branchIds = branches.map((b) => b.id);
-        if (branchIds.length > 0) {
-          const banks = await this.banksRepo.find({
-            where: { branchId: In(branchIds) },
-            select: ['id'],
-          });
-          const accountIds = banks.map((b) => b.id);
-          if (accountIds.length > 0) {
-            query.andWhere('movement.accountId IN (:...accountIds)', { accountIds });
-          } else {
-            return [];
-          }
-        } else {
-          return [];
-        }
-      }
-      
+      const accountIds = await this.resolverCuentas(tenantId, branchId, companyId);
+      if (accountIds.length === 0) return [];
+      query.andWhere('movement.accountId IN (:...accountIds)', { accountIds });
+
       const movements = await query.getMany();
       
       return movements.map((m) => ({
