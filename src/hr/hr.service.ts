@@ -10,6 +10,7 @@ import { Attendance } from './entities/attendance.entity';
 import { BiometricCredential } from './entities/biometric-credential.entity';
 import { AttendanceAudit } from './entities/attendance-audit.entity';
 import { Branch } from '../branches/entities/branch.entity';
+import { Company } from '../companies/entities/company.entity';
 import { OcrService } from '../ocr/ocr.service';
 import { StorageService } from '../storage/storage.service';
 import { FiltrosSolicitudes, parseFiltrosSolicitudes } from './pending-requests.query';
@@ -50,16 +51,54 @@ export class HrService {
     private readonly storageService: StorageService,
   ) {}
 
+  // --- Aislamiento por tenant ---
+  // tenantId llega SIEMPRE del token (el controlador usa tenantDeSesion / tenantParaListar / tenantParaEscribir);
+  // undefined solo ocurre con SOPORTE en operaciones por id. Un recurso de otro tenant responde 404 igual que uno inexistente.
+  private async empleadoDe(employeeId: string, tenantId?: string): Promise<Employee> {
+    const emp = employeeId
+      ? await this.empRepo.findOne({ where: tenantId ? { id: employeeId, tenantId } : { id: employeeId } })
+      : null;
+    if (!emp) throw new NotFoundException('Empleado no encontrado');
+    return emp;
+  }
+
+  // Empresa y sucursal (que pueden venir de cabeceras / body, controlados por el cliente) deben ser del tenant.
+  private async empresaDelTenant(companyId: string, tenantId: string): Promise<boolean> {
+    return !!(await this.empRepo.manager.getRepository(Company).findOne({ where: { id: companyId, tenantId } as any, select: ['id'] }));
+  }
+
+  private async sucursalDelTenant(branchId: string, tenantId: string): Promise<boolean> {
+    const n = await this.branchRepo
+      .createQueryBuilder('b')
+      .innerJoin(Company, 'c', 'c.id::text = b."companyId"::text')
+      .where('b.id::text = :branchId', { branchId })
+      .andWhere('c."tenantId"::text = :tenantId', { tenantId })
+      .getCount();
+    return n > 0;
+  }
+
+  private async validarUbicacion(tenantId: string, d: { companyId?: string; branchId?: string; shiftId?: string }) {
+    if (d.companyId && !(await this.empresaDelTenant(d.companyId, tenantId))) throw new NotFoundException('Empresa no encontrada');
+    if (d.branchId && !(await this.sucursalDelTenant(d.branchId, tenantId))) throw new NotFoundException('Sucursal no encontrada');
+    if (d.shiftId && !(await this.shiftRepo.findOne({ where: { id: d.shiftId, tenantId } }))) throw new NotFoundException('Turno no encontrado');
+  }
+
   // --- Employees ---
 
-  findAllEmployees(tenantId?: string, companyId?: string): Promise<Employee[]> {
-    const where: any = {};
-    if (tenantId) where.tenantId = tenantId;
-    if (companyId) where.companyId = companyId;
+  async findAllEmployees(tenantId?: string, companyId?: string): Promise<Employee[]> {
+    if (!tenantId) return []; // sin tenant (SOPORTE sin ?tenantId=) nunca se listan todos los tenants
+    const where: any = { tenantId };
+    if (companyId) {
+      if (!(await this.empresaDelTenant(companyId, tenantId))) return [];
+      where.companyId = companyId;
+    }
     return this.empRepo.find({ where, order: { nombre: 'ASC' } });
   }
 
   async createEmployee(data: Partial<Employee>): Promise<Employee> {
+    if (!data.tenantId) throw new BadRequestException('Falta el negocio del empleado');
+    delete (data as any).id; // con id en el body save() actualizaría (pisaría) al empleado de otro tenant
+    await this.validarUbicacion(data.tenantId, data);
     const normalized = this.normalizeEmployeeUserId(data);
     if (normalized.userId) {
       await this.assertUserIdNotLinked(normalized.userId, normalized.tenantId);
@@ -72,14 +111,13 @@ export class HrService {
   }
 
   async updateEmployee(id: string, data: Partial<Employee>, tenantId?: string): Promise<Employee> {
-    const emp = await this.empRepo.findOne({ where: { id } });
-    if (!emp) throw new NotFoundException('Empleado no encontrado');
-    if (tenantId && emp.tenantId && emp.tenantId !== tenantId) {
-      throw new ForbiddenException('No tienes permiso sobre este empleado');
-    }
+    const emp = await this.empleadoDe(id, tenantId);
+    delete (data as any).id;
+    delete (data as any).tenantId; // el negocio de un empleado no se cambia
+    await this.validarUbicacion(emp.tenantId, data);
     const normalized = this.normalizeEmployeeUserId(data);
     if (normalized.userId) {
-      await this.assertUserIdNotLinked(normalized.userId, tenantId ?? emp.tenantId, id);
+      await this.assertUserIdNotLinked(normalized.userId, emp.tenantId, id);
     }
     try {
       await this.empRepo.update(id, normalized);
@@ -130,11 +168,7 @@ export class HrService {
   }
 
   async removeEmployee(id: string, tenantId?: string): Promise<void> {
-    const emp = await this.empRepo.findOne({ where: { id } });
-    if (!emp) throw new NotFoundException('Empleado no encontrado');
-    if (tenantId && emp.tenantId && emp.tenantId !== tenantId) {
-      throw new ForbiddenException('No tienes permiso sobre este empleado');
-    }
+    await this.empleadoDe(id, tenantId);
     await this.empRepo.delete(id);
   }
 
@@ -170,6 +204,7 @@ export class HrService {
   }
 
   async findDocsByEmployee(employeeId: string, tenantId?: string): Promise<HrDocument[]> {
+    await this.empleadoDe(employeeId, tenantId);
     const docs = await this.docRepo.find({ where: { employeeId }, order: { uploadedAt: 'DESC' } });
     return this.attachContent(docs);
   }
@@ -178,10 +213,11 @@ export class HrService {
     return value.match(/^data:([^;]+);base64,/)?.[1];
   }
 
-  async addDocument(employeeId: string, data: any): Promise<HrDocument> {
+  async addDocument(employeeId: string, data: any, tenantId?: string): Promise<HrDocument> {
+    const empDoc = await this.empleadoDe(employeeId, tenantId);
     // fileData/url ya no son columnas de HrDocument — se destructuran fuera para no
     // intentar guardarlas por accidente vía el spread; fileData (si viene) se sube aparte.
-    const { fileData, url: _ignoredUrl, ...rest } = data;
+    const { fileData, url: _ignoredUrl, id: _ignoredId, ...rest } = data;
     // Tipado explícito: docRepo.create() con un objeto `any` puro resuelve al overload de
     // array (create(entityLikeArray): T[]) en vez del de un solo registro — mismo problema
     // que ya resolvía el `as unknown as Promise<HrDocument>` de la versión anterior de este
@@ -190,9 +226,8 @@ export class HrService {
     const doc = await this.docRepo.save(this.docRepo.create(docData));
 
     if (fileData) {
-      const emp = await this.empRepo.findOne({ where: { id: employeeId } });
       await this.storageService.upload({
-        tenantId: emp?.tenantId ?? '',
+        tenantId: empDoc.tenantId ?? '',
         ownerType: 'hr_document',
         ownerId: doc.id,
         role: 'file',
@@ -206,7 +241,10 @@ export class HrService {
     return doc;
   }
 
-  async removeDocument(id: string): Promise<void> {
+  async removeDocument(id: string, tenantId?: string): Promise<void> {
+    const documento = await this.docRepo.findOne({ where: { id } });
+    if (!documento) throw new NotFoundException('Documento no encontrado');
+    await this.empleadoDe(documento.employeeId, tenantId);
     const file = await this.storageService.getOneByOwner('hr_document', id, 'file');
     if (file) {
       try {
@@ -222,7 +260,9 @@ export class HrService {
     await this.docRepo.delete(id);
   }
 
-  async getEmployeePhotos(employeeIds: string[]): Promise<Record<string, string>> {
+  async getEmployeePhotos(employeeIds: string[], tenantId?: string): Promise<Record<string, string>> {
+    if (!tenantId || !employeeIds.length) return {}; // las fotos son datos personales: solo de empleados del tenant
+    employeeIds = (await this.empRepo.find({ where: { id: In(employeeIds), tenantId }, select: ['id'] })).map((e) => e.id);
     if (!employeeIds.length) return {};
     const docs = await this.docRepo.find({
       where: { employeeId: In(employeeIds), tipo: 'FOTO' },
@@ -250,7 +290,8 @@ export class HrService {
     return result;
   }
 
-  async getBirthdaysThisMonth(tenantId: string): Promise<Partial<Employee>[]> {
+  async getBirthdaysThisMonth(tenantId?: string): Promise<Partial<Employee>[]> {
+    if (!tenantId) return [];
     const currentMonth = new Date().getMonth() + 1;
     const employees = await this.empRepo.find({
       where: { tenantId, status: 'ACTIVO' },
@@ -280,9 +321,9 @@ export class HrService {
     employeeId: string,
     fileData: string,
     tipo: string,
+    tenantId?: string,
   ): Promise<{ documentId: string; extractedFields: Record<string, string> }> {
-    const emp = await this.empRepo.findOne({ where: { id: employeeId } });
-    if (!emp) throw new NotFoundException('Empleado no encontrado');
+    const emp = await this.empleadoDe(employeeId, tenantId);
 
     const matches = fileData.match(/^data:([^;]+);base64,(.+)$/s);
     if (!matches) throw new BadRequestException('Formato de archivo inválido');
@@ -323,7 +364,11 @@ export class HrService {
     employeeId: string,
     documentId: string,
     fields: Record<string, string>,
+    tenantId?: string,
   ): Promise<Employee> {
+    await this.empleadoDe(employeeId, tenantId);
+    // El documento debe ser de ese empleado: sin esto se confirmaba el OCR de cualquier documento por id
+    if (!(await this.docRepo.findOne({ where: { id: documentId, employeeId } }))) throw new NotFoundException('Documento no encontrado');
     await this.docRepo.update(documentId, { ocrConfirmed: true });
 
     const allowed: (keyof Employee)[] = [
@@ -375,26 +420,44 @@ export class HrService {
 
   // --- Shifts ---
 
-  findAllShifts(tenantId: string): Promise<HrShift[]> {
+  async findAllShifts(tenantId?: string): Promise<HrShift[]> {
+    if (!tenantId) return [];
     return this.shiftRepo.find({ where: { tenantId, isActive: true }, order: { name: 'ASC' } });
   }
 
-  createShift(data: Partial<HrShift>): Promise<HrShift> {
+  async createShift(data: Partial<HrShift>): Promise<HrShift> {
+    if (!data.tenantId) throw new BadRequestException('Falta el negocio del turno');
+    delete (data as any).id;
+    if (data.branchId) await this.validarUbicacion(data.tenantId, { branchId: data.branchId });
     return this.shiftRepo.save(this.shiftRepo.create(data));
   }
 
-  async updateShift(id: string, data: Partial<HrShift>): Promise<HrShift> {
+  private async turnoDe(id: string, tenantId?: string): Promise<HrShift> {
+    const shift = await this.shiftRepo.findOne({ where: tenantId ? { id, tenantId } : { id } });
+    if (!shift) throw new NotFoundException('Turno no encontrado');
+    return shift;
+  }
+
+  async updateShift(id: string, data: Partial<HrShift>, tenantId?: string): Promise<HrShift> {
+    const shift = await this.turnoDe(id, tenantId);
+    delete (data as any).id;
+    delete (data as any).tenantId;
+    if (data.branchId) await this.validarUbicacion(shift.tenantId, { branchId: data.branchId });
     await this.shiftRepo.update(id, data);
     return this.shiftRepo.findOne({ where: { id } }) as Promise<HrShift>;
   }
 
-  async deleteShift(id: string): Promise<void> {
+  async deleteShift(id: string, tenantId?: string): Promise<void> {
+    await this.turnoDe(id, tenantId);
     await this.shiftRepo.update(id, { isActive: false });
   }
 
   // --- Vacation Requests ---
 
-  createVacationRequest(data: Partial<VacationRequest>): Promise<VacationRequest> {
+  async createVacationRequest(data: Partial<VacationRequest>, tenantId?: string): Promise<VacationRequest> {
+    const emp = await this.empleadoDe(data.employeeId as string, tenantId);
+    data.tenantId = emp.tenantId; // el negocio sale del empleado, nunca del body
+    for (const k of ['id', 'status', 'approvedBy', 'approvedAt', 'responseNote'] as const) delete (data as any)[k];
     if (data.startDate && data.endDate) {
       const start = new Date(data.startDate);
       const end = new Date(data.endDate);
@@ -414,9 +477,13 @@ export class HrService {
   // persona queden contiguas y la pantalla pueda agruparlas.
   async findPendingRequests(tenantId: string | undefined, filtros: FiltrosSolicitudes = parseFiltrosSolicitudes()) {
     const { estado, desde, hasta, employeeId, page, limit } = filtros;
+    if (!tenantId) {
+      // sin tenant (SOPORTE sin ?tenantId=) nunca se listan todos los tenants
+      return { vacaciones: [], permisos: [], totalVacaciones: 0, totalPermisos: 0, total: 0, page, limit };
+    }
     const base = (alias: string, repo: Repository<any>) => {
       const qb = repo.createQueryBuilder(alias);
-      if (tenantId) qb.andWhere(`${alias}.tenantId = :tenantId`, { tenantId });
+      qb.andWhere(`${alias}.tenantId = :tenantId`, { tenantId });
       if (estado) qb.andWhere(`${alias}.status = :estado`, { estado });
       if (employeeId) qb.andWhere(`${alias}.employeeId = :employeeId`, { employeeId });
       return qb;
@@ -464,9 +531,10 @@ export class HrService {
     };
   }
 
-  async approveVacation(id: string, approvedBy: string, responseNote?: string): Promise<VacationRequest> {
+  async approveVacation(id: string, approvedBy: string, responseNote?: string, tenantId?: string): Promise<VacationRequest> {
     const vacation = await this.vacRepo.findOne({ where: { id } });
     if (!vacation) throw new NotFoundException('Solicitud de vacaciones no encontrada');
+    const empVac = await this.empleadoDe(vacation.employeeId, tenantId);
     await this.vacRepo.update(id, { status: 'APROBADA', approvedBy, approvedAt: new Date(), responseNote: responseNote || '' });
 
     const start = new Date(vacation.startDate);
@@ -479,7 +547,7 @@ export class HrService {
       if (!existing) {
         await this.attendanceRepo.save({
           employeeId: vacation.employeeId,
-          tenantId: vacation.tenantId,
+          tenantId: empVac.tenantId,
           date: dateStr,
           status: 'JUSTIFICADO',
           method: 'WEB',
@@ -491,14 +559,20 @@ export class HrService {
     return this.vacRepo.findOne({ where: { id } }) as Promise<VacationRequest>;
   }
 
-  async rejectVacation(id: string, approvedBy: string, responseNote: string): Promise<VacationRequest> {
+  async rejectVacation(id: string, approvedBy: string, responseNote: string, tenantId?: string): Promise<VacationRequest> {
+    const vacation = await this.vacRepo.findOne({ where: { id } });
+    if (!vacation) throw new NotFoundException('Solicitud de vacaciones no encontrada');
+    await this.empleadoDe(vacation.employeeId, tenantId);
     await this.vacRepo.update(id, { status: 'RECHAZADA', approvedBy, responseNote });
     return this.vacRepo.findOne({ where: { id } }) as Promise<VacationRequest>;
   }
 
   // --- Permission Requests ---
 
-  createPermissionRequest(data: Partial<PermissionRequest>): Promise<PermissionRequest> {
+  async createPermissionRequest(data: Partial<PermissionRequest>, tenantId?: string): Promise<PermissionRequest> {
+    const emp = await this.empleadoDe(data.employeeId as string, tenantId);
+    data.tenantId = emp.tenantId;
+    for (const k of ['id', 'status', 'approvedBy', 'approvedAt', 'responseNote'] as const) delete (data as any)[k];
     return this.permRepo.save(this.permRepo.create(data));
   }
 
@@ -506,9 +580,10 @@ export class HrService {
     return this.permRepo.find({ where: { employeeId }, order: { createdAt: 'DESC' } });
   }
 
-  async approvePermission(id: string, approvedBy: string, responseNote?: string): Promise<PermissionRequest> {
+  async approvePermission(id: string, approvedBy: string, responseNote?: string, tenantId?: string): Promise<PermissionRequest> {
     const permission = await this.permRepo.findOne({ where: { id } });
     if (!permission) throw new NotFoundException('Solicitud de permiso no encontrada');
+    const empPerm = await this.empleadoDe(permission.employeeId, tenantId);
     await this.permRepo.update(id, { status: 'APROBADA', approvedBy, responseNote: responseNote || '' });
 
     const dateStr = new Date(permission.date).toISOString().split('T')[0];
@@ -518,7 +593,7 @@ export class HrService {
     if (!existing) {
       await this.attendanceRepo.save({
         employeeId: permission.employeeId,
-        tenantId: permission.tenantId,
+        tenantId: empPerm.tenantId,
         date: dateStr,
         status: 'JUSTIFICADO',
         method: 'WEB',
@@ -529,7 +604,10 @@ export class HrService {
     return this.permRepo.findOne({ where: { id } }) as Promise<PermissionRequest>;
   }
 
-  async rejectPermission(id: string, approvedBy: string, responseNote: string): Promise<PermissionRequest> {
+  async rejectPermission(id: string, approvedBy: string, responseNote: string, tenantId?: string): Promise<PermissionRequest> {
+    const permission = await this.permRepo.findOne({ where: { id } });
+    if (!permission) throw new NotFoundException('Solicitud de permiso no encontrada');
+    await this.empleadoDe(permission.employeeId, tenantId);
     await this.permRepo.update(id, { status: 'RECHAZADA', approvedBy, responseNote });
     return this.permRepo.findOne({ where: { id } }) as Promise<PermissionRequest>;
   }
@@ -555,6 +633,10 @@ export class HrService {
     lng?: number,
   ): Promise<Attendance> {
     if (!employeeId) throw new BadRequestException('ID de empleado requerido');
+    // El empleado debe ser del tenant del token; el registro se guarda con el tenant del empleado y la sucursal debe ser suya
+    const employee = await this.empleadoDe(employeeId, tenantId);
+    tenantId = employee.tenantId;
+    if (branchId) await this.validarUbicacion(tenantId, { branchId });
 
     // Anti-double check
     const today = new Date().toISOString().slice(0, 10);
@@ -586,7 +668,6 @@ export class HrService {
 
     // Time-window status from employee's assigned shift
     let attendanceStatus = 'PRESENTE';
-    const employee = await this.empRepo.findOne({ where: { id: employeeId } });
     if (employee?.shiftId) {
       const shift = await this.shiftRepo.findOne({ where: { id: employee.shiftId } });
       if (shift) attendanceStatus = this.getShiftStatus(serverNow, shift);
@@ -606,7 +687,8 @@ export class HrService {
     return this.attendanceRepo.save(rec);
   }
 
-  async checkOut(employeeId: string): Promise<Attendance | null> {
+  async checkOut(employeeId: string, tenantId?: string): Promise<Attendance | null> {
+    await this.empleadoDe(employeeId, tenantId);
     const today = new Date().toISOString().slice(0, 10);
     const rec = await this.attendanceRepo.findOne({
       where: { employeeId, date: today as any },
@@ -626,8 +708,17 @@ export class HrService {
       incidenceNote: string;
       notes: string;
     }>,
+    tenantId?: string,
   ) {
-    await this.attendanceRepo.update(id, data);
+    const att = await this.attendanceRepo.findOne({ where: { id } });
+    if (!att) throw new NotFoundException('Asistencia no encontrada');
+    await this.empleadoDe(att.employeeId, tenantId);
+    // Solo estos campos: el body no puede reasignar empleado, tenant ni fecha del registro
+    const permitido: any = {};
+    for (const k of ['status', 'incidenceType', 'overtimeHours', 'incidenceNote', 'notes'] as const) {
+      if ((data as any)[k] !== undefined) permitido[k] = (data as any)[k];
+    }
+    await this.attendanceRepo.update(id, permitido);
     return this.attendanceRepo.findOne({ where: { id } });
   }
 
@@ -643,7 +734,10 @@ export class HrService {
     changeReason?: string;
     changedBy?: string;
     approvedBy?: string;
-  }) {
+  }, tenantId?: string) {
+    const emp = await this.empleadoDe(data.employeeId, tenantId);
+    data.tenantId = emp.tenantId; // el negocio sale del empleado, nunca de una cabecera
+    if (data.branchId) await this.validarUbicacion(emp.tenantId, { branchId: data.branchId });
     const existing = await this.attendanceRepo.findOne({
       where: { employeeId: data.employeeId, date: data.date as any },
     });
@@ -696,16 +790,18 @@ export class HrService {
     return result;
   }
 
-  async getAttendanceAudit(employeeId: string, tenantId: string) {
+  async getAttendanceAudit(employeeId: string, tenantId?: string) {
+    await this.empleadoDe(employeeId, tenantId);
     return this.attendanceAuditRepo.find({
-      where: { employeeId, tenantId },
+      where: { employeeId },
       order: { createdAt: 'DESC' },
     });
   }
 
-  async revertAttendanceChange(auditId: string, revertedBy: string) {
+  async revertAttendanceChange(auditId: string, revertedBy: string, tenantId?: string) {
     const audit = await this.attendanceAuditRepo.findOne({ where: { id: auditId } });
     if (!audit || audit.reverted) throw new NotFoundException('Registro no encontrado o ya revertido');
+    await this.empleadoDe(audit.employeeId, tenantId);
 
     await this.attendanceRepo.update(audit.attendanceId, {
       status: audit.previousStatus || 'PRESENTE',
@@ -728,8 +824,9 @@ export class HrService {
     checkOut?: string;
     tenantId?: string;
   }): Promise<Attendance | null> {
-    const { employeeId, date, checkIn, checkOut, tenantId } = data;
+    const { employeeId, date, checkIn, checkOut } = data;
     if (!employeeId || !date) throw new BadRequestException('employeeId y date son requeridos');
+    const tenantId = (await this.empleadoDe(employeeId, data.tenantId)).tenantId;
 
     const existing = await this.attendanceRepo.findOne({ where: { employeeId, date: date as any } });
     if (existing) {
@@ -767,15 +864,24 @@ export class HrService {
   async portalCheckOut(userId: string): Promise<Attendance | null> {
     const employee = await this.empRepo.findOne({ where: { userId } });
     if (!employee) throw new NotFoundException('No tienes un perfil de empleado vinculado a tu usuario.');
-    return this.checkOut(employee.id);
+    return this.checkOut(employee.id, employee.tenantId);
   }
 
-  findAttendanceToday(branchId: string): Promise<Attendance[]> {
+  // Antes, sin sucursal, el where quedaba { branchId: undefined } y TypeORM lo ignoraba: asistencia de TODOS los tenants.
+  async findAttendanceToday(branchId?: string, tenantId?: string): Promise<Attendance[]> {
+    if (!tenantId) return [];
     const today = new Date().toISOString().slice(0, 10);
-    return this.attendanceRepo.find({ where: { branchId, date: today as any } });
+    const qb = this.attendanceRepo
+      .createQueryBuilder('a')
+      .innerJoin(Employee, 'e', 'e.id::text = a."employeeId"::text')
+      .where('e."tenantId"::text = :tenantId', { tenantId })
+      .andWhere('a.date = :today', { today });
+    if (branchId) qb.andWhere('a."branchId"::text = :branchId', { branchId });
+    return qb.getMany();
   }
 
-  findAttendanceByEmployee(employeeId: string, startDate?: Date, endDate?: Date): Promise<Attendance[]> {
+  async findAttendanceByEmployee(employeeId: string, startDate?: Date, endDate?: Date, tenantId?: string): Promise<Attendance[]> {
+    await this.empleadoDe(employeeId, tenantId);
     const q = this.attendanceRepo.createQueryBuilder('a').where('a.employeeId = :employeeId', { employeeId });
     if (startDate) q.andWhere('a.date >= :startDate', { startDate });
     if (endDate) q.andWhere('a.date <= :endDate', { endDate });
@@ -784,7 +890,8 @@ export class HrService {
 
   // --- Biometrics ---
 
-  async registerFace(employeeId: string, tenantId: string, faceDescriptor: number[]): Promise<BiometricCredential> {
+  async registerFace(employeeId: string, tenantId: string | undefined, faceDescriptor: number[]): Promise<BiometricCredential> {
+    tenantId = (await this.empleadoDe(employeeId, tenantId)).tenantId;
     const existing = await this.bioRepo.findOne({ where: { employeeId, type: 'FACE' } });
     const data = { employeeId, tenantId, type: 'FACE', faceDescriptor: JSON.stringify(faceDescriptor), isActive: true };
     if (existing) {
@@ -794,7 +901,8 @@ export class HrService {
     return this.bioRepo.save(this.bioRepo.create(data));
   }
 
-  async verifyFace(faceDescriptor: number[], tenantId: string): Promise<{ employeeId: string; distance: number } | null> {
+  async verifyFace(faceDescriptor: number[], tenantId?: string): Promise<{ employeeId: string; distance: number } | null> {
+    if (!tenantId) return null;
     const credentials = await this.bioRepo.find({ where: { tenantId, type: 'FACE', isActive: true } });
     let best: { employeeId: string; distance: number } | null = null;
     for (const cred of credentials) {
@@ -812,7 +920,8 @@ export class HrService {
     return this.bioRepo.find({ where: { employeeId } });
   }
 
-  findBiometricsByTenant(tenantId: string): Promise<BiometricCredential[]> {
+  async findBiometricsByTenant(tenantId?: string): Promise<BiometricCredential[]> {
+    if (!tenantId) return [];
     return this.bioRepo.find({ where: { tenantId, isActive: true } });
   }
 }
