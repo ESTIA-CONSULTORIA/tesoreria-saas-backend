@@ -1,10 +1,16 @@
-import { Body, Controller, Delete, Get, Headers, Param, Patch, Post, Query, Request } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Headers, Param, Patch, Post, Query, Request, UseGuards } from '@nestjs/common';
+import { RolesGuard } from '../auth/roles.guard';
+import { Roles } from '../auth/roles.decorator';
+import { tenantDeSesion, tenantParaListar } from '../auth/tenant-access.util';
 import { BranchesService } from './branches.service';
 
 @Controller('branches')
 export class BranchesController {
   constructor(private branchesService: BranchesService) {}
 
+  // Alta, edición y baja de sucursales: solo ADMIN, GERENTE y SOPORTE (antes cualquier usuario autenticado, incluido un cajero)
+  @UseGuards(RolesGuard)
+  @Roles('ADMIN', 'GERENTE', 'SOPORTE')
   @Post()
   create(
     @Body()
@@ -20,7 +26,7 @@ export class BranchesController {
   ) {
     // Auditoría de seguridad (GoodsHabits, hallazgo #2 BUSINESS): tenantId siempre del JWT,
     // mismo criterio que companies.controller.ts::create().
-    const tenantId = req?.user?.tenantId;
+    const tenantId = tenantDeSesion(req);
     return this.branchesService.create(
       body.companyId,
       body.code,
@@ -39,7 +45,8 @@ export class BranchesController {
     @Request() req?: any,
   ) {
     const userCompanyId = req?.user?.companyId;
-    const tenantId = req?.user?.tenantId || req?.tenantId;
+    // Tenant del token (403 si no es SOPORTE y no lo trae); SOPORTE con ?tenantId= explícito
+    const tenantId = tenantParaListar(req, req?.query?.tenantId);
 
     // If user has companyId in JWT, use it and ignore everything else
     if (userCompanyId) {
@@ -61,17 +68,20 @@ export class BranchesController {
       return this.branchesService.findByCompany(headerCompanyId, tenantId);
     }
 
-    return this.branchesService.findAll();
+    // Sin tenant (SOPORTE sin ?tenantId= ni empresa) no se listan las sucursales de todos los negocios
+    return [];
   }
 
   @Get('company/:companyId')
   findByCompany(@Param('companyId') companyId: string, @Request() req?: any) {
     // Auditoría de seguridad (GoodsHabits, hallazgo #2 BUSINESS): sin esto, cualquier usuario
     // autenticado podía listar las sucursales de una empresa ajena solo sabiendo su companyId.
-    const tenantId = req?.user?.tenantId;
+    const tenantId = tenantDeSesion(req);
     return this.branchesService.findByCompany(companyId, tenantId);
   }
 
+  @UseGuards(RolesGuard)
+  @Roles('ADMIN', 'GERENTE', 'SOPORTE')
   @Patch(':id')
   update(
     @Param('id') id: string,
@@ -87,13 +97,15 @@ export class BranchesController {
     },
     @Request() req?: any,
   ) {
-    const tenantId = req?.user?.tenantId;
+    const tenantId = tenantDeSesion(req);
     return this.branchesService.update(id, body, tenantId);
   }
 
+  @UseGuards(RolesGuard)
+  @Roles('ADMIN', 'GERENTE', 'SOPORTE')
   @Delete(':id')
   remove(@Param('id') id: string, @Request() req?: any) {
-    const tenantId = req?.user?.tenantId;
+    const tenantId = tenantDeSesion(req);
     return this.branchesService.remove(id, tenantId);
   }
 }
