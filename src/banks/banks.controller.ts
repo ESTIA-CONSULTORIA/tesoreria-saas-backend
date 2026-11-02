@@ -2,6 +2,7 @@ import { Body, Controller, Delete, Get, Headers, Param, Patch, Post, Request } f
 import { BanksService } from './banks.service';
 import { Modulo } from '../auth/modulo.decorator';
 import { sucursalEfectiva } from '../common/sucursal-efectiva';
+import { tenantDeSesion, tenantParaListar } from '../auth/tenant-access.util';
 
 // Auditoría de seguridad (GoodsHabits, P1): 'tesoreria', igual que transfers.controller.ts
 // (ya en producción con ese código) — el catálogo lista 'bancos' como entrada propia, pero
@@ -27,7 +28,7 @@ export class BanksController {
     },
     @Request() req?: any,
   ) {
-    const tenantId = req?.user?.tenantId;
+    const tenantId = tenantDeSesion(req);
     const branchId = req?.user?.branchId || body.branchId;
     return this.banksService.create(
       branchId,
@@ -54,23 +55,23 @@ export class BanksController {
     // el servicio verifica que sea de su tenant.
     const { branchId, restringida } = sucursalEfectiva(req?.user, headerBranchId);
     const companyId = headerCompanyId || userCompanyId;
-    if (branchId) return this.banksService.findByBranch(branchId, restringida ? undefined : req?.user?.tenantId);
-    if (companyId) return this.banksService.findByCompany(companyId);
-
-    const tenantId = req?.user?.tenantId;
-    if (tenantId) return this.banksService.findByTenant(tenantId);
-
-    return [];
+    // Tenant del token (403 si no es SOPORTE y no lo trae); SOPORTE solo con ?tenantId= explícito. Todo se acota a él.
+    const tenantId = tenantParaListar(req, req?.query?.tenantId);
+    if (!tenantId) return [];
+    if (branchId) return this.banksService.findByBranch(branchId, restringida ? undefined : tenantId);
+    if (companyId) return this.banksService.findByCompany(companyId, tenantId);
+    return this.banksService.findByTenant(tenantId);
   }
 
   @Get('branch/:branchId')
-  findByBranch(@Param('branchId') branchId: string) {
-    return this.banksService.findByBranch(branchId);
+  findByBranch(@Param('branchId') branchId: string, @Request() req?: any) {
+    // La sucursal pedida por id debe ser del tenant del token (antes se listaban los bancos de cualquier sucursal)
+    return this.banksService.findByBranch(branchId, tenantDeSesion(req));
   }
 
   @Get(':id')
   findOne(@Param('id') id: string, @Request() req?: any) {
-    const tenantId = req?.user?.tenantId;
+    const tenantId = tenantDeSesion(req);
     return this.banksService.findOne(id, tenantId);
   }
 
@@ -90,13 +91,13 @@ export class BanksController {
     @Request() req?: any,
   ) {
     // Auditoría de seguridad (GoodsHabits, hallazgo #1 BUSINESS): tenantId siempre del JWT.
-    const tenantId = req?.user?.tenantId;
+    const tenantId = tenantDeSesion(req);
     return this.banksService.update(id, body, tenantId);
   }
 
   @Delete(':id')
   remove(@Param('id') id: string, @Request() req?: any) {
-    const tenantId = req?.user?.tenantId;
+    const tenantId = tenantDeSesion(req);
     return this.banksService.remove(id, tenantId);
   }
 }
