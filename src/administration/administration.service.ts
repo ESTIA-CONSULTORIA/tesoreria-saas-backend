@@ -16,21 +16,6 @@ export class AdministrationService {
     private tenantSettingsRepo: Repository<TenantSetting>,
   ) {}
 
-  async createAuditLog(data: {
-    userId: string;
-    userEmail: string;
-    roleCode?: string;
-    tenantId: string;
-    action: string;
-    entity: string;
-    details?: any;
-    ipAddress: string;
-    userAgent: string;
-  }) {
-    const auditLog = this.auditLogRepo.create(data);
-    return this.auditLogRepo.save(auditLog);
-  }
-
   async getAuditLogs(filters?: {
     userId?: string;
     tenantId?: string;
