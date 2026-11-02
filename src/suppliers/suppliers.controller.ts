@@ -1,7 +1,7 @@
 import { Controller, Get, Post, Put, Delete, Body, Param, Query, Req, Headers } from '@nestjs/common';
 import { SuppliersService } from './suppliers.service';
 import { Modulo } from '../auth/modulo.decorator';
-import { tenantDeSesion } from '../auth/tenant-access.util';
+import { tenantDeSesion, tenantParaListar, tenantParaEscribir } from '../auth/tenant-access.util';
 
 @Controller('suppliers')
 @Modulo('proveedores')
@@ -19,7 +19,8 @@ export class SuppliersController {
     // Auditoría de seguridad (GoodsHabits): query('tenantId') es controlable por el
     // cliente — antes se evaluaba ANTES que el JWT (GET /suppliers?tenantId=<otro> filtraba
     // proveedores de otro tenant). El JWT va primero; el query param queda como fallback.
-    const tenantIdFromReq = req?.user?.tenantId || req?.tenantId || tenantId;
+    // Tenant del token; SOPORTE solo con ?tenantId= explícito; un token sin tenant que no es SOPORTE recibe 403.
+    const tenantIdFromReq = tenantParaListar(req, tenantId);
     const userCompanyId = req?.user?.companyId;
     const companyId = userCompanyId || headerCompanyId;
     const isActiveBool = isActive === 'true' ? true : isActive === 'false' ? false : undefined;
@@ -36,13 +37,12 @@ export class SuppliersController {
   // de compras" — ese módulo (src/purchases/) ya existe. Se conecta la consulta real.
   @Get(':id/purchases')
   getSupplierPurchases(@Param('id') id: string, @Req() req?: any) {
-    const tenantId = req?.user?.tenantId;
-    return this.suppliersService.findPurchasesBySupplier(id, tenantId);
+    return this.suppliersService.findPurchasesBySupplier(id, tenantDeSesion(req));
   }
 
   @Post()
   create(@Body() data: any, @Req() req?: any) {
-    const tenantId = req?.user?.tenantId || req?.tenantId;
+    const tenantId = tenantParaEscribir(req, req?.query?.tenantId);
     return this.suppliersService.create({ ...data, tenantId });
   }
 

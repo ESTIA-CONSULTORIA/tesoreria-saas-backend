@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Like } from 'typeorm';
 import { Supplier } from './entities/supplier.entity';
@@ -14,8 +14,8 @@ export class SuppliersService {
   ) {}
 
   findAll(tenantId?: string, search?: string, isActive?: boolean, companyId?: string) {
-    const where: any = {};
-    if (tenantId) where.tenantId = tenantId;
+    if (!tenantId) return Promise.resolve([]); // sin tenant (SOPORTE sin ?tenantId=) nunca se listan todos
+    const where: any = { tenantId };
     if (isActive !== undefined) where.isActive = isActive;
     if (search) {
       where.nombre = Like(`%${search}%`);
@@ -46,7 +46,10 @@ export class SuppliersService {
   // filtrar por ambos alcanza: un supplierId de OTRO tenant nunca puede coincidir con una
   // fila cuyo tenantId sea el del que llama, sin necesitar una verificación de pertenencia
   // aparte sobre el proveedor.
-  findPurchasesBySupplier(supplierId: string, tenantId?: string) {
+  async findPurchasesBySupplier(supplierId: string, tenantId?: string) {
+    // Con tenant del token: el proveedor debe ser suyo (404) y solo se devuelven compras de su tenant.
+    // SOPORTE (tenantId undefined) consulta por id de proveedor, igual que en el resto de rutas por id.
+    await this.assertProveedor(supplierId, tenantId);
     const where: any = { supplierId };
     if (tenantId) where.tenantId = tenantId;
     return this.purchasesRepo.find({
@@ -56,6 +59,8 @@ export class SuppliersService {
   }
 
   create(data: Partial<Supplier>) {
+    if (!data.tenantId) throw new BadRequestException('Falta el negocio del proveedor');
+    delete (data as any).id; // con id en el body save() pisaría al proveedor de otro tenant
     const supplier = this.suppliersRepo.create(data);
     return this.suppliersRepo.save(supplier);
   }

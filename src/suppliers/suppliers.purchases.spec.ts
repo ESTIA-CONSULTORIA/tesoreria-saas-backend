@@ -51,7 +51,8 @@ describe('SuppliersService.findPurchasesBySupplier()', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         SuppliersService,
-        { provide: getRepositoryToken(Supplier), useValue: { find: jest.fn(), findOne: jest.fn() } },
+        // el proveedor SUPPLIER_B es del TENANT_B: para cualquier otro tenant findOne no lo encuentra
+        { provide: getRepositoryToken(Supplier), useValue: { find: jest.fn(), findOne: jest.fn(({ where }) => Promise.resolve(where.id === SUPPLIER_B && where.tenantId === TENANT_B ? { id: SUPPLIER_B, tenantId: TENANT_B } : null)) } },
         { provide: getRepositoryToken(Purchase), useValue: purchasesRepo },
       ],
     }).compile();
@@ -59,8 +60,9 @@ describe('SuppliersService.findPurchasesBySupplier()', () => {
     service = module.get<SuppliersService>(SuppliersService);
   });
 
-  it('no devuelve compras de un proveedor consultado desde OTRO tenant', async () => {
-    await expect(service.findPurchasesBySupplier(SUPPLIER_B, TENANT_A)).resolves.toEqual([]);
+  it('responde 404 al consultar las compras de un proveedor de OTRO tenant (y no las devuelve)', async () => {
+    await expect(service.findPurchasesBySupplier(SUPPLIER_B, TENANT_A)).rejects.toThrow('Proveedor no encontrado');
+    expect(purchasesRepo.find).not.toHaveBeenCalled();
   });
 
   it('sí devuelve las compras reales del proveedor del MISMO tenant', async () => {
