@@ -7,7 +7,7 @@ import { Bank } from '../banks/entities/bank.entity';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
 
-const APPROVAL_THRESHOLD = 50_000;
+export const APPROVAL_THRESHOLD = 50_000;
 
 @Injectable()
 export class MovementsService {

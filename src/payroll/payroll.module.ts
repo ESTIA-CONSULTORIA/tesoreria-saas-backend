@@ -6,9 +6,10 @@ import { PayrollRun } from './entities/payroll-run.entity';
 import { PayrollEntry } from './entities/payroll-entry.entity';
 import { PayrollConceptTemplate } from './entities/payroll-concept-template.entity';
 import { EmployeeIncapacity } from './entities/employee-incapacity.entity';
+import { MovementsModule } from '../movements/movements.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([PayrollRun, PayrollEntry, PayrollConceptTemplate, EmployeeIncapacity])],
+  imports: [TypeOrmModule.forFeature([PayrollRun, PayrollEntry, PayrollConceptTemplate, EmployeeIncapacity]), MovementsModule],
   controllers: [PayrollController],
   providers: [PayrollService],
   exports: [PayrollService],

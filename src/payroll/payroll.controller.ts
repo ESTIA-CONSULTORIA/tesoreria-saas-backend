@@ -59,7 +59,7 @@ export class PayrollController {
     @Request() req?: any,
   ) {
     const tenantId = tenantDeSesion(req);
-    return this.payrollService.confirmPayment(id, body.bankId, tenantId);
+    return this.payrollService.confirmPayment(id, body.bankId, tenantId, req?.user?.id);
   }
 
   // Auditoría de producto (GoodsHabits, Fase 3 — Nómina): addon 'dispersion_bancaria' —
@@ -73,7 +73,7 @@ export class PayrollController {
     @Request() req?: any,
   ) {
     const tenantId = tenantDeSesion(req);
-    return this.payrollService.confirmPaymentPerEmployee(id, body.bankId, tenantId);
+    return this.payrollService.confirmPaymentPerEmployee(id, body.bankId, tenantId, req?.user?.id);
   }
 
   // Addon 'dispersion_layout' — genera el archivo, no cambia el status de la corrida.

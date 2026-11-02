@@ -14,6 +14,7 @@ import { Company } from '../companies/entities/company.entity';
 import { Branch } from '../branches/entities/branch.entity';
 import { Bank } from '../banks/entities/bank.entity';
 import { Movement } from '../movements/entities/movement.entity';
+import { MovementsService } from '../movements/movements.service';
 
 dotenv.config();
 
@@ -63,7 +64,7 @@ describe('PayrollService: aislamiento entre tenants contra Postgres real', () =>
     brB = await guardar(Branch, { companyId: coB, name: 'Matriz B' });
     empA = await guardar(Employee, { tenantId: tA, companyId: coA, branchId: brA, nombre: 'Ana', status: 'ACTIVO', salarioDiarioIntegrado: 500, clabe: '012345678901234567', banco: 'BBVA', rfc: 'RFCA010101AAA' });
     await guardar(Employee, { tenantId: tB, companyId: coB, branchId: brB, nombre: 'Beto', status: 'ACTIVO', salarioDiarioIntegrado: 300 });
-    bankA = await guardar(Bank, { branchId: brA, tenantId: tA, name: 'Banco A', balance: 0, isActive: true });
+    bankA = await guardar(Bank, { branchId: brA, tenantId: tA, name: 'Banco A', balance: 10000, isActive: true });
     bankB = await guardar(Bank, { branchId: brB, tenantId: tB, name: 'Banco B', balance: 0, isActive: true });
     runA = await guardar(PayrollRun, { tenantId: tA, companyId: coA, branchId: brA, periodStart: '2026-10-01', periodEnd: '2026-10-15', status: 'APROBADA', totalAmount: 5000 });
     entryA = await guardar(PayrollEntry, { payrollRunId: runA, employeeId: empA, tenantId: tA, workedDays: 10, dailySalary: 500, netAmount: 5000, status: 'REVISADO', concepts: [] });
@@ -74,6 +75,7 @@ describe('PayrollService: aislamiento entre tenants contra Postgres real', () =>
     svc = new PayrollService(
       ds.getRepository(PayrollRun), ds.getRepository(PayrollEntry), ds.getRepository(PayrollConceptTemplate),
       ds.getRepository(EmployeeIncapacity), ds, storage,
+      new MovementsService(ds.getRepository(Movement), ds.getRepository(Bank), ds as any),
     );
   });
 
@@ -149,8 +151,11 @@ describe('PayrollService: aislamiento entre tenants contra Postgres real', () =>
   it('pago: A no puede registrar el egreso en la cuenta de B; con su cuenta si, y el periodo queda cerrado', async () => {
     await noEncontrado(svc.confirmPayment(runA, bankB, tA));
     expect(await ds.getRepository(Movement).count()).toBe(0);
-    expect((await svc.confirmPayment(runA, bankA, tA)).status).toBe('PAGADA');
+    expect((await svc.confirmPayment(runA, bankA, tA, 'u-pago')).status).toBe('PAGADA');
     expect(await ds.getRepository(Movement).count()).toBe(1);
+    // el pago descuenta el saldo de la cuenta, como cualquier egreso (MovementsService.create), y deja quien lo registro
+    expect(Number((await ds.getRepository(Bank).findOneBy({ id: bankA }))!.balance)).toBe(5000);
+    expect(await ds.getRepository(Movement).findOneBy({ accountId: bankA })).toMatchObject({ type: 'EXPENSE', category: 'PAYROLL', status: 'APPROVED', createdBy: 'u-pago' });
     expect(await svc.isPeriodLocked(brA, '2026-10-05', tA)).toBe(true);
     expect(await svc.isPeriodLocked(brA, '2026-10-05', tB)).toBe(false);
   });
@@ -162,6 +167,27 @@ describe('PayrollService: aislamiento entre tenants contra Postgres real', () =>
     await noEncontrado(svc.confirmPaymentPerEmployee(run2, bankB, tA)); // cuenta de otro tenant
     expect((await svc.confirmPaymentPerEmployee(run2, bankA, tA)).status).toBe('PAGADA');
     expect(await ds.getRepository(Movement).count()).toBe(antes + 1);
+    expect(Number((await ds.getRepository(Bank).findOneBy({ id: bankA }))!.balance)).toBe(4900); // 5000 - 100
+  });
+
+  it('saldo: sin saldo suficiente la nomina NO se paga ni queda a medias; un monto sobre el umbral de aprobacion queda pendiente sin descontar', async () => {
+    const mala = await guardar(PayrollRun, { tenantId: tA, companyId: coA, branchId: brA, periodStart: '2026-12-01', periodEnd: '2026-12-15', status: 'APROBADA', totalAmount: 999999 });
+    await expect(svc.confirmPayment(mala, bankA, tA)).rejects.toBeInstanceOf(BadRequestException);
+    expect((await ds.getRepository(PayrollRun).findOneBy({ id: mala }))!.status).toBe('APROBADA');
+    // por empleado: 3 pagos de 2000 con saldo 4900 -> alcanza para 2, la nomina completa (6000) no: no se escribe NADA
+    const rev = await guardar(PayrollRun, { tenantId: tA, companyId: coA, branchId: brA, periodStart: '2026-12-16', periodEnd: '2026-12-31', status: 'APROBADA', totalAmount: 6000 });
+    for (let i = 0; i < 3; i++) await guardar(PayrollEntry, { payrollRunId: rev, employeeId: empA, tenantId: tA, workedDays: 1, dailySalary: 2000, netAmount: 2000, status: 'REVISADO', concepts: [] });
+    const antes = await ds.getRepository(Movement).count();
+    await expect(svc.confirmPaymentPerEmployee(rev, bankA, tA)).rejects.toThrow(/Saldo insuficiente/);
+    expect(await ds.getRepository(Movement).count()).toBe(antes);
+    expect(Number((await ds.getRepository(Bank).findOneBy({ id: bankA }))!.balance)).toBe(4900);
+    expect((await ds.getRepository(PayrollRun).findOneBy({ id: rev }))!.status).toBe('APROBADA');
+    // sobre el umbral de aprobacion (50,000): movimiento pendiente, el saldo no se toca hasta aprobarlo
+    const grande = await guardar(Bank, { branchId: brA, tenantId: tA, name: 'Banco grande', balance: 200000, isActive: true });
+    const run60 = await guardar(PayrollRun, { tenantId: tA, companyId: coA, branchId: brA, periodStart: '2027-01-01', periodEnd: '2027-01-15', status: 'APROBADA', totalAmount: 60000 });
+    expect((await svc.confirmPayment(run60, grande, tA)).status).toBe('PAGADA');
+    expect(await ds.getRepository(Movement).findOneBy({ accountId: grande })).toMatchObject({ status: 'PENDING_APPROVAL' });
+    expect(Number((await ds.getRepository(Bank).findOneBy({ id: grande }))!.balance)).toBe(200000);
   });
 
   it('controlador: tenant del token (x-tenant-id y query ignorados), token sin tenant 403, aprobacion atribuida al token', async () => {

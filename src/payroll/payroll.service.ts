@@ -8,6 +8,7 @@ import { PayrollEntry } from './entities/payroll-entry.entity';
 import { PayrollConceptTemplate } from './entities/payroll-concept-template.entity';
 import { EmployeeIncapacity } from './entities/employee-incapacity.entity';
 import { StorageService } from '../storage/storage.service';
+import { MovementsService, APPROVAL_THRESHOLD } from '../movements/movements.service';
 import { DispersionEntry } from './layout-formatters/payroll-layout-formatter.interface';
 import { getLayoutFormatter, REGISTERED_BANKS } from './layout-formatters/registry';
 
@@ -25,6 +26,7 @@ export class PayrollService {
     @InjectDataSource()
     private dataSource: DataSource,
     private readonly storageService: StorageService,
+    private readonly movementsService: MovementsService,
   ) {}
 
   // --- Aislamiento por tenant ---
@@ -235,7 +237,7 @@ export class PayrollService {
     return this.runRepo.findOne({ where: { id } }) as Promise<PayrollRun>;
   }
 
-  async confirmPayment(id: string, bankId: string, tenantId?: string): Promise<PayrollRun> {
+  async confirmPayment(id: string, bankId: string, tenantId?: string, createdBy?: string): Promise<PayrollRun> {
     const run = await this.corridaDe(id, tenantId);
     tenantId = run.tenantId; // el movimiento se registra en el negocio de la corrida
     // La cuenta de pago debe ser del tenant: antes se podía registrar el egreso en la cuenta bancaria de OTRO negocio
@@ -245,13 +247,10 @@ export class PayrollService {
     }
 
     const concept = `NOMINA ${run.periodStart} al ${run.periodEnd}`;
-    await this.dataSource.query(
-      // movement NO tiene columna "tenantId" (ni en la entidad ni en produccion): el negocio de un movimiento sale de su cuenta.
-      // Antes este INSERT la incluia y fallaba en produccion con 'column "tenantId" does not exist'.
-      `INSERT INTO movement (id, "accountId", type, category, amount, concept, date, "createdAt")
-       VALUES (gen_random_uuid(), $1, 'EXPENSE', 'PAYROLL', $2, $3, NOW(), NOW())`,
-      [bankId, run.totalAmount, concept],
-    );
+    // Mismo camino que cualquier egreso (MovementsService.create): valida saldo ('Saldo insuficiente'), descuenta el saldo de la cuenta y,
+    // si el monto llega al umbral de aprobacion, queda PENDING_APPROVAL sin descontar hasta que se apruebe. La cuenta ya se validó contra
+    // el tenant arriba. Antes un INSERT crudo con la columna inexistente "tenantId" fallaba en produccion y nunca tocaba el saldo.
+    await this.movementsService.create(bankId, 'EXPENSE', 'PAYROLL', concept, Number(run.totalAmount), run.id, createdBy);
 
     await this.runRepo.update(id, {
       status: 'PAGADA',
@@ -274,7 +273,7 @@ export class PayrollService {
   // puede conciliar línea por línea contra la nómina. El ERP no tiene ninguna integración
   // con un riel de pago real (SPEI o similar, confirmado en el diseño de esta fase) — esto
   // sigue siendo un registro contable, el pago real lo ejecuta el cliente por fuera.
-  async confirmPaymentPerEmployee(id: string, bankId: string, tenantId?: string): Promise<PayrollRun> {
+  async confirmPaymentPerEmployee(id: string, bankId: string, tenantId?: string, createdBy?: string): Promise<PayrollRun> {
     const run = await this.corridaDe(id, tenantId);
     tenantId = run.tenantId;
     if (!bankId || !(await this.cuentaDelTenant(bankId, tenantId))) throw new NotFoundException('Cuenta bancaria no encontrada');
@@ -289,15 +288,17 @@ export class PayrollService {
     });
     const employeeById = new Map(employees.map((e) => [e.id, e]));
 
+    // Antes de escribir nada: el saldo debe alcanzar para TODOS los pagos que se descuentan al momento (los que llegan al umbral de
+    // aprobacion quedan pendientes y no descuentan). Así un 'Saldo insuficiente' a la mitad no deja la nómina pagada a medias.
+    const saldoRows = await this.dataSource.query(`SELECT balance FROM bank WHERE id::text = $1 LIMIT 1`, [bankId]);
+    const aDescontar = entries.reduce((s, e) => (Number(e.netAmount) >= APPROVAL_THRESHOLD ? s : s + Number(e.netAmount)), 0);
+    if (Number(saldoRows[0]?.balance ?? 0) < aDescontar) throw new BadRequestException('Saldo insuficiente');
+
     for (const entry of entries) {
       const emp = employeeById.get(entry.employeeId);
       const empName = emp ? `${emp.nombre} ${emp.apellidos || ''}`.trim() : entry.employeeId;
       const concept = `NOMINA ${run.periodStart} al ${run.periodEnd} - ${empName}`;
-      await this.dataSource.query(
-        `INSERT INTO movement (id, "accountId", type, category, amount, concept, reference, date, "createdAt")
-         VALUES (gen_random_uuid(), $1, 'EXPENSE', 'PAYROLL', $2, $3, $4, NOW(), NOW())`,
-        [bankId, entry.netAmount, concept, entry.employeeId],
-      );
+      await this.movementsService.create(bankId, 'EXPENSE', 'PAYROLL', concept, Number(entry.netAmount), entry.employeeId, createdBy);
     }
 
     await this.runRepo.update(id, { status: 'PAGADA', paidFromBankId: bankId });
