@@ -243,8 +243,8 @@ export class TransfersService {
   }
 
   findAll(tenantId?: string) {
-    const where: any = {};
-    if (tenantId) where.tenantId = tenantId;
+    if (!tenantId) return Promise.resolve([]); // sin tenant (SOPORTE sin ?tenantId=) nunca se listan las transferencias de todos
+    const where: any = { tenantId };
     return this.transferRepo.find({
       where,
       order: { createdAt: 'DESC' },

@@ -1,6 +1,7 @@
 import { Body, Controller, ForbiddenException, Get, Post, Put, Param, Req } from '@nestjs/common';
 import { TransfersService } from './transfers.service';
 import { Modulo } from '../auth/modulo.decorator';
+import { tenantDeSesion, tenantParaListar, tenantParaEscribir } from '../auth/tenant-access.util';
 
 @Controller('transfers')
 export class TransfersController {
@@ -23,7 +24,7 @@ export class TransfersController {
     },
     @Req() req,
   ) {
-    const tenantId = req.user?.tenantId || req.tenantId;
+    const tenantId = tenantParaEscribir(req, req?.query?.tenantId);
     return this.transfersService.create(
       body.fromAccountId,
       body.toAccountId,
@@ -41,7 +42,7 @@ export class TransfersController {
   @Get()
   @Modulo('tesoreria')
   findAll(@Req() req) {
-    const tenantId = req.user?.tenantId || req.tenantId;
+    const tenantId = tenantParaListar(req, req?.query?.tenantId);
     return this.transfersService.findAll(tenantId);
   }
 
@@ -52,14 +53,14 @@ export class TransfersController {
     if (!['ADMIN'].includes(roleCode)) {
       throw new ForbiddenException('Solo los administradores pueden autorizar transferencias');
     }
-    const tenantId = req.user?.tenantId || req.tenantId;
+    const tenantId = tenantDeSesion(req);
     return this.transfersService.authorize(id, tenantId);
   }
 
   @Put(':id/reject')
   @Modulo('tesoreria')
   reject(@Param('id') id: string, @Body() body: { motivo: string }, @Req() req: any) {
-    const tenantId = req.user?.tenantId || req.tenantId;
+    const tenantId = tenantDeSesion(req);
     return this.transfersService.reject(id, body.motivo, tenantId);
   }
 }
