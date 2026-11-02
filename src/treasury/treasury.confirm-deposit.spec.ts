@@ -51,6 +51,8 @@ describe('TreasuryService.confirmDeposit()', () => {
     }).compile();
 
     service = module.get<TreasuryService>(TreasuryService);
+    // La pertenencia de la cuenta al tenant se prueba contra Postgres real en treasury.depositos-pg.spec.ts
+    jest.spyOn(service as any, 'resolverCuentas').mockImplementation(async () => [BANK_ID]);
   });
 
   it('crea el Movement con las columnas reales de la entidad (accountId/type/amount/concept/date)', async () => {
@@ -90,7 +92,6 @@ describe('TreasuryService.confirmDeposit()', () => {
   });
 
   it('falla con un mensaje claro si la cuenta bancaria no existe', async () => {
-    banksRepo.findOne.mockResolvedValueOnce(null);
     await expect(service.confirmDeposit(SHIFT_ID, 'tenant-A', 'bank-inexistente', AMOUNT)).rejects.toThrow();
     expect(movementsRepo.save).not.toHaveBeenCalled();
   });

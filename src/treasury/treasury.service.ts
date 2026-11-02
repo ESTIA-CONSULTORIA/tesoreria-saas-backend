@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, HttpException, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
 import { Bank } from '../banks/entities/bank.entity';
@@ -655,6 +655,8 @@ export class TreasuryService {
 
   async getPendingDeposits(tenantId: string, branchId?: string) {
     try {
+      // Sin tenant TypeORM ignoraria la condicion (undefined) y devolveria turnos de todos los tenants.
+      if (!tenantId) return { deposits: [], total: 0 };
       const where: any = { tenantId, status: 'CERRADO' };
       if (branchId) where.sucursalId = branchId;
       const shifts = await this.shiftsRepo.find({ where, order: { fecha: 'DESC' } });
@@ -685,11 +687,15 @@ export class TreasuryService {
   // actualiza el balance de la cuenta (antes tampoco lo hacía, ni con los nombres correctos).
   async confirmDeposit(shiftId: string, tenantId: string, bankId: string, amount: number) {
     try {
-      const shift = await this.shiftsRepo.findOne({ where: { id: shiftId } });
-      if (!shift) throw new Error('Turno no encontrado');
+      // Turno y cuenta deben pertenecer al tenant del token; si no, 404 (no se revela que existen en otro tenant).
+      if (!tenantId) throw new NotFoundException('Turno no encontrado');
+      const shift = await this.shiftsRepo.findOne({ where: { id: shiftId, tenantId } });
+      if (!shift) throw new NotFoundException('Turno no encontrado');
 
+      const cuentasDelTenant = await this.resolverCuentas(tenantId);
+      if (!bankId || !cuentasDelTenant.includes(bankId)) throw new NotFoundException('Cuenta bancaria no encontrada');
       const account = await this.banksRepo.findOne({ where: { id: bankId } });
-      if (!account) throw new Error('Cuenta bancaria no encontrada');
+      if (!account) throw new NotFoundException('Cuenta bancaria no encontrada');
 
       const numericAmount = Number(amount);
       account.balance = Number(account.balance) + numericAmount;
@@ -714,6 +720,7 @@ export class TreasuryService {
 
       return { success: true, movementId: saved.id };
     } catch (error) {
+      if (error instanceof HttpException) throw error;
       console.error('TreasuryService.confirmDeposit error:', error);
       throw new Error(`Error al confirmar depósito: ${error.message}`);
     }
