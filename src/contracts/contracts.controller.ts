@@ -1,6 +1,7 @@
 import { Body, Controller, Delete, Get, NotFoundException, Param, Post, Query, Request, Headers } from '@nestjs/common';
 import { ContractsService } from './contracts.service';
 import { Modulo } from '../auth/modulo.decorator';
+import { tenantDeSesion, tenantParaListar, tenantParaEscribir } from '../auth/tenant-access.util';
 
 // Auditoría de seguridad (GoodsHabits, P1): 'rh', no 'contratos'/'expedientes' — no
 // existe ese código en el catálogo (MODULES_CATALOG, seed.ts), Expedientes es parte del
@@ -12,7 +13,6 @@ export class ContractsController {
 
   @Get('templates')
   getTemplates(
-    @Headers('x-tenant-id') tenantId: string,
     @Headers('x-company-id') companyId: string,
     @Request() req: any,
   ) {
@@ -21,7 +21,7 @@ export class ContractsController {
     // usuario autenticado podía leer/generar contratos de otro tenant mandando el header a
     // mano. El JWT (fuente verificada) va primero; el header queda solo como fallback para
     // cuando el JWT no trae tenantId (SOPORTE).
-    const tid = req?.user?.tenantId || tenantId;
+    const tid = tenantParaListar(req, req?.query?.tenantId);
     const cid = req?.user?.companyId || companyId;
     return this.contractsService.getTemplates(tid, cid);
   }
@@ -29,7 +29,6 @@ export class ContractsController {
   @Post('templates')
   uploadTemplate(
     @Body() body: any,
-    @Headers('x-tenant-id') tenantId: string,
     @Headers('x-company-id') companyId: string,
     @Request() req: any,
   ) {
@@ -38,19 +37,18 @@ export class ContractsController {
     // usuario autenticado podía leer/generar contratos de otro tenant mandando el header a
     // mano. El JWT (fuente verificada) va primero; el header queda solo como fallback para
     // cuando el JWT no trae tenantId (SOPORTE).
-    const tid = req?.user?.tenantId || tenantId;
+    const tid = tenantParaEscribir(req, req?.query?.tenantId);
     const cid = req?.user?.companyId || companyId;
     return this.contractsService.uploadTemplate({ ...body, tenantId: tid, companyId: cid });
   }
 
   @Delete('templates/:id')
-  deleteTemplate(@Param('id') id: string) {
-    return this.contractsService.deleteTemplate(id);
+  deleteTemplate(@Param('id') id: string, @Request() req: any) {
+    return this.contractsService.deleteTemplate(id, tenantDeSesion(req));
   }
 
   @Get()
   getContracts(
-    @Headers('x-tenant-id') tenantId: string,
     @Headers('x-company-id') companyId: string,
     @Query('employeeId') employeeId: string,
     @Request() req: any,
@@ -60,7 +58,7 @@ export class ContractsController {
     // usuario autenticado podía leer/generar contratos de otro tenant mandando el header a
     // mano. El JWT (fuente verificada) va primero; el header queda solo como fallback para
     // cuando el JWT no trae tenantId (SOPORTE).
-    const tid = req?.user?.tenantId || tenantId;
+    const tid = tenantParaListar(req, req?.query?.tenantId);
     const cid = req?.user?.companyId || companyId;
     return this.contractsService.getContracts(tid, employeeId, cid);
   }
@@ -68,7 +66,6 @@ export class ContractsController {
   @Post('generate')
   generateContract(
     @Body() body: any,
-    @Headers('x-tenant-id') tenantId: string,
     @Headers('x-company-id') companyId: string,
     @Request() req: any,
   ) {
@@ -77,7 +74,7 @@ export class ContractsController {
     // usuario autenticado podía leer/generar contratos de otro tenant mandando el header a
     // mano. El JWT (fuente verificada) va primero; el header queda solo como fallback para
     // cuando el JWT no trae tenantId (SOPORTE).
-    const tid = req?.user?.tenantId || tenantId;
+    const tid = tenantParaEscribir(req, req?.query?.tenantId);
     const cid = req?.user?.companyId || companyId;
     return this.contractsService.generateContract({ ...body, tenantId: tid, companyId: cid });
   }
@@ -89,17 +86,17 @@ export class ContractsController {
     @Request() req: any,
   ) {
     const ip = req?.ip || req?.headers?.['x-forwarded-for'] || 'N/D';
-    return this.contractsService.signContract({ ...body, contractId, ip });
+    return this.contractsService.signContract({ ...body, contractId, ip }, tenantDeSesion(req));
   }
 
   @Get(':id/pdf')
-  getContractPdf(@Param('id') id: string) {
-    return this.contractsService.getContractPdf(id);
+  getContractPdf(@Param('id') id: string, @Request() req: any) {
+    return this.contractsService.getContractPdf(id, tenantDeSesion(req));
   }
 
   @Get(':id/evidence')
-  getEvidencePdf(@Param('id') id: string) {
-    return this.contractsService.getEvidencePdf(id);
+  getEvidencePdf(@Param('id') id: string, @Request() req: any) {
+    return this.contractsService.getEvidencePdf(id, tenantDeSesion(req));
   }
 
   // ═══════════════════════════════════════════════════════════════
