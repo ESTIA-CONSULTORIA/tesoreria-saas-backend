@@ -68,6 +68,8 @@ describe('ReconciliationService — aislamiento por tenant', () => {
     }).compile();
 
     service = module.get<ReconciliationService>(ReconciliationService);
+    // La pertenencia cuenta->tenant (cadena banco/sucursal/empresa) se prueba contra Postgres real en reconciliation.aislamiento-pg.spec.ts
+    jest.spyOn(service as any, 'cuentasDelTenant').mockImplementation(async (t: string) => (t === TENANT_B ? [ACCOUNT_B] : []));
   });
 
   describe('updateInvoiceStatus()', () => {
