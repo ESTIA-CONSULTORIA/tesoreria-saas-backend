@@ -1,5 +1,7 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import { Branch } from '../branches/entities/branch.entity';
+import { Company } from '../companies/entities/company.entity';
 import { Repository, Between, EntityManager } from 'typeorm';
 import { Insumo } from './entities/insumo.entity';
 import { Recipe } from './entities/recipe.entity';
@@ -35,10 +37,47 @@ export class CostsService {
     private familiasRepo: Repository<FamiliaInsumo>,
   ) {}
 
+  // --- Aislamiento por tenant ---
+  // tenantId llega SIEMPRE del token (tenantParaListar / tenantParaEscribir / tenantDeSesion en el controlador); en las
+  // operaciones por id undefined solo ocurre con SOPORTE. Un recurso de otro tenant responde 404 igual que uno inexistente.
+  private dueno(id: string, tenantId?: string): any {
+    return tenantId ? { id, tenantId } : { id };
+  }
+
+  private async propio<T extends object>(repo: Repository<T>, id: string, tenantId: string | undefined, mensaje: string): Promise<T> {
+    const r = id ? await repo.findOne({ where: this.dueno(id, tenantId) as any }) : null;
+    if (!r) throw new NotFoundException(mensaje);
+    return r;
+  }
+
+  private exigirTenant(tenantId?: string): string {
+    if (!tenantId) throw new BadRequestException('Falta el negocio');
+    return tenantId;
+  }
+
+  private async sucursalDelTenant(branchId: string, tenantId: string): Promise<boolean> {
+    const n = await this.almacenesRepo.manager
+      .getRepository(Branch)
+      .createQueryBuilder('b')
+      .innerJoin(Company, 'c', 'c.id::text = b."companyId"::text')
+      .where('b.id::text = :branchId', { branchId })
+      .andWhere('c."tenantId"::text = :tenantId', { tenantId })
+      .getCount();
+    return n > 0;
+  }
+
+  private async validarRefs(tenantId: string, r: { insumoId?: string; familiaId?: string; sucursalId?: string; branchId?: string }) {
+    if (r.insumoId) await this.propio(this.insumosRepo, r.insumoId, tenantId, 'Insumo no encontrado');
+    if (r.familiaId) await this.propio(this.familiasRepo, r.familiaId, tenantId, 'Familia no encontrada');
+    for (const b of [r.sucursalId, r.branchId]) {
+      if (b && !(await this.sucursalDelTenant(b, tenantId))) throw new NotFoundException('Sucursal no encontrada');
+    }
+  }
+
   // Insumos
   findAllInsumos(tenantId?: string, categoriaId?: string) {
-    const where: any = {};
-    if (tenantId) where.tenantId = tenantId;
+    if (!tenantId) return Promise.resolve([]); // sin tenant (SOPORTE sin ?tenantId=) nunca se listan todos
+    const where: any = { tenantId };
     if (categoriaId) where.categoriaId = categoriaId;
 
     return this.insumosRepo.find({
@@ -47,14 +86,15 @@ export class CostsService {
     });
   }
 
-  async searchInsumos(search: string, limit: number = 10) {
-    if (!search || search.length < 2) {
+  async searchInsumos(search: string, limit: number = 10, tenantId?: string) {
+    if (!tenantId || !search || search.length < 2) {
       return [];
     }
 
     const query = this.insumosRepo.createQueryBuilder('insumo');
     
-    query.where(
+    query.where('insumo.tenantId = :tenantId', { tenantId });
+    query.andWhere(
       '(LOWER(insumo.codigo) LIKE LOWER(:search) OR LOWER(insumo.nombre) LIKE LOWER(:search) OR LOWER(insumo.descripcion) LIKE LOWER(:search))',
       { search: `%${search}%` }
     );
@@ -67,8 +107,8 @@ export class CostsService {
     return query.getMany();
   }
 
-  findOneInsumo(id: string) {
-    return this.insumosRepo.findOne({ where: { id } });
+  findOneInsumo(id: string, tenantId?: string) {
+    return this.propio(this.insumosRepo, id, tenantId, 'Insumo no encontrado');
   }
 
   // Auditoría de seguridad (GoodsHabits, portabilidad Costos standalone): adaptado de
@@ -83,8 +123,11 @@ export class CostsService {
     return Number(precioCompra) / denom;
   }
 
-  createInsumo(data: Partial<Insumo>) {
+  async createInsumo(data: Partial<Insumo>) {
+    const tenantId = this.exigirTenant(data.tenantId);
     const payload: Partial<Insumo> = { ...data };
+    delete (payload as any).id; // con id en el body save() pisaría el insumo de otro tenant
+    await this.validarRefs(tenantId, { familiaId: payload.familiaId });
     // Se recalcula SIEMPRE aquí, nunca se confía en un costoUnitario que llegue del cliente
     // — pero solo cuando hay precioCompra que convertir. Sin precioCompra (insumo capturado
     // a mano, sin flujo de compra con presentación) se respeta el costoUnitario tal cual
@@ -103,10 +146,14 @@ export class CostsService {
   // `manager` opcional (mismo patrón que resolveActiveInsumoChain): quien necesite que el update
   // viva dentro de SU transacción (PurchasesService.createPurchase) pasa el EntityManager
   // transaccional; sin él se usa el repositorio de siempre, comportamiento sin cambio.
-  async updateInsumo(id: string, data: Partial<Insumo>, manager?: EntityManager) {
+  async updateInsumo(id: string, data: Partial<Insumo>, manager?: EntityManager, tenantId?: string) {
     const insumosRepo = manager ? manager.getRepository(Insumo) : this.insumosRepo;
-    const existing = await insumosRepo.findOne({ where: { id } });
+    const existing = await insumosRepo.findOne({ where: this.dueno(id, tenantId) });
+    if (tenantId && !existing) throw new NotFoundException('Insumo no encontrado');
     const payload: Partial<Insumo> = { ...data, updatedAt: new Date() };
+    delete (payload as any).id;
+    delete (payload as any).tenantId; // el negocio de un insumo no se cambia
+    if (tenantId) await this.validarRefs(tenantId, { familiaId: payload.familiaId });
     // Mismo criterio que createInsumo(), pero mezclado con lo que ya había guardado — un
     // update que solo cambia factorConversion (sin volver a mandar precioCompra) debe
     // recalcular igual, usando el precioCompra ya existente en el registro.
@@ -124,23 +171,25 @@ export class CostsService {
     return insumosRepo.findOne({ where: { id } });
   }
 
-  async deleteInsumo(id: string) {
+  async deleteInsumo(id: string, tenantId?: string) {
+    await this.propio(this.insumosRepo, id, tenantId, 'Insumo no encontrado');
     await this.insumosRepo.delete(id);
   }
 
-  async replaceInsumo(oldId: string, newId: string) {
+  async replaceInsumo(oldId: string, newId: string, tenantId?: string) {
     if (oldId === newId) {
       throw new Error('El insumo de reemplazo no puede ser el mismo insumo');
     }
 
-    const oldInsumo = await this.insumosRepo.findOne({ where: { id: oldId } });
+    const oldInsumo = await this.insumosRepo.findOne({ where: this.dueno(oldId, tenantId) });
     if (!oldInsumo) {
-      throw new Error('Insumo a reemplazar no encontrado');
+      throw new NotFoundException('Insumo a reemplazar no encontrado');
     }
 
-    const newInsumo = await this.insumosRepo.findOne({ where: { id: newId } });
+    // El reemplazo debe ser del mismo tenant que el insumo original
+    const newInsumo = await this.insumosRepo.findOne({ where: this.dueno(newId, oldInsumo.tenantId || undefined) });
     if (!newInsumo) {
-      throw new Error('Insumo de reemplazo no encontrado');
+      throw new NotFoundException('Insumo de reemplazo no encontrado');
     }
 
     if (!newInsumo.isActive) {
@@ -180,11 +229,8 @@ export class CostsService {
     return false;
   }
 
-  async getNextInsumoCode(familiaId: string): Promise<{ codigo: string }> {
-    const familia = await this.familiasRepo.findOne({ where: { id: familiaId } });
-    if (!familia) {
-      throw new Error('Familia no encontrada');
-    }
+  async getNextInsumoCode(familiaId: string, tenantId?: string): Promise<{ codigo: string }> {
+    const familia = await this.propio(this.familiasRepo, familiaId, tenantId, 'Familia no encontrada');
 
     const count = await this.insumosRepo.count({
       where: { familiaId },
@@ -194,9 +240,10 @@ export class CostsService {
     return { codigo };
   }
 
-  async importInsumos(insumos: any[]) {
+  async importInsumos(insumos: any[], tenantId?: string) {
+    this.exigirTenant(tenantId);
     const results = { success: 0, errors: [] as any[] };
-    const familias = await this.familiasRepo.find();
+    const familias = await this.familiasRepo.find({ where: { tenantId } as any }); // solo las familias del tenant
 
     for (let i = 0; i < insumos.length; i++) {
       const row = insumos[i];
@@ -224,6 +271,7 @@ export class CostsService {
 
         // Create insumo
         const insumo = this.insumosRepo.create({
+          tenantId, // antes los insumos importados quedaban sin negocio
           codigo,
           nombre: row.nombre,
           descripcion: row.descripcion || '',
@@ -250,8 +298,8 @@ export class CostsService {
 
   // Almacenes
   findAllAlmacenes(tenantId?: string, sucursalId?: string) {
-    const where: any = {};
-    if (tenantId) where.tenantId = tenantId;
+    if (!tenantId) return Promise.resolve([]);
+    const where: any = { tenantId };
     if (sucursalId) where.sucursalId = sucursalId;
 
     return this.almacenesRepo.find({
@@ -260,28 +308,36 @@ export class CostsService {
     });
   }
 
-  findOneAlmacen(id: string) {
-    return this.almacenesRepo.findOne({ where: { id } });
+  findOneAlmacen(id: string, tenantId?: string) {
+    return this.propio(this.almacenesRepo, id, tenantId, 'Almacén no encontrado');
   }
 
-  createAlmacen(data: Partial<Almacen>) {
+  async createAlmacen(data: Partial<Almacen>) {
+    const tenantId = this.exigirTenant(data.tenantId);
+    delete (data as any).id;
+    await this.validarRefs(tenantId, { sucursalId: (data as any).sucursalId });
     const almacen = this.almacenesRepo.create(data);
     return this.almacenesRepo.save(almacen);
   }
 
-  async updateAlmacen(id: string, data: Partial<Almacen>) {
+  async updateAlmacen(id: string, data: Partial<Almacen>, tenantId?: string) {
+    const actual = await this.propio(this.almacenesRepo, id, tenantId, 'Almacén no encontrado');
+    delete (data as any).id;
+    delete (data as any).tenantId;
+    await this.validarRefs(actual.tenantId, { sucursalId: (data as any).sucursalId });
     await this.almacenesRepo.update(id, { ...data, updatedAt: new Date() });
     return this.almacenesRepo.findOne({ where: { id } });
   }
 
-  async deleteAlmacen(id: string) {
+  async deleteAlmacen(id: string, tenantId?: string) {
+    await this.propio(this.almacenesRepo, id, tenantId, 'Almacén no encontrado');
     await this.almacenesRepo.delete(id);
   }
 
   // Familias de Insumos
   findAllFamilias(tenantId?: string) {
-    const where: any = {};
-    if (tenantId) where.tenantId = tenantId;
+    if (!tenantId) return Promise.resolve([]);
+    const where: any = { tenantId };
 
     return this.familiasRepo.find({
       where,
@@ -289,28 +345,34 @@ export class CostsService {
     });
   }
 
-  findOneFamilia(id: string) {
-    return this.familiasRepo.findOne({ where: { id } });
+  findOneFamilia(id: string, tenantId?: string) {
+    return this.propio(this.familiasRepo, id, tenantId, 'Familia no encontrada');
   }
 
-  createFamilia(data: Partial<FamiliaInsumo>) {
+  async createFamilia(data: Partial<FamiliaInsumo>) {
+    this.exigirTenant(data.tenantId);
+    delete (data as any).id;
     const familia = this.familiasRepo.create(data);
     return this.familiasRepo.save(familia);
   }
 
-  async updateFamilia(id: string, data: Partial<FamiliaInsumo>) {
+  async updateFamilia(id: string, data: Partial<FamiliaInsumo>, tenantId?: string) {
+    await this.propio(this.familiasRepo, id, tenantId, 'Familia no encontrada');
+    delete (data as any).id;
+    delete (data as any).tenantId;
     await this.familiasRepo.update(id, { ...data, updatedAt: new Date() });
     return this.familiasRepo.findOne({ where: { id } });
   }
 
-  async deleteFamilia(id: string) {
+  async deleteFamilia(id: string, tenantId?: string) {
+    await this.propio(this.familiasRepo, id, tenantId, 'Familia no encontrada');
     await this.familiasRepo.delete(id);
   }
 
   // Recetas
   findAllRecipes(tenantId?: string, tipo?: string) {
-    const where: any = {};
-    if (tenantId) where.tenantId = tenantId;
+    if (!tenantId) return Promise.resolve([]);
+    const where: any = { tenantId };
     if (tipo) where.tipo = tipo;
 
     return this.recipesRepo.find({
@@ -319,27 +381,34 @@ export class CostsService {
     });
   }
 
-  findOneRecipe(id: string) {
-    return this.recipesRepo.findOne({ where: { id } });
+  findOneRecipe(id: string, tenantId?: string) {
+    return this.propio(this.recipesRepo, id, tenantId, 'Receta no encontrada');
   }
 
-  createRecipe(data: Partial<Recipe>) {
+  async createRecipe(data: Partial<Recipe>) {
+    this.exigirTenant(data.tenantId);
+    delete (data as any).id;
     const recipe = this.recipesRepo.create(data);
     return this.recipesRepo.save(recipe);
   }
 
-  async updateRecipe(id: string, data: Partial<Recipe>) {
+  async updateRecipe(id: string, data: Partial<Recipe>, tenantId?: string) {
+    await this.propio(this.recipesRepo, id, tenantId, 'Receta no encontrada');
+    delete (data as any).id;
+    delete (data as any).tenantId;
     await this.recipesRepo.update(id, { ...data, updatedAt: new Date() });
     return this.recipesRepo.findOne({ where: { id } });
   }
 
-  async deleteRecipe(id: string) {
+  async deleteRecipe(id: string, tenantId?: string) {
+    await this.propio(this.recipesRepo, id, tenantId, 'Receta no encontrada');
     await this.recipesRepo.delete(id);
   }
 
-  async importRecipes(recetas: any[]) {
+  async importRecipes(recetas: any[], tenantId?: string) {
+    this.exigirTenant(tenantId);
     const results = { success: 0, errors: [] as any[] };
-    const insumos = await this.insumosRepo.find({ where: { isActive: true } });
+    const insumos = await this.insumosRepo.find({ where: { isActive: true, tenantId } as any }); // solo insumos del tenant
 
     // Group by recipe name
     const groupedRecipes: Record<string, any[]> = {};
@@ -392,6 +461,7 @@ export class CostsService {
         const precioVentaSugerido = costoPorPorcion / (1 - margenDeseado);
 
         const recipe = this.recipesRepo.create({
+          tenantId, // antes las recetas importadas quedaban sin negocio
           nombre: recipeName,
           descripcion: '',
           tipo: 'PRODUCTO_VENTA',
@@ -415,14 +485,20 @@ export class CostsService {
   }
 
   // RecipeItem (líneas de receta normalizadas)
-  findRecipeItems(recipeId: string) {
+  async findRecipeItems(recipeId: string, tenantId?: string) {
+    await this.propio(this.recipesRepo, recipeId, tenantId, 'Receta no encontrada');
     return this.recipeItemsRepo.find({
       where: { recipeId },
       order: { createdAt: 'ASC' },
     });
   }
 
-  async createRecipeItem(recipeId: string, data: Partial<RecipeItem>) {
+  async createRecipeItem(recipeId: string, data: Partial<RecipeItem>, tenantId?: string) {
+    const receta = await this.propio(this.recipesRepo, recipeId, tenantId, 'Receta no encontrada');
+    delete (data as any).id;
+    data.tenantId = receta.tenantId; // el negocio sale de la receta, no del body
+    if (data.insumoId) await this.propio(this.insumosRepo, data.insumoId, receta.tenantId, 'Insumo no encontrado');
+    if (data.componentRecipeId) await this.propio(this.recipesRepo, data.componentRecipeId, receta.tenantId, 'Receta componente no encontrada');
     const hasInsumo = !!data.insumoId;
     const hasComponentRecipe = !!data.componentRecipeId;
 
@@ -441,11 +517,11 @@ export class CostsService {
     return this.recipeItemsRepo.save(item);
   }
 
-  async updateRecipeItem(id: string, data: Partial<RecipeItem>) {
-    const existing = await this.recipeItemsRepo.findOne({ where: { id } });
-    if (!existing) {
-      throw new Error('Línea de receta no encontrada');
-    }
+  async updateRecipeItem(id: string, data: Partial<RecipeItem>, tenantId?: string) {
+    const existing = await this.propio(this.recipeItemsRepo, id, tenantId, 'Línea de receta no encontrada');
+    for (const k of ['id', 'tenantId', 'recipeId'] as const) delete (data as any)[k];
+    if (data.insumoId) await this.propio(this.insumosRepo, data.insumoId, existing.tenantId, 'Insumo no encontrado');
+    if (data.componentRecipeId) await this.propio(this.recipesRepo, data.componentRecipeId, existing.tenantId, 'Receta componente no encontrada');
 
     const insumoId = data.insumoId !== undefined ? data.insumoId : existing.insumoId;
     const componentRecipeId = data.componentRecipeId !== undefined ? data.componentRecipeId : existing.componentRecipeId;
@@ -467,7 +543,8 @@ export class CostsService {
     return this.recipeItemsRepo.findOne({ where: { id } });
   }
 
-  async deleteRecipeItem(id: string) {
+  async deleteRecipeItem(id: string, tenantId?: string) {
+    await this.propio(this.recipeItemsRepo, id, tenantId, 'Línea de receta no encontrada');
     await this.recipeItemsRepo.delete(id);
   }
 
@@ -524,7 +601,8 @@ export class CostsService {
     return { subtotal, costoPorUnidad };
   }
 
-  async getRecipeCost(recipeId: string) {
+  async getRecipeCost(recipeId: string, tenantId?: string) {
+    await this.propio(this.recipesRepo, recipeId, tenantId, 'Receta no encontrada');
     return this.costoRecipe(recipeId);
   }
 
@@ -557,8 +635,8 @@ export class CostsService {
   // Inventario
   async findInventoryByPeriod(tenantId?: string, periodo?: string) {
     try {
-      const where: any = {};
-      if (tenantId) where.tenantId = tenantId;
+      if (!tenantId) return [];
+      const where: any = { tenantId };
       if (periodo) where.periodo = periodo;
 
       return this.inventoryRepo.find({
@@ -571,18 +649,26 @@ export class CostsService {
     }
   }
 
-  async findInventoryByInsumo(insumoId: string, periodo: string) {
+  async findInventoryByInsumo(insumoId: string, periodo: string, tenantId?: string) {
+    if (!tenantId) return null; // el cálculo por insumo solo se resuelve dentro de un tenant
     return this.inventoryRepo.findOne({
-      where: { insumoId, periodo },
+      where: { insumoId, periodo, tenantId } as any,
     });
   }
 
   async createInventory(data: Partial<Inventory>) {
+    const tenantId = this.exigirTenant(data.tenantId);
+    delete (data as any).id;
+    await this.validarRefs(tenantId, { insumoId: data.insumoId });
     const inventory = this.inventoryRepo.create(data);
     return this.inventoryRepo.save(inventory);
   }
 
-  async updateInventory(id: string, data: Partial<Inventory>) {
+  async updateInventory(id: string, data: Partial<Inventory>, tenantId?: string) {
+    const actual = await this.propio(this.inventoryRepo, id, tenantId, 'Inventario no encontrado');
+    delete (data as any).id;
+    delete (data as any).tenantId;
+    await this.validarRefs(actual.tenantId, { insumoId: data.insumoId });
     await this.inventoryRepo.update(id, { ...data, updatedAt: new Date() });
     return this.inventoryRepo.findOne({ where: { id } });
   }
@@ -590,8 +676,8 @@ export class CostsService {
   // Movimientos de inventario (ledger auditable, solo lectura desde aquí — se escriben
   // desde SalesService dentro de la transacción de la venta)
   findInventoryMovements(tenantId?: string, filters?: { insumoId?: string; desde?: string; hasta?: string }) {
-    const where: any = {};
-    if (tenantId) where.tenantId = tenantId;
+    if (!tenantId) return Promise.resolve([]);
+    const where: any = { tenantId };
     if (filters?.insumoId) where.insumoId = filters.insumoId;
     if (filters?.desde && filters?.hasta) {
       where.fecha = Between(new Date(filters.desde), new Date(filters.hasta));
@@ -603,15 +689,16 @@ export class CostsService {
     });
   }
 
-  async deleteInventory(id: string) {
+  async deleteInventory(id: string, tenantId?: string) {
+    await this.propio(this.inventoryRepo, id, tenantId, 'Inventario no encontrado');
     await this.inventoryRepo.delete(id);
   }
 
   // Costo de Venta
   async calculateCostOfSales(tenantId?: string, periodo?: string) {
     try {
-      const where: any = {};
-      if (tenantId) where.tenantId = tenantId;
+      if (!tenantId) return { periodo, detalles: [], totalGeneral: 0 };
+      const where: any = { tenantId };
       if (periodo) where.periodo = periodo;
 
       const inventories = await this.inventoryRepo.find({
@@ -655,9 +742,12 @@ export class CostsService {
     branchId?: string;
   }) {
     // Get theoretical existence from insumo
-    const insumo = await this.insumosRepo.findOne({ where: { id: data.insumoId } });
+    const tenantId = this.exigirTenant(data.tenantId);
+    delete (data as any).id;
+    await this.validarRefs(tenantId, { branchId: data.branchId });
+    const insumo = await this.insumosRepo.findOne({ where: { id: data.insumoId, tenantId } as any });
     if (!insumo) {
-      throw new Error('Insumo no encontrado');
+      throw new NotFoundException('Insumo no encontrado');
     }
 
     const existenciaTeorica = Number(insumo.stockActual);
@@ -679,8 +769,8 @@ export class CostsService {
   }
 
   findPhysicalCounts(tenantId?: string, insumoId?: string) {
-    const where: any = {};
-    if (tenantId) where.tenantId = tenantId;
+    if (!tenantId) return Promise.resolve([]);
+    const where: any = { tenantId };
     if (insumoId) where.insumoId = insumoId;
 
     return this.physicalCountRepo.find({
@@ -690,10 +780,11 @@ export class CostsService {
   }
 
   findPhysicalCountsByPeriod(fechaInicio: Date, fechaFin: Date, tenantId?: string) {
+    if (!tenantId) return Promise.resolve([]);
     const where: any = {
       fecha: Between(fechaInicio, fechaFin),
+      tenantId,
     };
-    if (tenantId) where.tenantId = tenantId;
 
     return this.physicalCountRepo.find({
       where,
@@ -713,14 +804,16 @@ export class CostsService {
     tenantId?: string;
     branchId?: string;
   }, manager?: EntityManager) {
+    this.exigirTenant(data.tenantId);
+    delete (data as any).id;
     const justifiableRepo = manager ? manager.getRepository(Justifiable) : this.justifiableRepo;
     const justifiable = justifiableRepo.create(data);
     return justifiableRepo.save(justifiable);
   }
 
   findJustificablesByPeriod(periodo: string, tenantId?: string) {
-    const where: any = { periodo };
-    if (tenantId) where.tenantId = tenantId;
+    if (!tenantId) return Promise.resolve([]);
+    const where: any = { periodo, tenantId };
 
     return this.justifiableRepo.find({
       where,

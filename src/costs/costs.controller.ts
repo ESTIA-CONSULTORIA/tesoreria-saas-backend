@@ -1,4 +1,4 @@
-import { tenantDeSesion } from '../auth/tenant-access.util';
+import { tenantDeSesion, tenantParaListar, tenantParaEscribir } from '../auth/tenant-access.util';
 import { Controller, Get, Post, Put, Delete, Body, Param, Query, Request } from '@nestjs/common';
 import { CostsService } from './costs.service';
 import { Modulo } from '../auth/modulo.decorator';
@@ -16,7 +16,7 @@ export class CostsController {
     @Query('categoriaId') categoriaId?: string,
     @Request() req?: any,
   ) {
-    const tenantId = tenantDeSesion(req) ?? queryTenantId;
+    const tenantId = tenantParaListar(req, queryTenantId);
     return this.costsService.findAllInsumos(tenantId, categoriaId);
   }
 
@@ -24,44 +24,46 @@ export class CostsController {
   searchInsumos(
     @Query('search') search: string,
     @Query('limit') limit?: number,
+    @Query('tenantId') tenantIdQuery?: string,
+    @Request() req?: any,
   ) {
-    return this.costsService.searchInsumos(search, limit);
+    return this.costsService.searchInsumos(search, limit, tenantParaListar(req, tenantIdQuery));
   }
 
   @Get('insumos/next-code')
-  getNextInsumoCode(@Query('familiaId') familiaId: string) {
-    return this.costsService.getNextInsumoCode(familiaId);
+  getNextInsumoCode(@Query('familiaId') familiaId: string, @Request() req?: any) {
+    return this.costsService.getNextInsumoCode(familiaId, tenantDeSesion(req));
   }
 
   @Get('insumos/:id')
-  findOneInsumo(@Param('id') id: string) {
-    return this.costsService.findOneInsumo(id);
+  findOneInsumo(@Param('id') id: string, @Request() req?: any) {
+    return this.costsService.findOneInsumo(id, tenantDeSesion(req));
   }
 
   @Post('insumos')
   createInsumo(@Body() data: any, @Request() req?: any) {
-    const tenantId = tenantDeSesion(req) as string; // undefined = SOPORTE (sin acotar)
+    const tenantId = tenantParaEscribir(req, req?.query?.tenantId);
     return this.costsService.createInsumo({ ...data, tenantId });
   }
 
   @Put('insumos/:id')
-  updateInsumo(@Param('id') id: string, @Body() data: any) {
-    return this.costsService.updateInsumo(id, data);
+  updateInsumo(@Param('id') id: string, @Body() data: any, @Request() req?: any) {
+    return this.costsService.updateInsumo(id, data, undefined, tenantDeSesion(req));
   }
 
   @Delete('insumos/:id')
-  deleteInsumo(@Param('id') id: string) {
-    return this.costsService.deleteInsumo(id);
+  deleteInsumo(@Param('id') id: string, @Request() req?: any) {
+    return this.costsService.deleteInsumo(id, tenantDeSesion(req));
   }
 
   @Post('insumos/:id/replace')
-  replaceInsumo(@Param('id') id: string, @Body() data: { newInsumoId: string }) {
-    return this.costsService.replaceInsumo(id, data.newInsumoId);
+  replaceInsumo(@Param('id') id: string, @Body() data: { newInsumoId: string }, @Request() req?: any) {
+    return this.costsService.replaceInsumo(id, data.newInsumoId, tenantDeSesion(req));
   }
 
   @Post('insumos/import')
-  importInsumos(@Body() data: { insumos: any[] }) {
-    return this.costsService.importInsumos(data.insumos);
+  importInsumos(@Body() data: { insumos: any[] }, @Request() req?: any) {
+    return this.costsService.importInsumos(data.insumos, tenantParaEscribir(req, req?.query?.tenantId));
   }
 
   // Almacenes
@@ -71,57 +73,57 @@ export class CostsController {
     @Query('sucursalId') sucursalId?: string,
     @Request() req?: any,
   ) {
-    const tenantId = tenantDeSesion(req) ?? queryTenantId;
+    const tenantId = tenantParaListar(req, queryTenantId);
     return this.costsService.findAllAlmacenes(tenantId, sucursalEfectiva(req?.user, sucursalId).branchId);
   }
 
   @Get('almacenes/:id')
-  findOneAlmacen(@Param('id') id: string) {
-    return this.costsService.findOneAlmacen(id);
+  findOneAlmacen(@Param('id') id: string, @Request() req?: any) {
+    return this.costsService.findOneAlmacen(id, tenantDeSesion(req));
   }
 
   @Post('almacenes')
   createAlmacen(@Body() data: any, @Request() req?: any) {
-    const tenantId = tenantDeSesion(req) as string; // undefined = SOPORTE (sin acotar)
+    const tenantId = tenantParaEscribir(req, req?.query?.tenantId);
     return this.costsService.createAlmacen({ ...data, tenantId });
   }
 
   @Put('almacenes/:id')
-  updateAlmacen(@Param('id') id: string, @Body() data: any) {
-    return this.costsService.updateAlmacen(id, data);
+  updateAlmacen(@Param('id') id: string, @Body() data: any, @Request() req?: any) {
+    return this.costsService.updateAlmacen(id, data, tenantDeSesion(req));
   }
 
   @Delete('almacenes/:id')
-  deleteAlmacen(@Param('id') id: string) {
-    return this.costsService.deleteAlmacen(id);
+  deleteAlmacen(@Param('id') id: string, @Request() req?: any) {
+    return this.costsService.deleteAlmacen(id, tenantDeSesion(req));
   }
 
   // Familias de Insumos
   @Get('familias')
   findAllFamilias(@Query('tenantId') queryTenantId?: string, @Request() req?: any) {
-    const tenantId = tenantDeSesion(req) ?? queryTenantId;
+    const tenantId = tenantParaListar(req, queryTenantId);
     return this.costsService.findAllFamilias(tenantId);
   }
 
   @Get('familias/:id')
-  findOneFamilia(@Param('id') id: string) {
-    return this.costsService.findOneFamilia(id);
+  findOneFamilia(@Param('id') id: string, @Request() req?: any) {
+    return this.costsService.findOneFamilia(id, tenantDeSesion(req));
   }
 
   @Post('familias')
   createFamilia(@Body() data: any, @Request() req?: any) {
-    const tenantId = tenantDeSesion(req) as string; // undefined = SOPORTE (sin acotar)
+    const tenantId = tenantParaEscribir(req, req?.query?.tenantId);
     return this.costsService.createFamilia({ ...data, tenantId });
   }
 
   @Put('familias/:id')
-  updateFamilia(@Param('id') id: string, @Body() data: any) {
-    return this.costsService.updateFamilia(id, data);
+  updateFamilia(@Param('id') id: string, @Body() data: any, @Request() req?: any) {
+    return this.costsService.updateFamilia(id, data, tenantDeSesion(req));
   }
 
   @Delete('familias/:id')
-  deleteFamilia(@Param('id') id: string) {
-    return this.costsService.deleteFamilia(id);
+  deleteFamilia(@Param('id') id: string, @Request() req?: any) {
+    return this.costsService.deleteFamilia(id, tenantDeSesion(req));
   }
 
   // Recetas
@@ -131,61 +133,61 @@ export class CostsController {
     @Query('tipo') tipo?: string,
     @Request() req?: any,
   ) {
-    const tenantId = tenantDeSesion(req) ?? queryTenantId;
+    const tenantId = tenantParaListar(req, queryTenantId);
     return this.costsService.findAllRecipes(tenantId, tipo);
   }
 
   @Get('recipes/:id')
-  findOneRecipe(@Param('id') id: string) {
-    return this.costsService.findOneRecipe(id);
+  findOneRecipe(@Param('id') id: string, @Request() req?: any) {
+    return this.costsService.findOneRecipe(id, tenantDeSesion(req));
   }
 
   @Post('recipes')
   createRecipe(@Body() data: any, @Request() req?: any) {
-    const tenantId = tenantDeSesion(req) as string; // undefined = SOPORTE (sin acotar)
+    const tenantId = tenantParaEscribir(req, req?.query?.tenantId);
     return this.costsService.createRecipe({ ...data, tenantId });
   }
 
   @Put('recipes/:id')
-  updateRecipe(@Param('id') id: string, @Body() data: any) {
-    return this.costsService.updateRecipe(id, data);
+  updateRecipe(@Param('id') id: string, @Body() data: any, @Request() req?: any) {
+    return this.costsService.updateRecipe(id, data, tenantDeSesion(req));
   }
 
   @Delete('recipes/:id')
-  deleteRecipe(@Param('id') id: string) {
-    return this.costsService.deleteRecipe(id);
+  deleteRecipe(@Param('id') id: string, @Request() req?: any) {
+    return this.costsService.deleteRecipe(id, tenantDeSesion(req));
   }
 
   @Post('recipes/import')
-  importRecipes(@Body() data: { recetas: any[] }) {
-    return this.costsService.importRecipes(data.recetas);
+  importRecipes(@Body() data: { recetas: any[] }, @Request() req?: any) {
+    return this.costsService.importRecipes(data.recetas, tenantParaEscribir(req, req?.query?.tenantId));
   }
 
   // RecipeItem (líneas de receta normalizadas)
   @Get('recipes/:id/items')
-  findRecipeItems(@Param('id') id: string) {
-    return this.costsService.findRecipeItems(id);
+  findRecipeItems(@Param('id') id: string, @Request() req?: any) {
+    return this.costsService.findRecipeItems(id, tenantDeSesion(req));
   }
 
   @Post('recipes/:id/items')
   createRecipeItem(@Param('id') id: string, @Body() data: any, @Request() req?: any) {
-    const tenantId = tenantDeSesion(req) as string; // undefined = SOPORTE (sin acotar)
-    return this.costsService.createRecipeItem(id, { ...data, tenantId });
+    const tenantId = tenantParaEscribir(req, req?.query?.tenantId);
+    return this.costsService.createRecipeItem(id, { ...data }, tenantDeSesion(req));
   }
 
   @Put('recipe-items/:id')
-  updateRecipeItem(@Param('id') id: string, @Body() data: any) {
-    return this.costsService.updateRecipeItem(id, data);
+  updateRecipeItem(@Param('id') id: string, @Body() data: any, @Request() req?: any) {
+    return this.costsService.updateRecipeItem(id, data, tenantDeSesion(req));
   }
 
   @Delete('recipe-items/:id')
-  deleteRecipeItem(@Param('id') id: string) {
-    return this.costsService.deleteRecipeItem(id);
+  deleteRecipeItem(@Param('id') id: string, @Request() req?: any) {
+    return this.costsService.deleteRecipeItem(id, tenantDeSesion(req));
   }
 
   @Get('recipes/:id/cost')
-  getRecipeCost(@Param('id') id: string) {
-    return this.costsService.getRecipeCost(id);
+  getRecipeCost(@Param('id') id: string, @Request() req?: any) {
+    return this.costsService.getRecipeCost(id, tenantDeSesion(req));
   }
 
   // Inventario
@@ -195,31 +197,32 @@ export class CostsController {
     @Query('periodo') periodo?: string,
     @Request() req?: any,
   ) {
-    return this.costsService.findInventoryByPeriod(tenantDeSesion(req) ?? tenantId, periodo);
+    return this.costsService.findInventoryByPeriod(tenantParaListar(req, tenantId), periodo);
   }
 
   @Get('inventory/:insumoId/:periodo')
   async findInventoryByInsumo(
     @Param('insumoId') insumoId: string,
     @Param('periodo') periodo: string,
+    @Request() req?: any,
   ) {
-    return this.costsService.findInventoryByInsumo(insumoId, periodo);
+    return this.costsService.findInventoryByInsumo(insumoId, periodo, tenantParaListar(req, req?.query?.tenantId));
   }
 
   @Post('inventory')
   async createInventory(@Body() data: any, @Request() req?: any) {
-    // El tenant sale del token; el del body solo vale para SOPORTE.
-    return this.costsService.createInventory({ ...data, tenantId: tenantDeSesion(req) ?? data?.tenantId });
+    // El tenant sale del token; SOPORTE con ?tenantId= explícito. El del body se ignora.
+    return this.costsService.createInventory({ ...data, tenantId: tenantParaEscribir(req, req?.query?.tenantId) });
   }
 
   @Put('inventory/:id')
-  async updateInventory(@Param('id') id: string, @Body() data: any) {
-    return this.costsService.updateInventory(id, data);
+  async updateInventory(@Param('id') id: string, @Body() data: any, @Request() req?: any) {
+    return this.costsService.updateInventory(id, data, tenantDeSesion(req));
   }
 
   @Delete('inventory/:id')
-  async deleteInventory(@Param('id') id: string) {
-    return this.costsService.deleteInventory(id);
+  async deleteInventory(@Param('id') id: string, @Request() req?: any) {
+    return this.costsService.deleteInventory(id, tenantDeSesion(req));
   }
 
   @Get('inventory-movements')
@@ -230,7 +233,7 @@ export class CostsController {
     @Query('tenantId') queryTenantId?: string,
     @Request() req?: any,
   ) {
-    const tenantId = tenantDeSesion(req) ?? queryTenantId;
+    const tenantId = tenantParaListar(req, queryTenantId);
     return this.costsService.findInventoryMovements(tenantId, { insumoId, desde, hasta });
   }
 
@@ -241,7 +244,7 @@ export class CostsController {
     @Query('periodo') periodo?: string,
     @Request() req?: any,
   ) {
-    return this.costsService.calculateCostOfSales(tenantDeSesion(req) ?? tenantId, periodo);
+    return this.costsService.calculateCostOfSales(tenantParaListar(req, tenantId), periodo);
   }
 
   // Conteo Físico
@@ -251,7 +254,7 @@ export class CostsController {
     @Query('insumoId') insumoId?: string,
     @Request() req?: any,
   ) {
-    return this.costsService.findPhysicalCounts(tenantDeSesion(req) ?? tenantId, insumoId);
+    return this.costsService.findPhysicalCounts(tenantParaListar(req, tenantId), insumoId);
   }
 
   @Get('physical-counts/period')
@@ -264,13 +267,13 @@ export class CostsController {
     return this.costsService.findPhysicalCountsByPeriod(
       new Date(fechaInicio),
       new Date(fechaFin),
-      tenantDeSesion(req) ?? tenantId,
+      tenantParaListar(req, tenantId),
     );
   }
 
   @Post('physical-counts')
   async createPhysicalCount(@Body() data: any, @Request() req?: any) {
-    const tenantId = tenantDeSesion(req) as string; // undefined = SOPORTE (sin acotar)
+    const tenantId = tenantParaEscribir(req, req?.query?.tenantId);
     return this.costsService.createPhysicalCount({ ...data, tenantId });
   }
 
@@ -281,7 +284,7 @@ export class CostsController {
     @Query('tenantId') tenantId?: string,
     @Request() req?: any,
   ) {
-    return this.costsService.findJustificablesByPeriod(periodo, tenantDeSesion(req) ?? tenantId);
+    return this.costsService.findJustificablesByPeriod(periodo, tenantParaListar(req, tenantId));
   }
 
   @Get('justificables/totals')
@@ -290,13 +293,13 @@ export class CostsController {
     @Query('tenantId') tenantId?: string,
     @Request() req?: any,
   ) {
-    return this.costsService.calculateTotalJustificables(periodo, tenantDeSesion(req) ?? tenantId);
+    return this.costsService.calculateTotalJustificables(periodo, tenantParaListar(req, tenantId));
   }
 
   @Post('justificables')
   async createJustifiable(@Body() data: any, @Request() req?: any) {
-    // El tenant sale del token; el del body solo vale para SOPORTE.
-    const tenantId = tenantDeSesion(req) ?? data?.tenantId;
+    // El tenant sale del token; SOPORTE con ?tenantId= explícito. El del body se ignora.
+    const tenantId = tenantParaEscribir(req, req?.query?.tenantId);
     return this.costsService.createJustifiable({ ...data, tenantId });
   }
 }
