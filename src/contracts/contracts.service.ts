@@ -50,12 +50,27 @@ export class ContractsService {
     private readonly faceMatchProvider: FaceMatchProvider,
   ) {}
 
-  async getTemplates(tenantId: string, companyId?: string) {
+  // --- Aislamiento por tenant ---
+  // tenantId llega SIEMPRE del token (tenantParaListar / tenantParaEscribir / tenantDeSesion en el controlador); en las
+  // operaciones por id undefined solo ocurre con SOPORTE. Un contrato o plantilla de otro tenant responde 404 igual que uno inexistente.
+  private async empresaDelTenant(companyId: string, tenantId: string): Promise<boolean> {
+    const rows = await this.dataSource.query(`SELECT 1 FROM company WHERE id::text = $1 AND "tenantId"::text = $2 LIMIT 1`, [companyId, tenantId]);
+    return rows.length > 0;
+  }
+
+  private async contratoDe(contractId: string, tenantId?: string): Promise<Contract> {
+    const contract = contractId ? await this.contractRepo.findOne({ where: { id: contractId } }) : null;
+    if (!contract || (tenantId && contract.tenantId !== tenantId)) throw new NotFoundException('Contrato no encontrado');
+    return contract;
+  }
+
+  async getTemplates(tenantId?: string, companyId?: string) {
     const global = await this.templateRepo.find({
       where: { isGlobal: true, isActive: true },
       select: ['id', 'name', 'fileType', 'detectedFields', 'isGlobal', 'createdAt'],
     });
-    const custom = companyId
+    // Las plantillas propias solo existen dentro de un tenant, y la empresa (X-Company-Id) debe ser suya
+    const custom = tenantId && companyId && (await this.empresaDelTenant(companyId, tenantId))
       ? await this.templateRepo.find({
           where: { tenantId, companyId, isGlobal: false, isActive: true },
           select: ['id', 'name', 'fileType', 'detectedFields', 'isGlobal', 'createdAt'],
@@ -71,6 +86,9 @@ export class ContractsService {
     fileType: string;
     fileBase64: string;
   }) {
+    if (!dto.tenantId) throw new BadRequestException('Falta el negocio de la plantilla');
+    delete (dto as any).id; // con id en el body save() pisaría la plantilla de otro tenant
+    if (dto.companyId && !(await this.empresaDelTenant(dto.companyId, dto.tenantId))) throw new NotFoundException('Empresa no encontrada');
     const fields = await this.detectFields(dto.fileBase64, dto.fileType);
     return this.templateRepo.save({
       ...dto,
@@ -80,9 +98,10 @@ export class ContractsService {
     });
   }
 
-  async deleteTemplate(id: string) {
+  async deleteTemplate(id: string, tenantId?: string) {
     const t = await this.templateRepo.findOne({ where: { id } });
-    if (t?.isGlobal) throw new Error('No se puede eliminar una plantilla global');
+    if (!t || (tenantId && !t.isGlobal && t.tenantId !== tenantId)) throw new NotFoundException('Plantilla no encontrada');
+    if (t.isGlobal) throw new BadRequestException('No se puede eliminar una plantilla global');
     await this.templateRepo.update(id, { isActive: false });
     return { deleted: true };
   }
@@ -111,10 +130,14 @@ export class ContractsService {
     }
   }
 
-  async getContracts(tenantId: string, employeeId?: string, companyId?: string) {
+  async getContracts(tenantId?: string, employeeId?: string, companyId?: string) {
+    if (!tenantId) return []; // sin tenant nunca se listan los contratos de todos
     const where: any = { tenantId };
     if (employeeId) where.employeeId = employeeId;
-    if (companyId) where.companyId = companyId;
+    if (companyId) {
+      if (!(await this.empresaDelTenant(companyId, tenantId))) return [];
+      where.companyId = companyId;
+    }
     return this.contractRepo.find({
       where,
       select: ['id', 'employeeId', 'templateId', 'status', 'signatureLevel', 'signedAt', 'createdAt'],
@@ -129,20 +152,24 @@ export class ContractsService {
     templateId: string;
     signatureLevel: string;
   }) {
+    if (!dto.tenantId) throw new BadRequestException('Falta el negocio del contrato');
+    // Plantilla global o del tenant; empleado y empresa deben ser del tenant: antes se generaba el contrato con el
+    // expediente de CUALQUIER empleado (y la plantilla de cualquier tenant) conociendo su id.
     const template = await this.templateRepo.findOne({ where: { id: dto.templateId } });
-    if (!template) throw new NotFoundException('Plantilla no encontrada');
+    if (!template || (!template.isGlobal && template.tenantId !== dto.tenantId)) throw new NotFoundException('Plantilla no encontrada');
 
     const employeeRows = await this.dataSource.query(
-      `SELECT * FROM employee WHERE id = $1 LIMIT 1`,
-      [dto.employeeId],
+      `SELECT * FROM employee WHERE id::text = $1 AND "tenantId"::text = $2 LIMIT 1`,
+      [dto.employeeId, dto.tenantId],
     );
     const employee = employeeRows[0];
     if (!employee) throw new NotFoundException('Empleado no encontrado');
 
     const companyRows = await this.dataSource.query(
-      `SELECT * FROM company WHERE id = $1 LIMIT 1`,
-      [dto.companyId],
+      `SELECT * FROM company WHERE id::text = $1 AND "tenantId"::text = $2 LIMIT 1`,
+      [dto.companyId, dto.tenantId],
     );
+    if (dto.companyId && !companyRows[0]) throw new NotFoundException('Empresa no encontrada');
     const company = companyRows[0];
 
     const branch = employee.branchId
@@ -295,9 +322,8 @@ export class ContractsService {
     ip: string;
     lat?: number;
     lng?: number;
-  }) {
-    const contract = await this.contractRepo.findOne({ where: { id: dto.contractId } });
-    if (!contract) throw new NotFoundException('Contrato no encontrado');
+  }, tenantId?: string) {
+    const contract = await this.contratoDe(dto.contractId, tenantId);
 
     // Auditoría de producto (GoodsHabits, Fase 3 — Firma electrónica): validación facial
     // opcional — gateada por el módulo 'validacion_facial' (apagado por default en todos
@@ -447,9 +473,8 @@ export class ContractsService {
     return Buffer.from(bytes).toString('base64');
   }
 
-  async getContractPdf(contractId: string) {
-    const contract = await this.contractRepo.findOne({ where: { id: contractId } });
-    if (!contract) throw new NotFoundException('Contrato no encontrado');
+  async getContractPdf(contractId: string, tenantId?: string) {
+    const contract = await this.contratoDe(contractId, tenantId);
 
     // Prioridad: PDF firmado si ya existe, si no el generado sin firmar — mismo criterio
     // que antes (signedPdfBase64 || contractPdfBase64), ahora resuelto vía StoredFile.
@@ -465,9 +490,8 @@ export class ContractsService {
     };
   }
 
-  async getEvidencePdf(contractId: string) {
-    const contract = await this.contractRepo.findOne({ where: { id: contractId } });
-    if (!contract) throw new NotFoundException('Contrato no encontrado');
+  async getEvidencePdf(contractId: string, tenantId?: string) {
+    const contract = await this.contratoDe(contractId, tenantId);
     const file = await this.storageService.getOneByOwner('contract', contract.id, 'evidence_pdf');
     if (!file) throw new NotFoundException('Este contrato no tiene constancia de firma generada');
     const content = await this.storageService.getContent(file.id);
