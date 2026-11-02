@@ -1,4 +1,4 @@
-import { tenantDeSesion } from '../auth/tenant-access.util';
+import { tenantDeSesion, tenantParaListar, tenantParaEscribir } from '../auth/tenant-access.util';
 import { Body, Controller, Delete, Get, Headers, Param, Post, Put, Query, Request } from '@nestjs/common';
 import { PayrollService } from './payroll.service';
 import { Modulo } from '../auth/modulo.decorator';
@@ -14,14 +14,13 @@ export class PayrollController {
   @Post('runs')
   createPayrollRun(
     @Body() body: { periodStart: string; periodEnd: string; periodType?: string; branchId?: string; notes?: string },
-    @Headers('x-tenant-id') headerTenantId?: string,
     @Headers('x-company-id') headerCompanyId?: string,
     @Request() req?: any,
   ) {
     // Auditoría de seguridad (GoodsHabits): x-tenant-id/x-company-id son headers
     // controlables por el cliente — el JWT (verificado) va primero en todo el archivo,
     // el header queda solo como fallback para cuando el JWT no trae el dato (SOPORTE).
-    const tenantId = (tenantDeSesion(req) ?? headerTenantId) as string;
+    const tenantId = tenantParaEscribir(req, req?.query?.tenantId);
     const companyId = req?.user?.companyId || headerCompanyId;
     const branchId = req?.user?.branchId || body.branchId;
     return this.payrollService.createPayrollRun(body, tenantId, companyId, branchId);
@@ -29,18 +28,17 @@ export class PayrollController {
 
   @Get('runs')
   listPayrollRuns(
-    @Headers('x-tenant-id') headerTenantId?: string,
     @Headers('x-company-id') headerCompanyId?: string,
     @Request() req?: any,
   ) {
-    const tenantId = (tenantDeSesion(req) ?? headerTenantId) as string;
+    const tenantId = tenantParaListar(req, req?.query?.tenantId);
     const companyId = req?.user?.companyId || headerCompanyId;
     return this.payrollService.listPayrollRuns(tenantId, companyId);
   }
 
   @Get('runs/:id')
-  getPayrollRun(@Param('id') id: string) {
-    return this.payrollService.getPayrollRun(id);
+  getPayrollRun(@Param('id') id: string, @Request() req?: any) {
+    return this.payrollService.getPayrollRun(id, tenantDeSesion(req));
   }
 
   @Put('runs/:id/approve')
@@ -49,18 +47,18 @@ export class PayrollController {
     @Body() body: { approvedBy?: string },
     @Request() req?: any,
   ) {
-    const approvedBy = body.approvedBy || req?.user?.email || req?.user?.id || 'admin';
-    return this.payrollService.approvePayrollRun(id, approvedBy);
+    // Quien aprueba sale del token: el body no puede atribuir la aprobación a otra persona
+    const approvedBy = req?.user?.email || req?.user?.id || 'admin';
+    return this.payrollService.approvePayrollRun(id, approvedBy, tenantDeSesion(req));
   }
 
   @Put('runs/:id/confirm-payment')
   confirmPayment(
     @Param('id') id: string,
     @Body() body: { bankId: string },
-    @Headers('x-tenant-id') headerTenantId?: string,
     @Request() req?: any,
   ) {
-    const tenantId = (tenantDeSesion(req) ?? headerTenantId) as string;
+    const tenantId = tenantDeSesion(req);
     return this.payrollService.confirmPayment(id, body.bankId, tenantId);
   }
 
@@ -72,18 +70,17 @@ export class PayrollController {
   confirmPaymentPerEmployee(
     @Param('id') id: string,
     @Body() body: { bankId: string },
-    @Headers('x-tenant-id') headerTenantId?: string,
     @Request() req?: any,
   ) {
-    const tenantId = (tenantDeSesion(req) ?? headerTenantId) as string;
+    const tenantId = tenantDeSesion(req);
     return this.payrollService.confirmPaymentPerEmployee(id, body.bankId, tenantId);
   }
 
   // Addon 'dispersion_layout' — genera el archivo, no cambia el status de la corrida.
   @Modulo('dispersion_layout')
   @Get('runs/:id/dispersion-file')
-  generateLayoutFile(@Param('id') id: string, @Query('bankCode') bankCode: string) {
-    return this.payrollService.generateLayoutFile(id, bankCode || 'GENERIC');
+  generateLayoutFile(@Param('id') id: string, @Query('bankCode') bankCode: string, @Request() req?: any) {
+    return this.payrollService.generateLayoutFile(id, bankCode || 'GENERIC', tenantDeSesion(req));
   }
 
   @Get('dispersion/banks')
@@ -94,10 +91,9 @@ export class PayrollController {
   @Post('runs/:id/generate-receipts')
   generateReceipts(
     @Param('id') id: string,
-    @Headers('x-tenant-id') headerTenantId?: string,
     @Request() req?: any,
   ) {
-    const tenantId = (tenantDeSesion(req) ?? headerTenantId) as string;
+    const tenantId = tenantDeSesion(req);
     return this.payrollService.generateReceipts(id, tenantId);
   }
 
@@ -105,42 +101,40 @@ export class PayrollController {
   updatePayrollEntry(
     @Param('id') id: string,
     @Body() body: { concepts: Array<{ name: string; type: string; amount: number; saved?: boolean }> },
+    @Request() req?: any,
   ) {
-    return this.payrollService.updatePayrollEntry(id, body.concepts);
+    return this.payrollService.updatePayrollEntry(id, body.concepts, tenantDeSesion(req));
   }
 
   @Get('concepts/:employeeId')
   getConceptTemplates(
     @Param('employeeId') employeeId: string,
-    @Headers('x-tenant-id') headerTenantId?: string,
     @Request() req?: any,
   ) {
-    const tenantId = (tenantDeSesion(req) ?? headerTenantId) as string;
+    const tenantId = tenantParaListar(req, req?.query?.tenantId);
     return this.payrollService.getConceptTemplates(employeeId, tenantId);
   }
 
   @Post('concepts')
   saveConceptTemplate(
     @Body() body: { employeeId: string; name: string; type: string; defaultAmount: number; id?: string },
-    @Headers('x-tenant-id') headerTenantId?: string,
     @Request() req?: any,
   ) {
-    const tenantId = (tenantDeSesion(req) ?? headerTenantId) as string;
+    const tenantId = tenantParaEscribir(req, req?.query?.tenantId);
     return this.payrollService.saveConceptTemplate(body, tenantId);
   }
 
   @Delete('concepts/:id')
-  deleteConceptTemplate(@Param('id') id: string) {
-    return this.payrollService.deleteConceptTemplate(id);
+  deleteConceptTemplate(@Param('id') id: string, @Request() req?: any) {
+    return this.payrollService.deleteConceptTemplate(id, tenantDeSesion(req));
   }
 
   @Get('catalog')
   getCatalog(
     @Request() req: any,
-    @Headers('x-tenant-id') tenantId?: string,
     @Headers('x-company-id') companyId?: string,
   ) {
-    const tid = (tenantDeSesion(req) ?? tenantId) as string;
+    const tid = tenantParaListar(req, req?.query?.tenantId);
     const cid = req?.user?.companyId || companyId;
     return this.payrollService.getCatalog(tid, cid);
   }
@@ -148,26 +142,26 @@ export class PayrollController {
   @Post('catalog')
   saveCatalogConcept(
     @Body() body: any,
-    @Headers('x-tenant-id') tenantId?: string,
     @Headers('x-company-id') companyId?: string,
     @Request() req?: any,
   ) {
-    const tid = (tenantDeSesion(req) ?? tenantId) as string;
+    const tid = tenantParaEscribir(req, req?.query?.tenantId);
     const cid = req?.user?.companyId || companyId;
     return this.payrollService.saveCatalogConcept({ ...body, tenantId: tid, companyId: cid });
   }
 
   @Delete('catalog/:id')
-  deleteCatalogConcept(@Param('id') id: string) {
-    return this.payrollService.deleteCatalogConcept(id);
+  deleteCatalogConcept(@Param('id') id: string, @Request() req?: any) {
+    return this.payrollService.deleteCatalogConcept(id, tenantDeSesion(req));
   }
 
   @Get('period-locked')
   isPeriodLocked(
     @Query('branchId') branchId: string,
     @Query('date') date: string,
+    @Request() req?: any,
   ) {
-    return this.payrollService.isPeriodLocked(branchId, date);
+    return this.payrollService.isPeriodLocked(branchId, date, tenantDeSesion(req));
   }
 
   @Post('incapacities')
@@ -182,20 +176,18 @@ export class PayrollController {
       diagnosis?: string;
       notes?: string;
     },
-    @Headers('x-tenant-id') headerTenantId?: string,
     @Request() req?: any,
   ) {
-    const tenantId = (tenantDeSesion(req) ?? headerTenantId) as string;
+    const tenantId = tenantParaEscribir(req, req?.query?.tenantId);
     return this.payrollService.createIncapacity(body, tenantId);
   }
 
   @Get('incapacities/:employeeId')
   getIncapacities(
     @Param('employeeId') employeeId: string,
-    @Headers('x-tenant-id') headerTenantId?: string,
     @Request() req?: any,
   ) {
-    const tenantId = (tenantDeSesion(req) ?? headerTenantId) as string;
+    const tenantId = tenantParaListar(req, req?.query?.tenantId);
     return this.payrollService.getIncapacities(employeeId, tenantId);
   }
 }
