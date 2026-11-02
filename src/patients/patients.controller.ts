@@ -1,4 +1,4 @@
-import { tenantDeSesion } from '../auth/tenant-access.util';
+import { tenantDeSesion, tenantParaEscribir } from '../auth/tenant-access.util';
 import { Controller, Get, Post, Put, Param, Body, Query, Request } from '@nestjs/common';
 import { PatientsService } from './patients.service';
 import { Modulo } from '../auth/modulo.decorator';
@@ -12,39 +12,39 @@ export class PatientsController {
 
   @Get()
   findAll(@Request() req: any) {
-    return this.service.findAll(req.user.tenantId, req.user.companyId);
+    return this.service.findAll(tenantParaEscribir(req, req?.query?.tenantId), req.user.companyId);
   }
 
   @Get('kpis')
   getKpis(@Request() req: any, @Query('from') from: string, @Query('to') to: string) {
     const fromDate = from ? new Date(from) : new Date(new Date().setDate(1));
     const toDate = to ? new Date(to) : new Date();
-    return this.service.getKpis(req.user.tenantId, fromDate, toDate);
+    return this.service.getKpis(tenantParaEscribir(req, req?.query?.tenantId), fromDate, toDate);
   }
 
   @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.service.findOne(id);
+  findOne(@Param('id') id: string, @Request() req: any) {
+    return this.service.findOne(id, tenantParaEscribir(req, req?.query?.tenantId));
   }
 
   @Post()
   create(@Request() req: any, @Body() body: any) {
-    return this.service.create({ ...body, tenantId: req.user.tenantId, companyId: req.user.companyId });
+    return this.service.create({ ...body, tenantId: tenantParaEscribir(req, req?.query?.tenantId), companyId: req.user.companyId });
   }
 
   @Put(':id')
-  update(@Param('id') id: string, @Body() body: any) {
-    return this.service.update(id, body);
+  update(@Param('id') id: string, @Body() body: any, @Request() req: any) {
+    return this.service.update(id, body, tenantParaEscribir(req, req?.query?.tenantId));
   }
 
   @Get(':id/consultas')
   getConsultas(@Param('id') id: string, @Request() req: any) {
-    return this.service.findConsultas(req.user.tenantId, id);
+    return this.service.findConsultas(tenantParaEscribir(req, req?.query?.tenantId), id);
   }
 
   @Post('consultas')
   createConsulta(@Request() req: any, @Body() body: any) {
-    return this.service.createConsulta({ ...body, tenantId: req.user.tenantId, companyId: req.user.companyId });
+    return this.service.createConsulta({ ...body, tenantId: tenantParaEscribir(req, req?.query?.tenantId), companyId: req.user.companyId });
   }
 
   @Put('consultas/:id')

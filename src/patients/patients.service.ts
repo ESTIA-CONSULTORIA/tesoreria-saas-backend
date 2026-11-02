@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Between } from 'typeorm';
 import { Patient } from './entities/patient.entity';
@@ -11,28 +11,43 @@ export class PatientsService {
     @InjectRepository(Consulta) private consultaRepo: Repository<Consulta>,
   ) {}
 
-  findAll(tenantId: string, companyId?: string) {
+  // Expedientes clínicos: SIEMPRE dentro del tenant del token. Con tenantId undefined TypeORM ignoraba la condición y devolvía los
+  // pacientes (y consultas) de TODOS los negocios; ahora sin tenant no se lista nada y las rutas por id dan 404 si es ajeno.
+  private async pacienteDe(id: string, tenantId: string) {
+    const p = id && tenantId ? await this.patientRepo.findOne({ where: { id, tenantId } }) : null;
+    if (!p) throw new NotFoundException('Paciente no encontrado');
+    return p;
+  }
+
+  async findAll(tenantId: string, companyId?: string) {
+    if (!tenantId) return [];
     return this.patientRepo.find({
       where: { tenantId, ...(companyId ? { companyId } : {}) },
       order: { createdAt: 'DESC' },
     });
   }
 
-  findOne(id: string) {
-    return this.patientRepo.findOne({ where: { id } });
+  findOne(id: string, tenantId: string) {
+    return this.pacienteDe(id, tenantId);
   }
 
   async create(data: Partial<Patient>) {
+    if (!data.tenantId) throw new BadRequestException('Falta el negocio del paciente');
+    delete (data as any).id; // con id en el body save() pisaría el expediente de otro negocio
     const patient = this.patientRepo.create(data);
     return this.patientRepo.save(patient);
   }
 
-  async update(id: string, data: Partial<Patient>) {
+  async update(id: string, data: Partial<Patient>, tenantId: string) {
+    await this.pacienteDe(id, tenantId);
+    delete (data as any).id;
+    delete (data as any).tenantId; // el negocio de un expediente no se cambia
     await this.patientRepo.update(id, data);
-    return this.findOne(id);
+    return this.pacienteDe(id, tenantId);
   }
 
-  findConsultas(tenantId: string, patientId?: string) {
+  async findConsultas(tenantId: string, patientId?: string) {
+    if (!tenantId) return [];
     return this.consultaRepo.find({
       where: { tenantId, ...(patientId ? { patientId } : {}) },
       order: { fecha: 'DESC' },
@@ -40,12 +55,13 @@ export class PatientsService {
   }
 
   async createConsulta(data: Partial<Consulta>) {
-    const patient = await this.patientRepo.findOne({ where: { id: data.patientId } });
-    if (patient) {
-      patient.numeroVisitas += 1;
-      patient.tipo = 'recurrente';
-      await this.patientRepo.save(patient);
-    }
+    if (!data.tenantId) throw new BadRequestException('Falta el negocio de la consulta');
+    delete (data as any).id;
+    // El paciente debe ser del tenant: antes se sumaban visitas al paciente de otro negocio
+    const patient = await this.pacienteDe(data.patientId as string, data.tenantId);
+    patient.numeroVisitas += 1;
+    patient.tipo = 'recurrente';
+    await this.patientRepo.save(patient);
     return this.consultaRepo.save(this.consultaRepo.create(data));
   }
 
@@ -62,6 +78,7 @@ export class PatientsService {
   }
 
   async getKpis(tenantId: string, from: Date, to: Date) {
+    if (!tenantId) throw new BadRequestException('Falta el negocio');
     const consultas = await this.consultaRepo.find({
       where: { tenantId, fecha: Between(from, to) },
     });
