@@ -27,6 +27,44 @@ export class PayrollService {
     private readonly storageService: StorageService,
   ) {}
 
+  // --- Aislamiento por tenant ---
+  // tenantId llega SIEMPRE del token (controlador: tenantParaListar / tenantParaEscribir / tenantDeSesion); en las operaciones por
+  // id undefined solo ocurre con SOPORTE. Un recurso de otro tenant responde 404 igual que uno inexistente.
+  private async corridaDe(id: string, tenantId?: string): Promise<PayrollRun> {
+    const run = id ? await this.runRepo.findOne({ where: { id } }) : null;
+    if (!run || (tenantId && run.tenantId !== tenantId)) throw new NotFoundException('Corrida de nómina no encontrada');
+    return run;
+  }
+
+  private async empresaDelTenant(companyId: string, tenantId: string): Promise<boolean> {
+    const rows = await this.dataSource.query(`SELECT 1 FROM company WHERE id::text = $1 AND "tenantId"::text = $2 LIMIT 1`, [companyId, tenantId]);
+    return rows.length > 0;
+  }
+
+  private async sucursalDelTenant(branchId: string, tenantId: string): Promise<boolean> {
+    const rows = await this.dataSource.query(
+      `SELECT 1 FROM branch b INNER JOIN company c ON c.id::text = b."companyId"::text WHERE b.id::text = $1 AND c."tenantId"::text = $2 LIMIT 1`,
+      [branchId, tenantId],
+    );
+    return rows.length > 0;
+  }
+
+  private async cuentaDelTenant(bankId: string, tenantId: string): Promise<boolean> {
+    const rows = await this.dataSource.query(
+      `SELECT 1 FROM bank k INNER JOIN branch b ON b.id::text = k."branchId"::text INNER JOIN company c ON c.id::text = b."companyId"::text
+       WHERE k.id::text = $1 AND c."tenantId"::text = $2 LIMIT 1`,
+      [bankId, tenantId],
+    );
+    return rows.length > 0;
+  }
+
+  private async empleadoDe(employeeId: string, tenantId?: string): Promise<any> {
+    const repo = this.dataSource.getRepository('Employee');
+    const emp = employeeId ? await repo.findOne({ where: tenantId ? { id: employeeId, tenantId } : { id: employeeId } } as any) : null;
+    if (!emp) throw new NotFoundException('Empleado no encontrado');
+    return emp;
+  }
+
   async createPayrollRun(
     dto: {
       periodStart: string;
@@ -38,6 +76,12 @@ export class PayrollService {
     companyId: string,
     branchId: string,
   ): Promise<{ run: PayrollRun; entries: PayrollEntry[] }> {
+    if (!tenantId) throw new BadRequestException('Falta el negocio de la nómina');
+    if (!branchId) throw new BadRequestException('Falta la sucursal de la nómina');
+    // Sucursal y empresa (body / cabecera X-Company-Id) deben ser del tenant: antes una sucursal ajena metía en TU nómina
+    // los sueldos de los empleados de otro negocio.
+    if (!(await this.sucursalDelTenant(branchId, tenantId))) throw new NotFoundException('Sucursal no encontrada');
+    if (companyId && !(await this.empresaDelTenant(companyId, tenantId))) throw new NotFoundException('Empresa no encontrada');
     const run = await this.runRepo.save(
       this.runRepo.create({
         tenantId,
@@ -54,7 +98,7 @@ export class PayrollService {
 
     const employeeRepo = this.dataSource.getRepository('Employee');
     const employees: any[] = await employeeRepo.find({
-      where: { branchId, status: 'ACTIVO' },
+      where: { branchId, tenantId, status: 'ACTIVO' },
     });
 
     const entries: PayrollEntry[] = [];
@@ -114,25 +158,29 @@ export class PayrollService {
     return { run, entries };
   }
 
-  async getPayrollRun(id: string): Promise<{ run: PayrollRun; entries: PayrollEntry[] }> {
-    const run = await this.runRepo.findOne({ where: { id } });
-    if (!run) throw new NotFoundException('Corrida de nómina no encontrada');
+  async getPayrollRun(id: string, tenantId?: string): Promise<{ run: PayrollRun; entries: PayrollEntry[] }> {
+    const run = await this.corridaDe(id, tenantId);
     const entries = await this.entryRepo.find({ where: { payrollRunId: id } });
     return { run, entries };
   }
 
-  listPayrollRuns(tenantId: string, companyId?: string): Promise<PayrollRun[]> {
+  async listPayrollRuns(tenantId?: string, companyId?: string): Promise<PayrollRun[]> {
+    if (!tenantId) return []; // sin tenant nunca se listan las nóminas de todos
     const where: any = { tenantId };
-    if (companyId) where.companyId = companyId;
+    if (companyId) {
+      if (!(await this.empresaDelTenant(companyId, tenantId))) return [];
+      where.companyId = companyId;
+    }
     return this.runRepo.find({ where, order: { createdAt: 'DESC' } });
   }
 
   async updatePayrollEntry(
     entryId: string,
     concepts: Array<{ name: string; type: string; amount: number; saved?: boolean }>,
+    tenantId?: string,
   ): Promise<PayrollEntry> {
     const entry = await this.entryRepo.findOne({ where: { id: entryId } });
-    if (!entry) throw new NotFoundException('Entry de nómina no encontrado');
+    if (!entry || (tenantId && entry.tenantId !== tenantId)) throw new NotFoundException('Entry de nómina no encontrado');
 
     const totalPerceptions =
       Number(entry.dailySalary) * entry.workedDays +
@@ -165,9 +213,8 @@ export class PayrollService {
     return updatedEntry;
   }
 
-  async approvePayrollRun(id: string, approvedBy: string): Promise<PayrollRun> {
-    const run = await this.runRepo.findOne({ where: { id } });
-    if (!run) throw new NotFoundException('Corrida de nómina no encontrada');
+  async approvePayrollRun(id: string, approvedBy: string, tenantId?: string): Promise<PayrollRun> {
+    const run = await this.corridaDe(id, tenantId);
     if (run.status !== 'PRENOMINA') {
       throw new BadRequestException('Solo se puede aprobar una prenómina');
     }
@@ -188,9 +235,11 @@ export class PayrollService {
     return this.runRepo.findOne({ where: { id } }) as Promise<PayrollRun>;
   }
 
-  async confirmPayment(id: string, bankId: string, tenantId: string): Promise<PayrollRun> {
-    const run = await this.runRepo.findOne({ where: { id } });
-    if (!run) throw new NotFoundException('Corrida de nómina no encontrada');
+  async confirmPayment(id: string, bankId: string, tenantId?: string): Promise<PayrollRun> {
+    const run = await this.corridaDe(id, tenantId);
+    tenantId = run.tenantId; // el movimiento se registra en el negocio de la corrida
+    // La cuenta de pago debe ser del tenant: antes se podía registrar el egreso en la cuenta bancaria de OTRO negocio
+    if (!bankId || !(await this.cuentaDelTenant(bankId, tenantId))) throw new NotFoundException('Cuenta bancaria no encontrada');
     if (run.status !== 'APROBADA') {
       throw new BadRequestException('Solo se puede confirmar el pago de una nómina aprobada');
     }
@@ -223,9 +272,10 @@ export class PayrollService {
   // puede conciliar línea por línea contra la nómina. El ERP no tiene ninguna integración
   // con un riel de pago real (SPEI o similar, confirmado en el diseño de esta fase) — esto
   // sigue siendo un registro contable, el pago real lo ejecuta el cliente por fuera.
-  async confirmPaymentPerEmployee(id: string, bankId: string, tenantId: string): Promise<PayrollRun> {
-    const run = await this.runRepo.findOne({ where: { id } });
-    if (!run) throw new NotFoundException('Corrida de nómina no encontrada');
+  async confirmPaymentPerEmployee(id: string, bankId: string, tenantId?: string): Promise<PayrollRun> {
+    const run = await this.corridaDe(id, tenantId);
+    tenantId = run.tenantId;
+    if (!bankId || !(await this.cuentaDelTenant(bankId, tenantId))) throw new NotFoundException('Cuenta bancaria no encontrada');
     if (run.status !== 'APROBADA') {
       throw new BadRequestException('Solo se puede confirmar el pago de una nómina aprobada');
     }
@@ -265,9 +315,8 @@ export class PayrollService {
   // anterior que solo registra el asiento contable. No cambia el status de la corrida ni
   // crea movimientos — es una exportación, el pago lo confirma quien suba el archivo al
   // banco y luego marque la corrida como pagada por el modo que corresponda.
-  async generateLayoutFile(id: string, bankCode: string): Promise<{ fileName: string; content: string; mimeType: string }> {
-    const run = await this.runRepo.findOne({ where: { id } });
-    if (!run) throw new NotFoundException('Corrida de nómina no encontrada');
+  async generateLayoutFile(id: string, bankCode: string, tenantId?: string): Promise<{ fileName: string; content: string; mimeType: string }> {
+    const run = await this.corridaDe(id, tenantId);
     if (run.status !== 'APROBADA' && run.status !== 'PAGADA') {
       throw new BadRequestException('La corrida debe estar aprobada para generar el archivo de dispersión');
     }
@@ -306,7 +355,8 @@ export class PayrollService {
     return REGISTERED_BANKS;
   }
 
-  getConceptTemplates(employeeId: string, tenantId: string): Promise<PayrollConceptTemplate[]> {
+  async getConceptTemplates(employeeId: string, tenantId?: string): Promise<PayrollConceptTemplate[]> {
+    if (!tenantId) return [];
     return this.conceptRepo.find({
       where: { employeeId, tenantId, isActive: true },
       order: { createdAt: 'ASC' },
@@ -317,7 +367,11 @@ export class PayrollService {
     dto: { employeeId: string; name: string; type: string; defaultAmount: number; id?: string },
     tenantId: string,
   ): Promise<PayrollConceptTemplate> {
+    if (!tenantId) throw new BadRequestException('Falta el negocio del concepto');
     if (dto.id) {
+      // Solo se edita un concepto propio (antes se podía editar el de otro tenant o uno global conociendo el id)
+      const propio = await this.conceptRepo.findOne({ where: { id: dto.id, tenantId, isGlobal: false } as any });
+      if (!propio) throw new NotFoundException('Concepto no encontrado');
       await this.conceptRepo.update(dto.id, {
         name: dto.name,
         type: dto.type,
@@ -325,6 +379,7 @@ export class PayrollService {
       });
       return this.conceptRepo.findOne({ where: { id: dto.id } }) as Promise<PayrollConceptTemplate>;
     }
+    await this.empleadoDe(dto.employeeId, tenantId);
     return this.conceptRepo.save(
       this.conceptRepo.create({
         tenantId,
@@ -337,16 +392,20 @@ export class PayrollService {
     );
   }
 
-  async deleteConceptTemplate(id: string): Promise<void> {
+  async deleteConceptTemplate(id: string, tenantId?: string): Promise<void> {
+    const t = await this.conceptRepo.findOne({ where: { id } });
+    if (!t || (tenantId && t.tenantId !== tenantId)) throw new NotFoundException('Concepto no encontrado');
+    if (t.isGlobal) throw new BadRequestException('No se puede eliminar un concepto global');
     await this.conceptRepo.delete(id);
   }
 
-  async getCatalog(tenantId: string, companyId?: string) {
+  async getCatalog(tenantId?: string, companyId?: string) {
     const global = await this.conceptRepo.find({
       where: { isGlobal: true, isActive: true },
       order: { type: 'ASC', name: 'ASC' },
     });
-    const custom = companyId
+    // Los conceptos propios solo existen dentro de un tenant, y la empresa (X-Company-Id) debe ser suya
+    const custom = tenantId && companyId && (await this.empresaDelTenant(companyId, tenantId))
       ? await this.conceptRepo.find({
           where: { tenantId, companyId, isGlobal: false, isActive: true },
           order: { type: 'ASC', name: 'ASC' },
@@ -364,9 +423,12 @@ export class PayrollService {
     defaultAmount: number;
     category?: string;
   }) {
+    if (!dto.tenantId) throw new BadRequestException('Falta el negocio del concepto');
+    if (dto.companyId && !(await this.empresaDelTenant(dto.companyId, dto.tenantId))) throw new NotFoundException('Empresa no encontrada');
     if (dto.id) {
       const existing = await this.conceptRepo.findOne({ where: { id: dto.id } });
-      if (existing?.isGlobal) throw new Error('No se puede modificar un concepto global');
+      if (!existing || existing.tenantId !== dto.tenantId) throw new NotFoundException('Concepto no encontrado');
+      if (existing.isGlobal) throw new BadRequestException('No se puede modificar un concepto global');
       await this.conceptRepo.update(dto.id, {
         name: dto.name,
         type: dto.type,
@@ -387,16 +449,17 @@ export class PayrollService {
     });
   }
 
-  async deleteCatalogConcept(id: string) {
+  async deleteCatalogConcept(id: string, tenantId?: string) {
     const existing = await this.conceptRepo.findOne({ where: { id } });
-    if (existing?.isGlobal) throw new Error('No se puede eliminar un concepto global');
+    if (!existing || (tenantId && existing.tenantId !== tenantId)) throw new NotFoundException('Concepto no encontrado');
+    if (existing.isGlobal) throw new BadRequestException('No se puede eliminar un concepto global');
     await this.conceptRepo.update(id, { isActive: false });
     return { deleted: true };
   }
 
-  async isPeriodLocked(branchId: string, date: string): Promise<boolean> {
+  async isPeriodLocked(branchId: string, date: string, tenantId?: string): Promise<boolean> {
     const runs = await this.runRepo.find({
-      where: { branchId, status: 'PAGADA' },
+      where: tenantId ? { branchId, tenantId, status: 'PAGADA' } : { branchId, status: 'PAGADA' },
     });
     return runs.some(run => date >= run.periodStart && date <= run.periodEnd);
   }
@@ -414,12 +477,16 @@ export class PayrollService {
     },
     tenantId: string,
   ): Promise<EmployeeIncapacity> {
+    if (!tenantId) throw new BadRequestException('Falta el negocio de la incapacidad');
+    await this.empleadoDe(dto.employeeId, tenantId);
+    delete (dto as any).id;
     return this.incapacityRepo.save(
       this.incapacityRepo.create({ ...dto, tenantId }),
     );
   }
 
-  getIncapacities(employeeId: string, tenantId: string): Promise<EmployeeIncapacity[]> {
+  async getIncapacities(employeeId: string, tenantId?: string): Promise<EmployeeIncapacity[]> {
+    if (!tenantId) return [];
     return this.incapacityRepo.find({
       where: { employeeId, tenantId },
       order: { createdAt: 'DESC' },
@@ -441,9 +508,9 @@ export class PayrollService {
   // descarga inmediata del administrador — a propósito NO se guarda como HrDocument de
   // ningún empleado individual, porque contiene los montos de TODOS los empleados de la
   // corrida (fuga de privacidad salarial si un empleado lo viera en su propio portal).
-  async generateReceipts(runId: string, tenantId: string): Promise<{ receiptsGenerated: number; listaDeRayaPdf: string }> {
-    const run = await this.runRepo.findOne({ where: { id: runId } });
-    if (!run) throw new NotFoundException('Corrida de nómina no encontrada');
+  async generateReceipts(runId: string, tenantId?: string): Promise<{ receiptsGenerated: number; listaDeRayaPdf: string }> {
+    const run = await this.corridaDe(runId, tenantId);
+    tenantId = run.tenantId;
 
     const entries = await this.entryRepo.find({ where: { payrollRunId: runId } });
     const employeeRepo = this.dataSource.getRepository('Employee');

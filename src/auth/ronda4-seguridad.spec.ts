@@ -161,7 +161,7 @@ describe('hr y payroll: el header x-tenant-id solo vale para SOPORTE', () => {
 
   it('payroll: crear corrida con x-tenant-id ajeno usa el tenant del token', async () => {
     const payroll: any = { createPayrollRun: jest.fn().mockResolvedValue({}) };
-    await new PayrollController(payroll).createPayrollRun({ periodStart: 'a', periodEnd: 'b' }, OTRO, undefined, req('ADMIN', MIO));
+    await new PayrollController(payroll).createPayrollRun({ periodStart: 'a', periodEnd: 'b' }, undefined, req('ADMIN', MIO)); // x-tenant-id ya no se lee: no hay parámetro de cabecera de tenant
     expect(payroll.createPayrollRun.mock.calls[0][1]).toBe(MIO);
   });
 
