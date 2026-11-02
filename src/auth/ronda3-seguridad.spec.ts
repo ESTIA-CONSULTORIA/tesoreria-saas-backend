@@ -6,6 +6,7 @@ import { CompaniesController } from '../companies/companies.controller';
 import { DashboardController } from '../dashboard/dashboard.controller';
 import { PurchasesService } from '../purchases/purchases.service';
 import { AdministrationController } from '../administration/administration.controller';
+import { AuditController } from '../audit/audit.controller';
 
 const MIO = 'tenant-mio';
 const OTRO = 'tenant-otro';
@@ -144,19 +145,19 @@ describe('registerPayment: la cuenta del pago debe ser del tenant de la factura'
   });
 });
 
-describe('POST /administration/audit-logs: el tenantId del body solo vale para SOPORTE', () => {
-  const servicio: any = { createAuditLog: jest.fn().mockResolvedValue({}) };
-  const ctrl = new AdministrationController(servicio, {} as any);
-  const body: any = { userId: 'u', userEmail: 'e', tenantId: OTRO, action: 'A', entity: 'E', ipAddress: 'i', userAgent: 'ua' };
-  beforeEach(() => servicio.createAuditLog.mockClear());
+describe('POST /administration/audit-logs ya no existe: la bitácora no se puede fabricar por HTTP', () => {
+  const rutas = (clase: any) =>
+    Object.getOwnPropertyNames(clase.prototype)
+      .filter((n) => n !== 'constructor')
+      .map((n) => ({ nombre: n, metodo: Reflect.getMetadata('method', clase.prototype[n]), ruta: Reflect.getMetadata('path', clase.prototype[n]) }));
 
-  it('SOPORTE puede registrar en el tenant del body', async () => {
-    await ctrl.createAuditLog(req('SOPORTE', null), body);
-    expect(servicio.createAuditLog.mock.calls[0][0].tenantId).toBe(OTRO);
+  it('el controlador de administración no tiene ninguna ruta POST sobre audit-logs', () => {
+    expect(rutas(AdministrationController).filter((r) => r.ruta === 'audit-logs' && r.metodo === 1 /* RequestMethod.POST */)).toEqual([]);
+    expect((AdministrationController.prototype as any).createAuditLog).toBeUndefined();
   });
 
-  it('cualquier otro rol registra con el tenant de su token', async () => {
-    await ctrl.createAuditLog(req('ADMIN', MIO), body);
-    expect(servicio.createAuditLog.mock.calls[0][0].tenantId).toBe(MIO);
+  it('ningún controlador de bitácora acepta escrituras: solo GET (listar, exportar)', () => {
+    const escrituras = rutas(AuditController).filter((r) => r.metodo !== 0 /* RequestMethod.GET */);
+    expect(escrituras).toEqual([]);
   });
 });

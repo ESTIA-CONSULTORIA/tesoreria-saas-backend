@@ -38,23 +38,8 @@ export class AdministrationController {
     });
   }
 
-  @Post('audit-logs')
-  createAuditLog(@Request() req: any, @Body() data: {
-    userId: string;
-    userEmail: string;
-    roleCode?: string;
-    tenantId: string;
-    action: string;
-    entity: string;
-    details?: any;
-    ipAddress: string;
-    userAgent: string;
-  }) {
-    // El tenantId del body solo vale para SOPORTE; cualquier otro rol (defensa en profundidad: la clase ya exige SOPORTE)
-    // registra con el tenant de su token.
-    const tenantId = req?.user?.roleCode === 'SOPORTE' ? data.tenantId : req?.user?.tenantId;
-    return this.administrationService.createAuditLog({ ...data, tenantId });
-  }
+  // POST /administration/audit-logs se ELIMINÓ a propósito: permitía a SOPORTE insertar entradas de bitácora con cualquier usuario,
+  // tenant y acción (fabricar evidencia). La bitácora solo la escribe el servidor (AuditInterceptor), nunca un cliente.
 
   @Get('tenants')
   getTenants() {
