@@ -54,8 +54,8 @@ describe('PayrollService: aislamiento entre tenants contra Postgres real', () =>
       entities: [PayrollRun, PayrollEntry, PayrollConceptTemplate, EmployeeIncapacity, Employee, Attendance, Company, Branch, Bank, Movement],
       extra: { options: `-c search_path=${schema},public` },
     }).initialize();
-    // confirmPayment inserta movement."tenantId" con SQL crudo: esa columna no esta en la entidad Movement
-    await ds.query(`ALTER TABLE movement ADD COLUMN IF NOT EXISTS "tenantId" varchar`);
+    // El esquema de prueba replica produccion: movement NO tiene columna "tenantId" (comprobado en produccion). confirmPayment
+    // la incluia en su INSERT y fallaba; este spec cubre esa regresion.
 
     coA = await guardar(Company, { tenantId: tA, tradeName: 'Empresa A' });
     coB = await guardar(Company, { tenantId: tB, tradeName: 'Empresa B' });
@@ -153,6 +153,15 @@ describe('PayrollService: aislamiento entre tenants contra Postgres real', () =>
     expect(await ds.getRepository(Movement).count()).toBe(1);
     expect(await svc.isPeriodLocked(brA, '2026-10-05', tA)).toBe(true);
     expect(await svc.isPeriodLocked(brA, '2026-10-05', tB)).toBe(false);
+  });
+
+  it('pago por empleado: registra un movimiento por empleado en la cuenta del tenant (regresion: el INSERT usaba una columna inexistente)', async () => {
+    const run2 = await guardar(PayrollRun, { tenantId: tA, companyId: coA, branchId: brA, periodStart: '2026-11-01', periodEnd: '2026-11-15', status: 'APROBADA', totalAmount: 100 });
+    await guardar(PayrollEntry, { payrollRunId: run2, employeeId: empA, tenantId: tA, workedDays: 1, dailySalary: 100, netAmount: 100, status: 'REVISADO', concepts: [] });
+    const antes = await ds.getRepository(Movement).count();
+    await noEncontrado(svc.confirmPaymentPerEmployee(run2, bankB, tA)); // cuenta de otro tenant
+    expect((await svc.confirmPaymentPerEmployee(run2, bankA, tA)).status).toBe('PAGADA');
+    expect(await ds.getRepository(Movement).count()).toBe(antes + 1);
   });
 
   it('controlador: tenant del token (x-tenant-id y query ignorados), token sin tenant 403, aprobacion atribuida al token', async () => {

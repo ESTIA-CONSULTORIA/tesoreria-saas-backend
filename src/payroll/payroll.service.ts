@@ -246,9 +246,11 @@ export class PayrollService {
 
     const concept = `NOMINA ${run.periodStart} al ${run.periodEnd}`;
     await this.dataSource.query(
-      `INSERT INTO movement (id, "accountId", type, amount, concept, date, "tenantId", "createdAt")
-       VALUES (gen_random_uuid(), $1, 'EXPENSE', $2, $3, NOW(), $4, NOW())`,
-      [bankId, run.totalAmount, concept, tenantId],
+      // movement NO tiene columna "tenantId" (ni en la entidad ni en produccion): el negocio de un movimiento sale de su cuenta.
+      // Antes este INSERT la incluia y fallaba en produccion con 'column "tenantId" does not exist'.
+      `INSERT INTO movement (id, "accountId", type, category, amount, concept, date, "createdAt")
+       VALUES (gen_random_uuid(), $1, 'EXPENSE', 'PAYROLL', $2, $3, NOW(), NOW())`,
+      [bankId, run.totalAmount, concept],
     );
 
     await this.runRepo.update(id, {
@@ -292,9 +294,9 @@ export class PayrollService {
       const empName = emp ? `${emp.nombre} ${emp.apellidos || ''}`.trim() : entry.employeeId;
       const concept = `NOMINA ${run.periodStart} al ${run.periodEnd} - ${empName}`;
       await this.dataSource.query(
-        `INSERT INTO movement (id, "accountId", type, category, amount, concept, reference, date, "tenantId", "createdAt")
-         VALUES (gen_random_uuid(), $1, 'EXPENSE', 'PAYROLL', $2, $3, $4, NOW(), $5, NOW())`,
-        [bankId, entry.netAmount, concept, entry.employeeId, tenantId],
+        `INSERT INTO movement (id, "accountId", type, category, amount, concept, reference, date, "createdAt")
+         VALUES (gen_random_uuid(), $1, 'EXPENSE', 'PAYROLL', $2, $3, $4, NOW(), NOW())`,
+        [bankId, entry.netAmount, concept, entry.employeeId],
       );
     }
 
