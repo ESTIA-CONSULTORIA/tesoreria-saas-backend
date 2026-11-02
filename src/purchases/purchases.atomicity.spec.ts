@@ -60,10 +60,10 @@ describe('PurchasesService.createPurchase() — atomicidad compra + stock + OC',
     committed = {
       purchases: [],
       insumos: new Map([
-        ['insumo-1', { id: 'insumo-1', stockActual: 10, factorConversion: 24, precioCompra: null }],
-        ['insumo-2', { id: 'insumo-2', stockActual: 5, factorConversion: 1, precioCompra: null }],
+        ['insumo-1', { id: 'insumo-1', tenantId: 'tenant-A', stockActual: 10, factorConversion: 24, precioCompra: null }],
+        ['insumo-2', { id: 'insumo-2', tenantId: 'tenant-A', stockActual: 5, factorConversion: 1, precioCompra: null }],
       ]),
-      ordenes: new Map([['oc-1', { id: 'oc-1', status: 'RECIBIDA' }]]),
+      ordenes: new Map([['oc-1', { id: 'oc-1', tenantId: 'tenant-A', status: 'RECIBIDA' }]]),
     };
 
     managerFindOne = jest.fn();
@@ -79,7 +79,10 @@ describe('PurchasesService.createPurchase() — atomicidad compra + stock + OC',
             return Promise.resolve(saved);
           }),
           findOne: managerFindOne.mockImplementation((entity: any, opts: any) => {
-            if (entity === Insumo) return Promise.resolve(staging.insumos.get(opts.where.id) ? { ...staging.insumos.get(opts.where.id) } : null);
+            // Las lecturas se acotan por tenant (la factura es de 'tenant-A'): un id de otro tenant no existe para esta compra
+            const ok = (row: any) => (row && row.tenantId === opts.where.tenantId ? { ...row } : null);
+            if (entity === Insumo) return Promise.resolve(ok(staging.insumos.get(opts.where.id)));
+            if (entity === PurchaseOrder) return Promise.resolve(ok(staging.ordenes.get(opts.where.id)));
             return Promise.resolve(null);
           }),
           update: jest.fn((entity: any, id: string, patch: any) => {
