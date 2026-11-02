@@ -31,7 +31,8 @@ export class BranchesService {
     // fuera una empresa del tenant que crea la sucursal — cualquier tenant con 'sucursales'
     // activo podía colgar una sucursal de la empresa de OTRO tenant con solo mandar su id.
     // Opcional para no romper a SOPORTE (tenantId null en su JWT).
-    if (tenantId && (!company || company.tenantId !== tenantId)) {
+    // La empresa debe existir y, si hay tenant en el token, ser suya (antes, sin tenant, se creaba bajo cualquier empresa)
+    if (!company || (tenantId && company.tenantId !== tenantId)) {
       throw new BadRequestException('Empresa no encontrada');
     }
 
@@ -118,6 +119,13 @@ export class BranchesService {
     const existing = await this.findOwnedBranch(id, tenantId);
     if (!existing) {
       throw new NotFoundException('Sucursal no encontrada');
+    }
+    delete (data as any).id;
+    // Mover la sucursal a otra empresa solo dentro del MISMO negocio (antes se podía pasar a la empresa de otro tenant)
+    if (data.companyId && data.companyId !== existing.companyId) {
+      const actual = await this.companiesRepository.findOne({ where: { id: existing.companyId } });
+      const destino = await this.companiesRepository.findOne({ where: { id: data.companyId } });
+      if (!destino || !actual || destino.tenantId !== actual.tenantId) throw new BadRequestException('Empresa no encontrada');
     }
     await this.branchesRepository.update(id, data);
     return this.branchesRepository.findOne({ where: { id } });
