@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
+import { Injectable, BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { User } from './entities/user.entity';
 import { Tenant } from '../tenants/entities/tenant.entity';
@@ -7,6 +7,7 @@ import { Branch } from '../branches/entities/branch.entity';
 import { In, Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 import { assertPinEjecutivoValido } from './executive-pin.util';
+import { assertSucursalDelTenant } from '../common/sucursal-efectiva';
 import { ROLES_CON_SUCURSAL, ROLES_NIP } from '../config/roles-pos.config';
 
 @Injectable()
@@ -18,6 +19,29 @@ export class UsersService {
     private tenantRepo: Repository<Tenant>,
   ) {}
 
+  // Quién puede asignar qué rol: antes cualquier usuario autenticado podía crear (o ascender a) un ADMIN o un SOPORTE.
+  // SOPORTE (rol de plataforma, sin límite de tenant) solo lo asigna SOPORTE; ADMIN solo ADMIN o SOPORTE; los roles operativos
+  // (gerente, cajero, mesero...) los asigna un GERENTE o superior; un rol que no conocemos exige ADMIN o SOPORTE.
+  private static readonly RANGO_QUIEN: Record<string, number> = { SOPORTE: 3, ADMIN: 2, GERENTE: 1 };
+  private static readonly ROLES_OPERATIVOS = [...ROLES_CON_SUCURSAL, 'USER'];
+  private assertPuedeAsignarRol(requesterRole: string | undefined, rolAsignado: string | undefined) {
+    // requesterRole undefined = llamada interna de confianza (alta de negocio, seed, prueba pública); el controlador SIEMPRE lo manda
+    if (!rolAsignado || requesterRole === undefined) return;
+    const quien = UsersService.RANGO_QUIEN[requesterRole ?? ''] ?? 0;
+    const requerido =
+      rolAsignado === 'SOPORTE' ? 3 : rolAsignado === 'ADMIN' ? 2 : UsersService.ROLES_OPERATIVOS.includes(rolAsignado) || rolAsignado === 'GERENTE' ? 1 : 2;
+    if (quien < requerido) throw new ForbiddenException('No tienes permiso para asignar ese rol');
+  }
+
+  // Empresa y sucursal que llegan en el body deben ser del tenant del usuario
+  private async validarUbicacion(tenantId: string | undefined, companyId?: string, branchId?: string) {
+    if (!tenantId) return;
+    if (companyId && !(await this.tenantRepo.manager.getRepository(Company).findOne({ where: { id: companyId, tenantId } as any, select: ['id'] }))) {
+      throw new NotFoundException('Empresa no encontrada');
+    }
+    await assertSucursalDelTenant(this.usersRepository.manager, branchId, tenantId);
+  }
+
   async create(
     email: string,
     password: string,
@@ -28,7 +52,11 @@ export class UsersService {
     companyId?: string,
     branchId?: string,
     executivePin?: string,
+    requesterRole?: string,
   ) {
+    this.assertPuedeAsignarRol(requesterRole, roleCode);
+    // Solo en llamadas que vienen del controlador (requesterRole definido); las internas de confianza no pasan por aquí
+    if (requesterRole !== undefined) await this.validarUbicacion(tenantId, companyId, branchId);
     if (tenantId) {
       const tenant = await this.tenantRepo.findOne({ where: { id: tenantId } });
       if (tenant?.plan?.startsWith('LITE')) {
@@ -196,6 +224,12 @@ export class UsersService {
     // propio ADMIN que edita, mismo criterio que ya usa create() — solo si companyId
     // estaba vacío; si ya existe, nunca se toca acá (reasignar una empresa YA asignada
     // sigue siendo exclusivo de updateCompany()/SOPORTE).
+    // No se puede ascender a nadie por encima del propio rol, ni tocar a un SOPORTE si no se es SOPORTE
+    this.assertPuedeAsignarRol(requester?.roleCode, data.roleCode);
+    if (requester?.roleCode !== undefined && existing.roleCode === 'SOPORTE' && requester.roleCode !== 'SOPORTE') {
+      throw new NotFoundException('Usuario no encontrado');
+    }
+    if (requester?.roleCode !== undefined) await this.validarUbicacion(existing.tenantId, undefined, data.branchId);
     const isSoporteRequester = requester?.roleCode === 'SOPORTE';
     const companyIdToBackfill =
       !existing.companyId && !isSoporteRequester && requester?.companyId
@@ -234,6 +268,7 @@ export class UsersService {
       throw new NotFoundException(`No existe un usuario con id '${id}'`);
     }
 
+    await this.validarUbicacion(existing.tenantId, companyId, undefined);
     this.assertCompanyBranchIfRequired(existing.roleCode, companyId, existing.branchId);
 
     await this.usersRepository.update(id, { companyId });
@@ -242,10 +277,12 @@ export class UsersService {
 
   // Auditoría BUSINESS (hallazgo transversal #6): antes borraba por id sin verificar tenant —
   // cualquier ADMIN autenticado podía borrar un usuario de OTRO tenant conociendo su id.
-  async remove(id: string, tenantId?: string) {
+  async remove(id: string, tenantId?: string, requesterRole?: string) {
     if (tenantId) {
       const existing = await this.usersRepository.findOne({ where: { id, tenantId } });
       if (!existing) throw new NotFoundException(`No existe un usuario con id '${id}'`);
+      // Un SOPORTE solo lo borra otro SOPORTE
+      if (requesterRole !== undefined && existing.roleCode === 'SOPORTE' && requesterRole !== 'SOPORTE') throw new NotFoundException(`No existe un usuario con id '${id}'`);
     }
     await this.usersRepository.delete(id);
     return { deleted: true };

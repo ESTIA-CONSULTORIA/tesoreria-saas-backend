@@ -29,7 +29,8 @@ describe('UsersService — aislamiento por tenant', () => {
       update: jest.fn().mockResolvedValue(undefined),
       delete: jest.fn().mockResolvedValue(undefined),
     };
-    tenantRepo = { findOne: jest.fn() };
+    // updateCompany valida que la empresa sea del tenant (la pertenencia real se prueba contra Postgres en users-companies.aislamiento-pg.spec.ts)
+    tenantRepo = { findOne: jest.fn(), manager: { getRepository: () => ({ findOne: jest.fn().mockResolvedValue({ id: 'company-x' }) }) } } as any;
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -115,8 +116,9 @@ describe('UsersController — prioridad tenantId JWT sobre query (findByRole)', 
     expect(service.findByRole).toHaveBeenCalledWith('ADMIN', TENANT_A);
   });
 
-  it('usa el tenantId de query solo cuando el JWT no trae uno (SOPORTE)', () => {
-    controller.findByRole('ADMIN', TENANT_B, { user: { tenantId: undefined } } as any);
+  it('usa el tenantId de query solo para SOPORTE; un token sin tenant que no es SOPORTE recibe 403', () => {
+    controller.findByRole('ADMIN', TENANT_B, { user: { roleCode: 'SOPORTE', tenantId: undefined } } as any);
     expect(service.findByRole).toHaveBeenCalledWith('ADMIN', TENANT_B);
+    expect(() => controller.findByRole('ADMIN', TENANT_B, { user: { roleCode: 'ADMIN' } } as any)).toThrow(/sin tenant/i);
   });
 });

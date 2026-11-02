@@ -2,12 +2,16 @@ import { Body, Controller, Delete, Get, Param, Post, Put, Query, Request, UseGua
 import { UsersService } from './users.service';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
-import { esSoporte } from '../auth/tenant-access.util';
+import { esSoporte, tenantDeSesion, tenantParaListar } from '../auth/tenant-access.util';
 
 @Controller('users')
 export class UsersController {
   constructor(private usersService: UsersService) {}
 
+  // Gestión de usuarios: solo ADMIN, GERENTE y SOPORTE (antes cualquier usuario autenticado, incluido un cajero, podía
+  // crear o ascender usuarios). Qué rol puede asignar cada uno lo valida UsersService.
+  @UseGuards(RolesGuard)
+  @Roles('ADMIN', 'GERENTE', 'SOPORTE')
   @Post()
   create(
     @Body()
@@ -30,7 +34,8 @@ export class UsersController {
     // hace, pero el endpoint lo aceptaba). El JWT va primero, igual que ya hacía GET /users
     // en este mismo archivo; el body queda como fallback solo para SOPORTE (sin tenantId
     // propio) creando un usuario en un tenant específico.
-    const tenantId = req?.user?.tenantId || body.tenantId;
+    // Tenant del token; el body.tenantId solo lo usa SOPORTE (que no tiene tenant propio). Un token sin tenant que no es SOPORTE: 403.
+    const tenantId = esSoporte(req?.user) ? body.tenantId || undefined : tenantDeSesion(req);
     const companyId = req?.user?.companyId || body.companyId;
     const branchId = req?.user?.branchId || body.branchId;
     return this.usersService.create(
@@ -43,6 +48,7 @@ export class UsersController {
       companyId,
       branchId,
       body.executivePin,
+      req?.user?.roleCode ?? 'NINGUNO',
     );
   }
 
@@ -75,10 +81,13 @@ export class UsersController {
     // directo del query param — un ADMIN de un tenant podía listar los usuarios de un rol
     // dado de OTRO tenant con solo mandar ?tenantId=<otro>. JWT primero, mismo criterio que
     // findAll() en este mismo archivo.
-    const tenantId = req?.user?.tenantId || queryTenantId;
+    const tenantId = tenantParaListar(req, queryTenantId);
+    if (!tenantId) return [];
     return this.usersService.findByRole(roleCode, tenantId);
   }
 
+  @UseGuards(RolesGuard)
+  @Roles('ADMIN', 'GERENTE', 'SOPORTE')
   @Put(':id')
   update(
     @Param('id') id: string,
@@ -100,9 +109,9 @@ export class UsersController {
     // por SOPORTE. usersService.update() rellena companyId automáticamente en ese caso
     // específico — ver el método, la lógica completa vive ahí, no acá.
     return this.usersService.update(id, body, {
-      roleCode: req?.user?.roleCode,
+      roleCode: req?.user?.roleCode ?? 'NINGUNO',
       companyId: req?.user?.companyId,
-      tenantId: req?.user?.tenantId,
+      tenantId: tenantDeSesion(req),
     });
   }
 
@@ -119,13 +128,15 @@ export class UsersController {
     @Body() body: { companyId: string },
     @Request() req?: any,
   ) {
-    const tenantId = req?.user?.tenantId;
+    const tenantId = tenantDeSesion(req);
     return this.usersService.updateCompany(id, body.companyId, tenantId);
   }
 
+  @UseGuards(RolesGuard)
+  @Roles('ADMIN', 'GERENTE', 'SOPORTE')
   @Delete(':id')
   remove(@Param('id') id: string, @Request() req?: any) {
-    const tenantId = req?.user?.tenantId;
-    return this.usersService.remove(id, tenantId);
+    const tenantId = tenantDeSesion(req);
+    return this.usersService.remove(id, tenantId, req?.user?.roleCode ?? 'NINGUNO');
   }
 }
