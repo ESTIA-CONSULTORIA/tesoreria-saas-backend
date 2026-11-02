@@ -1,4 +1,4 @@
-import { tenantDeSesion } from '../auth/tenant-access.util';
+import { tenantDeSesion, tenantParaListar, tenantParaEscribir } from '../auth/tenant-access.util';
 import {
   BadRequestException,
   Controller,
@@ -34,14 +34,13 @@ export class OcrController {
   )
   async upload(
     @UploadedFile() file: Express.Multer.File,
-    @Headers('x-tenant-id') headerTenantId?: string,
     @Headers('x-company-id') headerCompanyId?: string,
     @Request() req?: any,
   ) {
     if (!file) {
       throw new BadRequestException('Tipo de archivo no permitido o archivo ausente');
     }
-    const tenantId = req?.user?.tenantId ?? headerTenantId;
+    const tenantId = tenantParaEscribir(req, req?.query?.tenantId);
     const companyId = req?.user?.companyId ?? headerCompanyId;
     return this.ocrService.processDocument(file, tenantId, companyId);
   }
@@ -53,11 +52,10 @@ export class OcrController {
 
   @Get('documents')
   findAll(
-    @Headers('x-tenant-id') headerTenantId?: string,
     @Headers('x-company-id') headerCompanyId?: string,
     @Request() req?: any,
   ) {
-    const tenantId = req?.user?.tenantId ?? headerTenantId;
+    const tenantId = tenantParaListar(req, req?.query?.tenantId);
     const companyId = req?.user?.companyId ?? headerCompanyId;
     return this.ocrService.findAll(tenantId, companyId);
   }

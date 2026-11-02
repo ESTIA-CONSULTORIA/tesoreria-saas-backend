@@ -116,6 +116,7 @@ export class IntegrationsService {
   ) {}
 
   async findAll(tenantId: string, companyId?: string) {
+    if (!tenantId) return []; // con tenantId undefined TypeORM ignoraba la condición y devolvía las integraciones de todos
     const active = await this.repo.find({ where: { tenantId } });
     return INTEGRATION_CATALOG.map((cat) => {
       const found = active.find((a) => a.slug === cat.slug);

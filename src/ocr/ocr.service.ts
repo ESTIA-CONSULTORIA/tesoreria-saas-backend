@@ -129,8 +129,8 @@ export class OcrService {
   }
 
   async findAll(tenantId?: string, companyId?: string): Promise<OcrDocument[]> {
-    const where: any = {};
-    if (tenantId) where.tenantId = tenantId;
+    if (!tenantId) return []; // sin tenant nunca se listan los documentos de todos
+    const where: any = { tenantId };
     if (companyId) where.companyId = companyId;
     return this.repo.find({ where, order: { uploadedAt: 'DESC' } });
   }
