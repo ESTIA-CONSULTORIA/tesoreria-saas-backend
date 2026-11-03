@@ -324,25 +324,38 @@ export class TreasuryService {
           severity: 'WARNING',
         }));
 
-      // Facturas vencidas sin pagar (simulado - usaría fechas de vencimiento reales)
+      // Facturas vencidas = cuentas por pagar REALES: compras PENDIENTE/PARCIAL con fecha de vencimiento ya pasada.
+      // Monto = saldo pendiente; fecha = la de vencimiento (los «días» del front son desde el vencimiento).
+      // Siempre por tenant del token (sin tenant -> nada); la empresa (header) solo estrecha dentro del tenant.
       const now = new Date();
-      const overdueInvoicesQuery = this.movementsRepo
-        .createQueryBuilder('movement')
-        .where('movement.type = :type', { type: 'EXPENSE' })
-        .andWhere('movement.createdAt < :date', { date: now })
-        .limit(10);
-      const overdueInvoices = accountIds.length === 0 ? [] : await overdueInvoicesQuery
-        .andWhere('movement.accountId IN (:...accountIds)', { accountIds })
-        .getMany();
+      const hoy = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+      const vencidasQuery = this.purchasesRepo
+        .createQueryBuilder('purchase')
+        .leftJoinAndSelect('purchase.supplier', 'supplier')
+        .where('purchase.tenantId = :tenantId', { tenantId: tenantId ?? null })
+        .andWhere('purchase.status IN (:...estados)', { estados: ['PENDIENTE', 'PARCIAL'] })
+        .andWhere('purchase.fechaVencimiento IS NOT NULL')
+        .andWhere('purchase.fechaVencimiento < :hoy', { hoy })
+        .orderBy('purchase.fechaVencimiento', 'ASC');
+      if (companyId) vencidasQuery.andWhere('purchase.companyId = :companyId', { companyId });
+      const vencidas = tenantId ? await vencidasQuery.getMany() : [];
 
-      const overdueAlerts = overdueInvoices.map((m) => ({
-        type: 'OVERDUE',
-        message: `Pago vencido: ${m.concept}`,
-        concept: m.concept,
-        amount: Number(m.amount),
-        date: m.createdAt,
-        severity: 'ERROR',
-      }));
+      const overdueAlerts = vencidas
+        .map((p) => ({ p, saldo: Number(p.total) - Number(p.montoPagado) }))
+        .filter(({ saldo }) => saldo > 0)
+        .map(({ p, saldo }) => {
+          const proveedor = p.supplier?.nombre;
+          const concepto = [p.numero || 'Sin folio', proveedor].filter(Boolean).join(' · ');
+          return {
+            type: 'OVERDUE',
+            message: `Factura vencida: ${concepto}`,
+            concept: concepto,
+            amount: saldo,
+            date: p.fechaVencimiento,
+            purchaseId: p.id,
+            severity: 'ERROR',
+          };
+        });
 
       // Próximos vencimientos (7, 15, 30 días)
       const sevenDays = new Date();

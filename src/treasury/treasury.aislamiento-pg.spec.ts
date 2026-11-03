@@ -80,7 +80,7 @@ describe('TreasuryService: aislamiento entre tenants contra Postgres real', () =
 
   it('sanidad: el tenant A si ve sus propios datos (el filtro no es un "todo vacio")', async () => {
     const a = await svc.getAlerts(tA);
-    expect(a.overdueAlerts.map((x) => x.concept)).toEqual(['Renta A']);
+    expect(a.overdueAlerts).toEqual([]); // el egreso pasado «Renta A» ya no es una factura vencida; la compra C-A no tiene fecha de vencimiento (ver treasury.vencidas-reales-pg.spec.ts)
     expect(a.pendingAlerts.map((x) => x.concept)).toEqual(['Prestamo A']);
     expect((await svc.getExecutiveSummary(tA)).totalBalance).toBe(1000);
     expect((await svc.getBankPosition(tA)).accounts.map((x) => x.name)).toEqual(['BBVA A']);
